@@ -29,12 +29,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.github.skydoves.colorpicker.compose.BrightnessSlider
 import com.github.skydoves.colorpicker.compose.HsvColorPicker
 import com.github.skydoves.colorpicker.compose.rememberColorPickerController
+import com.prof18.feedflow.android.settings.SettingsE2eIds
 import com.prof18.feedflow.core.model.WidgetFeedLayout
 import com.prof18.feedflow.shared.domain.model.SyncPeriod
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
@@ -229,7 +231,9 @@ private fun WidgetCardAppearanceSettings(
         ?: strings.widgetCardSurfaceColorDefault
     var showCardColorPicker by remember { mutableStateOf(false) }
 
-    Column {
+    Column(
+        modifier = Modifier.testTag(SettingsE2eIds.WIDGET_CARD_APPEARANCE),
+    ) {
         Text(
             text = strings.widgetCardAppearanceTitle,
             modifier = Modifier.padding(horizontal = Spacing.regular, vertical = Spacing.small),
@@ -241,6 +245,7 @@ private fun WidgetCardAppearanceSettings(
             currentValueLabel = cardColorLabel,
             color = resolvedCardColor,
             onClick = { showCardColorPicker = true },
+            modifier = Modifier.testTag(SettingsE2eIds.WIDGET_CARD_SURFACE_COLOR),
         )
 
         Text(
@@ -249,7 +254,9 @@ private fun WidgetCardAppearanceSettings(
             style = MaterialTheme.typography.bodyMedium,
         )
         Slider(
-            modifier = Modifier.padding(horizontal = Spacing.regular),
+            modifier = Modifier
+                .padding(horizontal = Spacing.regular)
+                .testTag(SettingsE2eIds.WIDGET_CARD_SURFACE_OPACITY),
             value = surfaceOpacity.toFloat(),
             onValueChange = { onSurfaceOpacitySelected(it.roundToInt()) },
             valueRange = 0f..100f,
@@ -261,7 +268,9 @@ private fun WidgetCardAppearanceSettings(
             style = MaterialTheme.typography.bodyMedium,
         )
         Slider(
-            modifier = Modifier.padding(horizontal = Spacing.regular),
+            modifier = Modifier
+                .padding(horizontal = Spacing.regular)
+                .testTag(SettingsE2eIds.WIDGET_CARD_CORNER_RADIUS),
             value = cornerRadius.toFloat(),
             onValueChange = { onCornerRadiusSelected(it.roundToInt()) },
             valueRange = 0f..32f,
@@ -275,17 +284,21 @@ private fun WidgetCardAppearanceSettings(
                 SettingDropdownOption(
                     WidgetCardItemSeparation.SPACING,
                     strings.widgetCardItemSeparationSpacing,
+                    e2eId = SettingsE2eIds.WIDGET_CARD_ITEM_SEPARATION_SPACING,
                 ),
                 SettingDropdownOption(
                     WidgetCardItemSeparation.DIVIDER,
                     strings.widgetCardItemSeparationDivider,
+                    e2eId = SettingsE2eIds.WIDGET_CARD_ITEM_SEPARATION_DIVIDER,
                 ),
                 SettingDropdownOption(
                     WidgetCardItemSeparation.NONE,
                     strings.widgetCardItemSeparationNone,
+                    e2eId = SettingsE2eIds.WIDGET_CARD_ITEM_SEPARATION_NONE,
                 ),
             ),
             onOptionSelected = onItemSeparationSelected,
+            modifier = Modifier.testTag(SettingsE2eIds.WIDGET_CARD_ITEM_SEPARATION),
         )
 
         if (appearance.itemSeparation == WidgetCardItemSeparation.DIVIDER) {
@@ -295,7 +308,9 @@ private fun WidgetCardAppearanceSettings(
                 style = MaterialTheme.typography.bodyMedium,
             )
             Slider(
-                modifier = Modifier.padding(horizontal = Spacing.regular),
+                modifier = Modifier
+                    .padding(horizontal = Spacing.regular)
+                    .testTag(SettingsE2eIds.WIDGET_CARD_DIVIDER_OPACITY),
                 value = dividerOpacity.toFloat(),
                 onValueChange = { onDividerOpacitySelected(it.roundToInt()) },
                 valueRange = 0f..100f,
@@ -310,13 +325,16 @@ private fun WidgetCardAppearanceSettings(
                     SettingDropdownOption(
                         WidgetCardImageSizing.THUMBNAIL,
                         strings.widgetCardImageSizingThumbnail,
+                        e2eId = SettingsE2eIds.WIDGET_CARD_IMAGE_THUMBNAIL,
                     ),
                     SettingDropdownOption(
                         WidgetCardImageSizing.FILL_ROW_HEIGHT,
                         strings.widgetCardImageSizingFillRowHeight,
+                        e2eId = SettingsE2eIds.WIDGET_CARD_IMAGE_FILL,
                     ),
                 ),
                 onOptionSelected = onImageSizingSelected,
+                modifier = Modifier.testTag(SettingsE2eIds.WIDGET_CARD_IMAGE_SIZING),
             )
         }
 
@@ -356,10 +374,19 @@ private fun WidgetFeedLayoutSelector(
         title = strings.feedLayoutTitle,
         currentValue = feedLayout,
         options = persistentListOf(
-            SettingDropdownOption(WidgetFeedLayout.LIST, strings.settingsFeedLayoutList),
-            SettingDropdownOption(WidgetFeedLayout.CARD, strings.settingsFeedLayoutCard),
+            SettingDropdownOption(
+                WidgetFeedLayout.LIST,
+                strings.settingsFeedLayoutList,
+                e2eId = SettingsE2eIds.WIDGET_FEED_LAYOUT_LIST,
+            ),
+            SettingDropdownOption(
+                WidgetFeedLayout.CARD,
+                strings.settingsFeedLayoutCard,
+                e2eId = SettingsE2eIds.WIDGET_FEED_LAYOUT_CARD,
+            ),
         ),
         onOptionSelected = onFeedLayoutSelected,
+        modifier = Modifier.testTag(SettingsE2eIds.WIDGET_FEED_LAYOUT),
     )
 }
 

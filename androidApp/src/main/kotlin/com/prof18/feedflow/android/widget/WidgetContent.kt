@@ -17,6 +17,7 @@ import androidx.glance.appwidget.lazy.LazyColumn
 import androidx.glance.appwidget.lazy.items
 import androidx.glance.background
 import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
@@ -239,20 +240,23 @@ private fun WidgetFeedItems(
                             imageBudgetPolicy = imageBudgetPolicy,
                             imageDisplayTargetPx = cardImageTargetPx,
                         )
-                        if (
-                            shouldEmitWidgetCardDivider(
-                                itemSeparation = cardAppearance.itemSeparation,
-                                itemIndex = index,
-                                itemCount = feedItems.size,
-                            )
-                        ) {
-                            Spacer(
+                        resolveWidgetCardDividerLayout(
+                            itemSeparation = cardAppearance.itemSeparation,
+                            itemIndex = index,
+                            itemCount = feedItems.size,
+                        )?.let { dividerLayout ->
+                            Box(
                                 modifier = GlanceModifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp)
-                                    .height(1.dp)
-                                    .background(ColorProvider(resolvedCardAppearance.dividerColor)),
-                            )
+                                    .padding(horizontal = dividerLayout.horizontalInsetDp.dp),
+                            ) {
+                                Spacer(
+                                    modifier = GlanceModifier
+                                        .fillMaxWidth()
+                                        .height(dividerLayout.thicknessDp.dp)
+                                        .background(ColorProvider(resolvedCardAppearance.dividerColor)),
+                                )
+                            }
                         }
                     }
                 }
@@ -263,13 +267,22 @@ private fun WidgetFeedItems(
     }
 }
 
-internal fun shouldEmitWidgetCardDivider(
+internal fun resolveWidgetCardDividerLayout(
     itemSeparation: WidgetCardItemSeparation,
     itemIndex: Int,
     itemCount: Int,
-): Boolean = itemSeparation == WidgetCardItemSeparation.DIVIDER &&
+): WidgetCardDividerLayout? = if (
+    itemSeparation == WidgetCardItemSeparation.DIVIDER &&
     itemIndex >= 0 &&
     itemIndex < itemCount - 1
+) {
+    WidgetCardDividerLayout(
+        horizontalInsetDp = 16,
+        thicknessDp = 1,
+    )
+} else {
+    null
+}
 
 @SuppressLint("RestrictedApi")
 @Composable
@@ -299,3 +312,8 @@ private fun createOpenAppAction(context: Context): Action {
         },
     )
 }
+
+internal data class WidgetCardDividerLayout(
+    val horizontalInsetDp: Int,
+    val thicknessDp: Int,
+)

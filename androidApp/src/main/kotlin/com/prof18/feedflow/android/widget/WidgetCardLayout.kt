@@ -5,7 +5,7 @@ import kotlin.math.ceil
 
 private const val TEXT_VERTICAL_PADDING_DP = 16
 private const val DATE_TOP_SPACING_DP = 4
-private const val TEXT_LINE_HEIGHT_MULTIPLIER = 1.2f
+internal const val WIDGET_TEXT_LINE_HEIGHT_MULTIPLIER = 1.2f
 private const val LEADING_TEXT_INSET_DP = 16
 private const val MIN_READABLE_TEXT_WIDTH_DP = 96
 private const val IMAGE_GAP_DP = 16
@@ -60,7 +60,7 @@ internal fun resolveWidgetCardLayout(
 }
 
 private fun widgetLineHeightDp(fontSizeSp: Int, systemFontScale: Float): Int =
-    ceil(fontSizeSp * systemFontScale * TEXT_LINE_HEIGHT_MULTIPLIER).toInt()
+    ceil(fontSizeSp * systemFontScale * WIDGET_TEXT_LINE_HEIGHT_MULTIPLIER).toInt()
 
 private fun thumbnailWidgetCardLayout(): ResolvedWidgetCardLayout = ResolvedWidgetCardLayout(
     imageSizing = WidgetCardImageSizing.THUMBNAIL,

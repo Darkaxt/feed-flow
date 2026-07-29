@@ -3,9 +3,7 @@ package com.prof18.feedflow.android.widget
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WidgetCardLayoutTest {
@@ -129,23 +127,27 @@ class WidgetCardLayoutTest {
     }
 
     @Test
-    fun `divider policy emits only between card entries`() {
-        assertTrue(
-            shouldEmitWidgetCardDivider(
+    fun `divider layout emits only between cards with true inset and one dp thickness`() {
+        assertEquals(
+            WidgetCardDividerLayout(
+                horizontalInsetDp = 16,
+                thicknessDp = 1,
+            ),
+            resolveWidgetCardDividerLayout(
                 itemSeparation = WidgetCardItemSeparation.DIVIDER,
                 itemIndex = 0,
                 itemCount = 2,
             ),
         )
-        assertFalse(
-            shouldEmitWidgetCardDivider(
+        assertNull(
+            resolveWidgetCardDividerLayout(
                 itemSeparation = WidgetCardItemSeparation.DIVIDER,
                 itemIndex = 1,
                 itemCount = 2,
             ),
         )
-        assertFalse(
-            shouldEmitWidgetCardDivider(
+        assertNull(
+            resolveWidgetCardDividerLayout(
                 itemSeparation = WidgetCardItemSeparation.DIVIDER,
                 itemIndex = 0,
                 itemCount = 1,
@@ -154,8 +156,8 @@ class WidgetCardLayoutTest {
         WidgetCardItemSeparation.entries
             .filterNot { it == WidgetCardItemSeparation.DIVIDER }
             .forEach { itemSeparation ->
-                assertFalse(
-                    shouldEmitWidgetCardDivider(
+                assertNull(
+                    resolveWidgetCardDividerLayout(
                         itemSeparation = itemSeparation,
                         itemIndex = 0,
                         itemCount = 2,
