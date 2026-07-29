@@ -197,7 +197,13 @@ The layout contract is:
 - The image is center-cropped and never stretched.
 - The image uses the configured Card radius as its uniform Glance corner radius. Uniform rounding may also round the image's inner corners; per-corner clipping is outside this change.
 
-Before using fill-height geometry, calculate the available slab width from `LocalSize.current.width` after the existing outer horizontal insets. Fill mode requires room for:
+#### Exact size handling and narrow fallback
+
+`FeedFlowWidget` overrides `sizeMode` with `SizeMode.Exact`. Exact mode is required because the Fill-versus-Thumbnail breakpoint depends on the current host width, calculated row height, widget font setting, and Android system font scale; a fixed set of responsive breakpoints cannot represent that calculation reliably.
+
+On Android 12 and newer, Glance may compose one `RemoteViews` variant for every exact size supplied by the host. `LocalSize.current` is therefore evaluated independently in each size composition. On older versions, Glance recomposes the current exact size when the widget is resized. A narrow-to-wide-to-narrow resize must switch Thumbnail fallback to Fill and back to Thumbnail without requiring a settings change, feed refresh, or widget re-addition.
+
+Before using fill-height geometry in each exact-size composition, calculate the available slab width from `LocalSize.current.width` after the existing outer horizontal insets. Fill mode requires room for:
 
 - A 16 dp leading text inset.
 - At least 96 dp of readable text width.
@@ -208,16 +214,24 @@ If the available width is smaller than that total, render the selected `FILL_ROW
 
 If the date is absent or the image fails to load, the resolved row geometry remains stable and text uses the additional horizontal space.
 
-Image requests first convert the resolved viewport dimensions through `LocalContext.current.resources.displayMetrics`. They are then bounded by a per-widget bitmap policy. `N` is the number of articles in the widget update that have an image URL while images are enabled:
+Image requests first convert the resolved viewport dimensions through `LocalContext.current.resources.displayMetrics`. They are then bounded by one budget calculated for the complete widget update, including every exact-size composition.
+
+Before `provideContent`, `FeedFlowWidget` reads and deduplicates the host-provided exact sizes for the current `GlanceId`:
+
+- `V` is the number of exact size variants Glance can emit for this update, with a minimum of one. On platforms that only compose the current size, or when no size list is available, `V` is one.
+- `N` is the number of articles that have an image URL while images are enabled.
+- `P = N * V` is the conservative number of serialized bitmap payloads. The same article in two size variants counts twice even if both requests resolve to the same dimensions; the budget does not assume `RemoteViews` bitmap deduplication.
+
+`FeedFlowWidget` calculates one immutable bitmap budget from `P` and makes it available to every exact-size composition:
 
 - Maximum decoded edge: 512 pixels.
-- Maximum combined raw article-bitmap payload: 6 MiB per widget update, assuming four bytes per pixel.
-- For `N` image-bearing articles, calculate `budgetEdgePx = floor(sqrt((6 * 1024 * 1024) / (4 * max(1, N))))`.
-- The square request edge is `min(displayTargetPx, 512, budgetEdgePx)`.
+- Maximum combined raw article-bitmap payload across all exact-size variants: 6 MiB per widget update, assuming four bytes per pixel.
+- Calculate `budgetEdgePx = floor(sqrt((6 * 1024 * 1024) / (4 * max(1, P))))`.
+- Each square request edge is `min(displayTargetPx, 512, budgetEdgePx)`.
 
-The same bounded edge is used for both request dimensions. The bitmap handed to `ImageProvider` must not exceed that edge in either dimension; an oversized decoder result is downscaled before it enters the `RemoteViews` payload. With 15 image-bearing articles, the calculated requests remain within the 6 MiB raw-pixel budget. The viewport remains the resolved dp size, so the host may perform limited upscaling only when the explicit memory bound is smaller than the display target.
+The same bounded edge is used for both request dimensions. The bitmap handed to `ImageProvider` must not exceed that edge in either dimension; an oversized decoder result is downscaled before it enters a `RemoteViews` payload. For 15 image-bearing articles, the sum of every article-by-size-variant payload remains within 6 MiB. The viewport remains the resolved dp size, so the host may perform limited upscaling only when the explicit memory bound is smaller than the display target.
 
-Bitmap state and asynchronous loading are keyed by image URL and the final bounded request dimensions. Switching image mode, widget width, widget font size, density, system font scale, or image-count budget cannot reuse a request with different target dimensions.
+Bitmap state and asynchronous loading are keyed by image URL and the final bounded request dimensions. Switching image mode, exact size variant, widget font size, density, system font scale, or total payload count cannot reuse a request with different target dimensions.
 
 ## Configuration Preview
 
@@ -272,10 +286,11 @@ Add focused tests for:
 - Existing Light and Dark modes override automatic Card text.
 - Divider alpha is the configured final alpha and no divider is emitted after the final item.
 - Row-height calculation accommodates minimum, default, and maximum widget font settings across representative Android system font scales.
+- `FeedFlowWidget` uses `SizeMode.Exact`, and the width resolver produces Thumbnail, Fill, then Thumbnail for a narrow-to-wide-to-narrow size sequence without another settings or feed event.
 - The 96 dp readable-text rule selects Fill mode when it fits and the complete Thumbnail fallback when it does not, including a 256 dp widget at maximum font scales.
 - Thumbnail and fill-height modes produce the correct viewport and bounded request dimensions.
-- Changing target dimensions or image-count budget changes the image-loading key.
-- A 15-image update keeps the calculated raw bitmap payload at or below 6 MiB and every decoded edge at or below 512 pixels.
+- Changing target dimensions, exact size variant, or total payload count changes the image-loading key when the bounded dimensions differ.
+- Bitmap-budget tests cover one and multiple exact-size variants. A 15-image update keeps the sum of all article-by-variant payloads at or below 6 MiB and every decoded edge at or below 512 pixels.
 
 ### Preview coverage
 
@@ -294,9 +309,9 @@ On a connected Android device:
 3. Verify Spacing, Divider, and None, including no divider after the final article.
 4. Verify radius 0 and 32 dp.
 5. Verify fill-height images align to row bounds, remain square, center-crop, and do not stretch.
-6. Resize to the 256 dp minimum width at maximum widget and Android system font scales and verify the complete Thumbnail fallback leaves at least 96 dp for text.
-7. Verify changing between image modes requests an appropriately bounded image.
-8. Update a widget containing 15 image-bearing articles and verify it renders without bitmap-allocation or `RemoteViews` failure.
+6. At maximum widget and Android system font scales, resize narrow to wide to narrow. Verify the 256 dp state uses the complete Thumbnail fallback with at least 96 dp for text, the wide state uses Fill, and the final narrow state returns to Thumbnail without a refresh or widget re-addition.
+7. Verify changing between image modes and exact sizes requests appropriately bounded images.
+8. On Android 12 or newer, update a widget containing 15 image-bearing articles with at least two host-provided exact sizes and verify every generated variant renders without bitmap-allocation, transaction, or `RemoteViews` failure.
 9. Verify missing and failed images collapse horizontally without breaking the row.
 10. Verify article rows remain clickable across text and image regions.
 11. Compare the preview with the placed widget at minimum, default, and maximum widget font settings.
@@ -341,9 +356,10 @@ After implementation:
 - Thumbnail mode remains 50 dp and visually unchanged.
 - Every effective in-app Card setting change updates placed widgets exactly once; unchanged callbacks do not update them.
 - Fill-height images are square, center-cropped, aligned to row bounds, and requested at display size up to the explicit bitmap limits.
+- `FeedFlowWidget` uses `SizeMode.Exact`; narrow-to-wide-to-narrow resizing changes Thumbnail fallback to Fill and back without another settings or feed event.
 - A fill-height image never reduces readable text below 96 dp; the renderer uses the complete Thumbnail fallback when necessary.
-- Image mode, geometry, or image-count budget changes cannot reuse a request with different bounded dimensions.
-- Up to 15 image-bearing articles stay within the 6 MiB raw bitmap budget and 512-pixel per-edge cap.
+- Image mode, exact size, geometry, or total payload count changes cannot reuse a request with different bounded dimensions.
+- Across every host-provided exact-size variant, up to 15 image-bearing articles stay within the combined 6 MiB raw bitmap budget and 512-pixel per-edge cap without assuming bitmap deduplication.
 - Missing or failed images do not leave an empty image region.
 - Preview controls and sample rows show every Card option without clipping.
 - Invalid values for the new Card preferences cannot crash configuration or rendering.
