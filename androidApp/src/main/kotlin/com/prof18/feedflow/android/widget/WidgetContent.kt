@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
@@ -14,6 +15,7 @@ import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.components.Scaffold
 import androidx.glance.appwidget.lazy.LazyColumn
 import androidx.glance.appwidget.lazy.items
+import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
 import androidx.glance.layout.Spacer
@@ -31,10 +33,14 @@ import com.prof18.feedflow.android.widget.components.WidgetFeedItemCard
 import com.prof18.feedflow.android.widget.components.WidgetFeedItemList
 import com.prof18.feedflow.core.model.FeedItem
 import com.prof18.feedflow.core.model.WidgetFeedLayout
+import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
+import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
 import com.prof18.feedflow.shared.domain.model.WidgetTextColorMode
+import com.prof18.feedflow.shared.domain.model.normalized
 import com.prof18.feedflow.shared.ui.style.Spacing
 import com.prof18.feedflow.shared.ui.utils.LocalFeedFlowStrings
 import kotlinx.collections.immutable.ImmutableList
+import kotlin.math.roundToInt
 
 @SuppressLint("RestrictedApi")
 @Composable
@@ -48,6 +54,11 @@ internal fun WidgetContent(
     backgroundOpacityPercent: Int,
     textColorMode: WidgetTextColorMode,
     hideImages: Boolean,
+    cardAppearance: WidgetCardAppearance,
+    imageBudgetPolicy: WidgetImageBudgetPolicy,
+    availableSlabWidthDp: Float,
+    displayDensity: Float,
+    systemFontScale: Float,
 ) {
     val context = LocalContext.current
     val openAppAction = createOpenAppAction(context)
@@ -60,25 +71,49 @@ internal fun WidgetContent(
         backgroundColor = backgroundColor,
         backgroundOpacity = backgroundOpacity,
     )
+    val themedWidgetUnderlayColor = GlanceTheme.colors.widgetBackground.getColor(context)
+    val normalizedCardAppearance = cardAppearance.normalized()
+    val resolvedCardAppearance = resolveWidgetCardAppearance(
+        appearance = normalizedCardAppearance,
+        textColorMode = textColorMode,
+        outerSurfaceColor = backgroundColor?.let(::widgetColorFromArgb) ?: themedWidgetUnderlayColor,
+        outerSurfaceOpacityPercent = backgroundOpacityPercent,
+        themedWidgetUnderlayColor = themedWidgetUnderlayColor,
+        themedCardSurfaceColor = GlanceTheme.colors.secondaryContainer.getColor(context),
+        themedOnSurfaceColor = GlanceTheme.colors.onSurface.getColor(context),
+    )
     val textColors = when {
         backgroundColor != null -> {
             val effectiveBackgroundColor = widgetEffectiveBackgroundColor(
                 backgroundColor = widgetColorFromArgb(backgroundColor),
                 backgroundOpacity = backgroundOpacity,
-                underlayColor = GlanceTheme.colors.widgetBackground.getColor(context),
+                underlayColor = themedWidgetUnderlayColor,
             )
             widgetTextColorsForMode(textColorMode, effectiveBackgroundColor)
         }
         textColorMode != WidgetTextColorMode.AUTOMATIC -> {
             widgetTextColorsForMode(
                 textColorMode = textColorMode,
-                backgroundColor = GlanceTheme.colors.widgetBackground.getColor(context),
+                backgroundColor = themedWidgetUnderlayColor,
             )
         }
         else -> null
     }
     val primaryTextColor = textColors?.primary?.let(::ColorProvider) ?: GlanceTheme.colors.onSurface
     val secondaryTextColor = textColors?.secondary?.let(::ColorProvider) ?: GlanceTheme.colors.onSurface
+    val cardLayout = resolveWidgetCardLayout(
+        requestedImageSizing = normalizedCardAppearance.imageSizing,
+        availableSlabWidthDp = availableSlabWidthDp,
+        fontSizes = fontSizes,
+        systemFontScale = systemFontScale,
+    )
+    val imageDensity = displayDensity.takeIf { it.isFinite() && it > 0f } ?: 1f
+    val thumbnailImageTargetPx = (WIDGET_THUMBNAIL_VIEWPORT_DP * imageDensity)
+        .roundToInt()
+        .coerceAtLeast(1)
+    val cardImageTargetPx = (cardLayout.displayTargetDp * imageDensity)
+        .roundToInt()
+        .coerceAtLeast(1)
 
     Scaffold(
         titleBar = if (showHeader) {
@@ -136,30 +171,105 @@ internal fun WidgetContent(
                 )
             }
         } else {
-            LazyColumn {
-                if (!showHeader) {
-                    item { Spacer(modifier = GlanceModifier.height(Spacing.small)) }
-                }
+            WidgetFeedItems(
+                feedItems = feedItems,
+                feedLayout = feedLayout,
+                browserManager = browserManager,
+                showHeader = showHeader,
+                fontSizes = fontSizes,
+                hideImages = hideImages,
+                primaryTextColor = primaryTextColor,
+                secondaryTextColor = secondaryTextColor,
+                cardAppearance = normalizedCardAppearance,
+                resolvedCardAppearance = resolvedCardAppearance,
+                cardLayout = cardLayout,
+                imageBudgetPolicy = imageBudgetPolicy,
+                thumbnailImageTargetPx = thumbnailImageTargetPx,
+                cardImageTargetPx = cardImageTargetPx,
+            )
+        }
+    }
+}
 
-                items(feedItems) { feedItem ->
-                    when (feedLayout) {
-                        WidgetFeedLayout.LIST -> WidgetFeedItemList(
+@Composable
+private fun WidgetFeedItems(
+    feedItems: ImmutableList<FeedItem>,
+    feedLayout: WidgetFeedLayout,
+    browserManager: BrowserManager,
+    showHeader: Boolean,
+    fontSizes: WidgetFontSizes,
+    hideImages: Boolean,
+    primaryTextColor: ColorProvider,
+    secondaryTextColor: ColorProvider,
+    cardAppearance: WidgetCardAppearance,
+    resolvedCardAppearance: ResolvedWidgetCardAppearance,
+    cardLayout: ResolvedWidgetCardLayout,
+    imageBudgetPolicy: WidgetImageBudgetPolicy,
+    thumbnailImageTargetPx: Int,
+    cardImageTargetPx: Int,
+) {
+    LazyColumn {
+        if (!showHeader) {
+            item { Spacer(modifier = GlanceModifier.height(Spacing.small)) }
+        }
+
+        items(count = feedItems.size) { index ->
+            val feedItem = feedItems[index]
+            when (feedLayout) {
+                WidgetFeedLayout.LIST -> WidgetFeedItemList(
+                    feedItem = feedItem,
+                    browserManager = browserManager,
+                    fontSizes = fontSizes,
+                    hideImages = hideImages,
+                    primaryTextColor = primaryTextColor,
+                    secondaryTextColor = secondaryTextColor,
+                    imageBudgetPolicy = imageBudgetPolicy,
+                    imageDisplayTargetPx = thumbnailImageTargetPx,
+                )
+                WidgetFeedLayout.CARD -> {
+                    Column(modifier = GlanceModifier.fillMaxWidth()) {
+                        WidgetFeedItemCard(
                             feedItem = feedItem,
                             browserManager = browserManager,
                             fontSizes = fontSizes,
                             hideImages = hideImages,
-                            primaryTextColor = primaryTextColor,
-                            secondaryTextColor = secondaryTextColor,
+                            appearance = cardAppearance,
+                            resolvedAppearance = resolvedCardAppearance,
+                            cardLayout = cardLayout,
+                            imageBudgetPolicy = imageBudgetPolicy,
+                            imageDisplayTargetPx = cardImageTargetPx,
                         )
-                        WidgetFeedLayout.CARD -> WidgetFeedItemCard(feedItem, browserManager, fontSizes, hideImages)
+                        if (
+                            shouldEmitWidgetCardDivider(
+                                itemSeparation = cardAppearance.itemSeparation,
+                                itemIndex = index,
+                                itemCount = feedItems.size,
+                            )
+                        ) {
+                            Spacer(
+                                modifier = GlanceModifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp)
+                                    .height(1.dp)
+                                    .background(ColorProvider(resolvedCardAppearance.dividerColor)),
+                            )
+                        }
                     }
                 }
-
-                item { Spacer(modifier = GlanceModifier.height(Spacing.small)) }
             }
         }
+
+        item { Spacer(modifier = GlanceModifier.height(Spacing.small)) }
     }
 }
+
+internal fun shouldEmitWidgetCardDivider(
+    itemSeparation: WidgetCardItemSeparation,
+    itemIndex: Int,
+    itemCount: Int,
+): Boolean = itemSeparation == WidgetCardItemSeparation.DIVIDER &&
+    itemIndex >= 0 &&
+    itemIndex < itemCount - 1
 
 @SuppressLint("RestrictedApi")
 @Composable

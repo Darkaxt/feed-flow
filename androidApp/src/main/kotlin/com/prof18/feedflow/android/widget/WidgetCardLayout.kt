@@ -9,7 +9,8 @@ private const val TEXT_LINE_HEIGHT_MULTIPLIER = 1.2f
 private const val LEADING_TEXT_INSET_DP = 16
 private const val MIN_READABLE_TEXT_WIDTH_DP = 96
 private const val IMAGE_GAP_DP = 16
-private const val THUMBNAIL_VIEWPORT_DP = 50
+internal const val WIDGET_THUMBNAIL_VIEWPORT_DP = 50
+private const val FALLBACK_SLAB_WIDTH_DP = 96
 
 internal fun calculateWidgetFillRowHeightDp(
     fontSizes: WidgetFontSizes,
@@ -36,6 +37,8 @@ internal fun resolveWidgetCardLayout(
         return thumbnailWidgetCardLayout()
     }
 
+    val availableWidthDp = availableSlabWidthDp.takeIf { it.isFinite() && it > 0f }
+        ?: FALLBACK_SLAB_WIDTH_DP.toFloat()
     val rowHeightDp = calculateWidgetFillRowHeightDp(
         fontSizes = fontSizes,
         systemFontScale = systemFontScale,
@@ -44,7 +47,7 @@ internal fun resolveWidgetCardLayout(
         MIN_READABLE_TEXT_WIDTH_DP +
         IMAGE_GAP_DP +
         rowHeightDp
-    if (availableSlabWidthDp < requiredWidthDp) {
+    if (availableWidthDp < requiredWidthDp) {
         return thumbnailWidgetCardLayout()
     }
 
@@ -62,8 +65,8 @@ private fun widgetLineHeightDp(fontSizeSp: Int, systemFontScale: Float): Int =
 private fun thumbnailWidgetCardLayout(): ResolvedWidgetCardLayout = ResolvedWidgetCardLayout(
     imageSizing = WidgetCardImageSizing.THUMBNAIL,
     fixedRowHeightDp = null,
-    imageViewportDp = THUMBNAIL_VIEWPORT_DP,
-    displayTargetDp = THUMBNAIL_VIEWPORT_DP,
+    imageViewportDp = WIDGET_THUMBNAIL_VIEWPORT_DP,
+    displayTargetDp = WIDGET_THUMBNAIL_VIEWPORT_DP,
 )
 
 internal data class ResolvedWidgetCardLayout(

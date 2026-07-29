@@ -1,8 +1,11 @@
 package com.prof18.feedflow.android.widget
 
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
+import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WidgetCardLayoutTest {
@@ -109,6 +112,56 @@ class WidgetCardLayoutTest {
         )
 
         assertThumbnailGeometry(layout)
+    }
+
+    @Test
+    fun `invalid slab width uses 96dp fallback and complete thumbnail geometry`() {
+        listOf(Float.NaN, Float.POSITIVE_INFINITY, 0f, -1f).forEach { width ->
+            val layout = resolveWidgetCardLayout(
+                requestedImageSizing = WidgetCardImageSizing.FILL_ROW_HEIGHT,
+                availableSlabWidthDp = width,
+                fontSizes = widgetFontSizes(0),
+                systemFontScale = 1f,
+            )
+
+            assertThumbnailGeometry(layout)
+        }
+    }
+
+    @Test
+    fun `divider policy emits only between card entries`() {
+        assertTrue(
+            shouldEmitWidgetCardDivider(
+                itemSeparation = WidgetCardItemSeparation.DIVIDER,
+                itemIndex = 0,
+                itemCount = 2,
+            ),
+        )
+        assertFalse(
+            shouldEmitWidgetCardDivider(
+                itemSeparation = WidgetCardItemSeparation.DIVIDER,
+                itemIndex = 1,
+                itemCount = 2,
+            ),
+        )
+        assertFalse(
+            shouldEmitWidgetCardDivider(
+                itemSeparation = WidgetCardItemSeparation.DIVIDER,
+                itemIndex = 0,
+                itemCount = 1,
+            ),
+        )
+        WidgetCardItemSeparation.entries
+            .filterNot { it == WidgetCardItemSeparation.DIVIDER }
+            .forEach { itemSeparation ->
+                assertFalse(
+                    shouldEmitWidgetCardDivider(
+                        itemSeparation = itemSeparation,
+                        itemIndex = 0,
+                        itemCount = 2,
+                    ),
+                )
+            }
     }
 
     private fun assertThumbnailGeometry(layout: ResolvedWidgetCardLayout) {
