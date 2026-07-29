@@ -221,12 +221,15 @@ If the date is absent or the image fails to load, the resolved row geometry rema
 Budget inputs are observed inside the Glance composition rather than captured once before `provideContent`:
 
 - `N` is recalculated from the current collected feed items whenever the feed flow emits. It is the number of current articles that have an image URL while images are enabled.
-- Every composition reads `LocalAppWidgetOptions.current` and derives a stable size-options key from `OPTION_APPWIDGET_SIZES` and the legacy minimum/maximum width and height fields.
-- A size state keyed by that options key starts as `Unresolved`, then calls `GlanceAppWidgetManager.getAppWidgetSizes()` and publishes the deduplicated result as `Resolved`.
-- `V` is the size count from `Resolved`. A completed query that genuinely returns no usable size falls back to the current composition size and `V = 1`; platform version alone never implies `V = 1`.
+- Every composition copies `LocalAppWidgetOptions.current` into an immutable `WidgetOptionsSnapshot`. The snapshot canonicalizes the explicit `OPTION_APPWIDGET_SIZES` list and the legacy minimum/maximum width and height fields; its stable key is derived only from that canonical value.
+- A size state keyed by the immutable snapshot starts as `Unresolved`.
+- Before calling `GlanceAppWidgetManager.getAppWidgetSizes()`, read and canonicalize the platform's current options. Run the query only if that snapshot equals the composition snapshot. Read the platform options again after the query and publish `Resolved` only when both platform snapshots still equal the original composition snapshot.
+- If either comparison fails, discard the queried sizes and remain `Unresolved`. While the composition snapshot remains current, retry the same before/query/after validation in its cancellable state producer with exponential delay starting at 50 ms and capped at 1 second. A new composition snapshot cancels the old retry loop and starts a new unresolved state.
+- Never publish a size count under a key from a different snapshot. The capped retry loop must also recover when platform options move A -> B -> A without emitting a different composition snapshot for B.
+- `V` is the deduplicated size count from a successfully validated `Resolved` result. A validated query that genuinely returns no usable size falls back to the current composition size and `V = 1`; platform version alone never implies `V = 1`.
 - `P = N * V` is the conservative number of serialized article-bitmap payloads. The same article in two size variants counts twice even if both requests resolve to the same dimensions; the budget does not assume Coil or `RemoteViews` bitmap deduplication.
 
-While the size state is `Unresolved`, emit no article `Image` and launch no article-image request in either List or Card mode. This applies on initial composition and synchronously whenever the options key changes. It prevents a new size variant from temporarily using a stale one-variant budget while the updated size query is in flight.
+While the size state is `Unresolved`, emit no article `Image` and launch no article-image request in either List or Card mode. This applies on initial composition and synchronously whenever the immutable options snapshot changes. It prevents a new size variant from temporarily using a stale one-variant budget while the updated size query is in flight.
 
 Once sizes are resolved, a pure resolver recalculates the shared budget whenever current articles, resolved host sizes, image visibility, or display metrics change. Every active exact-size composition receives the resulting current budget. An existing Glance session must therefore react correctly to `N: 1 -> 15` and `V: 1 -> 2` without restarting `provideGlance`.
 
@@ -236,14 +239,25 @@ Use `Long` arithmetic for all byte and pixel-count calculations:
 2. `deviceArticleBudgetBytes = remoteViewsLimitBytes * 3L / 4L`, reserving 25 percent for non-article bitmaps and safety headroom.
 3. `effectiveArticleBudgetBytes = min(6L * 1024L * 1024L, deviceArticleBudgetBytes)`.
 4. `payloadCount = max(1L, N.toLong() * V.toLong())`.
-5. `budgetEdgePx = floor(sqrt(effectiveArticleBudgetBytes.toDouble() / (4.0 * payloadCount))).toInt()`.
-6. Each square request edge is `min(displayTargetPx, 512, budgetEdgePx)`.
+5. `payloadBudgetBytes = effectiveArticleBudgetBytes / payloadCount`.
+6. `budgetEdgePx = floor(sqrt(payloadBudgetBytes.toDouble() / 4.0)).toInt()`.
+7. Each square request edge is `min(displayTargetPx, 512, budgetEdgePx)`.
 
-If the calculated edge is less than one pixel, omit article images for that update rather than exceed the device limit. The same bounded edge is used for both request dimensions. The bitmap handed to `ImageProvider` must not exceed that edge in either dimension; an oversized decoder result is downscaled before it enters a `RemoteViews` payload.
+If the calculated edge is less than one pixel, omit article images for that update rather than exceed the device limit. Otherwise, every Coil request must use `allowHardware(false)`, prefer `Bitmap.Config.ARGB_8888`, retain exact requested dimensions, and use the same bounded edge for width and height.
+
+Decoder preferences are not treated as proof of the delivered allocation. Before creating `ImageProvider`:
+
+1. Reject hardware-backed results from the delivery path and convert any non-`ARGB_8888` software result, including `RGBA_F16`, to software `ARGB_8888`.
+2. Ensure neither bitmap dimension exceeds `budgetEdgePx`; downscale if necessary.
+3. Read `bitmap.allocationByteCount.toLong()` and require it to be at most `payloadBudgetBytes`.
+4. If the allocation remains too large, calculate a smaller edge from the actual allocation, downscale again as software `ARGB_8888`, and revalidate dimensions, configuration, and `allocationByteCount`.
+5. If conversion or further downscaling fails, or the actual allocation still exceeds `payloadBudgetBytes`, omit the image rather than pass it to `ImageProvider`.
+
+Only a validated software `ARGB_8888` bitmap may enter the `RemoteViews` payload. Because every delivered article bitmap is individually checked against `payloadBudgetBytes`, the aggregate guarantee is based on actual allocations rather than the four-byte estimate alone.
 
 The viewport remains the resolved dp size, so the host may perform limited upscaling when the explicit memory bound is smaller than the display target. On a 480 by 800 pixel display, the Android ceiling is 2,304,000 bytes and the 25-percent reservation leaves an article budget of 1,728,000 bytes rather than 6 MiB.
 
-Bitmap state and asynchronous loading use a request key containing the image URL and final bounded dimensions. State is remembered by that complete key, and the loading effect applies a result only if the key is still current. Returning to `Unresolved` removes image state from composition and cancels its effect. When `N`, `V`, display metrics, or geometry changes the bounded dimensions, the old state is discarded and an in-flight stale result cannot restore an oversized bitmap.
+Bitmap state and asynchronous loading use a request key containing the image URL, final bounded dimensions, and `payloadBudgetBytes`. State is remembered by that complete key, and the loading effect applies a result only if the full key is still current. Returning to `Unresolved` removes image state from composition and cancels its effect. When `N`, `V`, display metrics, geometry, or the per-payload budget changes, the old state is discarded and an in-flight stale result cannot restore a bitmap validated against an older budget. A budget change must revalidate or reload even when target-size capping or integer rounding leaves the bounded pixel dimensions unchanged.
 
 Exact mode may run an image effect independently for each size composition. Identical List requests may be served from Coil's cache, but correctness and aggregate memory calculations do not rely on cache reuse. Every List and Card article-by-variant payload remains included in `P`.
 
@@ -266,7 +280,7 @@ The light/dark wallpaper toggle remains to show transparency over contrasting vi
 ## Error Handling
 
 - Invalid values for the six new Card preferences fall back or normalize without crashing.
-- Failed image loads omit the image and leave the article text and click action intact.
+- Failed image loads and bitmap results that cannot be converted and validated within their allocation budget omit the image while leaving article text and click action intact.
 - Fully transparent outer and Card surfaces use the themed underlay only for automatic contrast calculation; they do not render that fallback as an opaque slab.
 - No new user-visible error state is required.
 
@@ -304,10 +318,15 @@ Add focused tests for:
 - The 96 dp readable-text rule selects Fill mode when it fits and the complete Thumbnail fallback when it does not, including a 256 dp widget at maximum font scales.
 - Thumbnail and fill-height modes produce the correct viewport and bounded request dimensions.
 - In one active Glance session, changing current articles from `N = 1` to `N = 15` and current host sizes from `V = 1` to `V = 2` recomputes the budget, replaces affected request keys, and prevents stale larger results from being applied.
-- Initial size resolution and every options-key change enter `Unresolved`, emit no image request in either layout, and start loading only after the complete size query resolves; an empty completed result alone uses `V = 1`.
+- A budget-key regression test increases `N` or `V` so `payloadBudgetBytes` decreases while the bounded edge remains unchanged; the old bitmap is removed, its in-flight result is rejected, and only a bitmap validated against the new budget can render.
+- Initial size resolution and every immutable-options-snapshot change enter `Unresolved`, emit no image request in either layout, and start loading only after a validated complete size query resolves; a validated empty result alone uses `V = 1`.
+- Options-race tests cover composition snapshot A with platform snapshot B before the query and A changing to B during the query. Neither mismatch may publish `V`; only matching pre-query, composition, and post-query snapshots resolve the size state.
+- A transient A -> B -> A platform sequence without a composition-key change remains unresolved during the mismatch, retries with capped backoff, and eventually resolves A so images recover. A real composition-key change cancels the previous retry loop.
 - Exact-mode size tests cover both Android 12+ explicit size lists and Android 8-11 legacy portrait/landscape estimates, with aggregate Card and List accounting on both paths.
 - Device-limit tests use `Long` arithmetic and cover a 480 by 800 pixel display, the 6 MiB upper cap, and large dimensions without overflow.
-- Bitmap-budget tests cover one and multiple exact-size variants. A 15-image update keeps the sum of all article-by-variant payloads within the effective device-derived budget and every decoded edge at or below 512 pixels.
+- Loader tests assert `allowHardware(false)` and the `ARGB_8888` preference, then inject hardware and `RGBA_F16` results to verify conversion or omission before `ImageProvider`.
+- Allocation tests use bitmaps whose `allocationByteCount` exceeds `width * height * 4`, verify further downscaling and revalidation, and verify omission when no compliant software bitmap can be produced.
+- Bitmap-budget tests sum actual validated `allocationByteCount` values across one and multiple exact-size variants. A 15-image update remains within the effective device-derived budget and every decoded edge remains at or below 512 pixels.
 - A List regression test uses multiple Exact-mode variants and 15 image-bearing articles, preserves the 50 dp List viewport and existing layout, and subjects every List payload to the same reactive aggregate budget and request-key rules.
 
 ### Preview coverage
@@ -380,9 +399,11 @@ After implementation:
 - `FeedFlowWidget` uses `SizeMode.Exact`; narrow-to-wide-to-narrow resizing changes Thumbnail fallback to Fill and back without another settings or feed event.
 - A fill-height image never reduces readable text below 96 dp; the renderer uses the complete Thumbnail fallback when necessary.
 - Current feed items and the complete current host-size result reactively recompute the image budget inside an existing Glance session on every supported Android version.
-- Initial size resolution and every options change suppress article-image requests until the size query resolves; a stale request cannot restore a bitmap from an older, larger budget.
+- Initial size resolution and every options change suppress article-image requests until a query validated against the same immutable options snapshot resolves; mismatched snapshots never publish `V` and retry with capped backoff so a transient mismatch cannot suppress images permanently.
 - The effective article-bitmap budget is the smaller of 6 MiB and 75 percent of Android's device-derived `RemoteViews` bitmap ceiling, calculated with `Long` arithmetic.
-- Across every host-provided exact-size variant, up to 15 image-bearing articles stay within the effective aggregate budget and 512-pixel per-edge cap without assuming bitmap deduplication.
+- Only validated software `ARGB_8888` bitmaps whose actual `allocationByteCount` fits the per-payload budget reach `ImageProvider`; incompatible or oversized results are converted, further downscaled, or omitted.
+- The image request/state key includes `payloadBudgetBytes`, so a reduced budget invalidates an older bitmap even when its bounded dimensions are unchanged.
+- Across every host-provided exact-size variant, the sum of actual allocations for up to 15 image-bearing articles stays within the effective aggregate budget and 512-pixel per-edge cap without assuming bitmap deduplication.
 - List rows retain their current 50 dp thumbnail geometry, appearance, and interactions while participating in the same Exact-mode aggregate budget and request-key policy.
 - Missing or failed images do not leave an empty image region.
 - Preview controls and sample rows show every Card option without clipping.
