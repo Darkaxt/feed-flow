@@ -19,6 +19,8 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.tooling.preview.Preview
 import com.prof18.feedflow.core.model.WidgetFeedLayout
 import com.prof18.feedflow.shared.domain.model.SyncPeriod
+import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
+import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
 import com.prof18.feedflow.shared.domain.model.WidgetTextColorMode
 import com.prof18.feedflow.shared.ui.style.Spacing
 import com.prof18.feedflow.shared.ui.theme.FeedFlowTheme
@@ -35,6 +37,12 @@ fun WidgetSettingsScaffold(
     onBackgroundOpacitySelected: (Int) -> Unit,
     onTextColorModeSelected: (WidgetTextColorMode) -> Unit,
     onHideImagesSelected: (Boolean) -> Unit,
+    onCardSurfaceColorSelected: (Int?) -> Unit,
+    onCardSurfaceOpacitySelected: (Int) -> Unit,
+    onCardCornerRadiusSelected: (Int) -> Unit,
+    onCardItemSeparationSelected: (WidgetCardItemSeparation) -> Unit,
+    onCardDividerOpacitySelected: (Int) -> Unit,
+    onCardImageSizingSelected: (WidgetCardImageSizing) -> Unit,
     showConfirmButton: Boolean,
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier,
@@ -92,6 +100,12 @@ fun WidgetSettingsScaffold(
                         onBackgroundOpacitySelected = onBackgroundOpacitySelected,
                         onTextColorModeSelected = onTextColorModeSelected,
                         onHideImagesSelected = onHideImagesSelected,
+                        onCardSurfaceColorSelected = onCardSurfaceColorSelected,
+                        onCardSurfaceOpacitySelected = onCardSurfaceOpacitySelected,
+                        onCardCornerRadiusSelected = onCardCornerRadiusSelected,
+                        onCardItemSeparationSelected = onCardItemSeparationSelected,
+                        onCardDividerOpacitySelected = onCardDividerOpacitySelected,
+                        onCardImageSizingSelected = onCardImageSizingSelected,
                         showConfirmButton = showConfirmButton,
                         onConfirm = onConfirm,
                         modifier = Modifier.fillMaxWidth(),
@@ -128,6 +142,12 @@ private fun WidgetSettingsScaffoldPreview() {
             onBackgroundOpacitySelected = {},
             onTextColorModeSelected = {},
             onHideImagesSelected = {},
+            onCardSurfaceColorSelected = {},
+            onCardSurfaceOpacitySelected = {},
+            onCardCornerRadiusSelected = {},
+            onCardItemSeparationSelected = {},
+            onCardDividerOpacitySelected = {},
+            onCardImageSizingSelected = {},
             showConfirmButton = true,
             onConfirm = {},
             onNavigateBack = {},

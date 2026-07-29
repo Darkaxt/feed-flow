@@ -196,6 +196,8 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.koin.test)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.multiplatform.settings)
+    testImplementation(libs.multiplatform.settings.test)
     testImplementation(libs.androidx.test.core.ktx)
     testImplementation(libs.org.robolectric)
 }
