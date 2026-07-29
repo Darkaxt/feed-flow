@@ -19,7 +19,7 @@ The current Card appearance remains the default. The `List` layout and unrelated
 - Support spaced slabs, divider-separated slabs, and slabs with no separator.
 - Allow fully transparent slabs independently of the outer widget background.
 - Keep the current 50 dp thumbnail as the compatibility default.
-- Add a square, center-cropped image mode that fills the rendered row height without stretching or thumbnail upscaling.
+- Add a square, center-cropped image mode that fills the rendered row height without stretching or reusing the 50 dp thumbnail request; decoded size remains subject to an explicit widget bitmap budget.
 - Make the configuration preview use the same normalized settings, separation rules, and image geometry as the placed widget.
 
 ## Non-goals
@@ -59,7 +59,7 @@ When `Feed Layout` is `Card`, add a `Card appearance` section with these control
 
 The existing color-picker dialog is reused. Its title and descriptive labels are parameters so the same implementation can edit either the widget background or Card surface. Resetting the Card color removes the custom value and restores the themed default.
 
-Settings continue to persist through the existing view-model callbacks. The existing add-widget confirmation behavior does not change.
+Each new update method in the in-app `WidgetSettingsViewModel` follows the existing widget-setting pattern: ignore an unchanged value; otherwise update state, persist the normalized value, and call `WidgetUpdater.update()` exactly once for that effective callback. This keeps placed widgets current immediately. The widget configuration view model continues to persist through its existing callbacks, and the existing add-widget confirmation behavior does not change.
 
 ## Compatibility
 
@@ -80,7 +80,7 @@ No preference migration is required.
 
 ## Settings Model and Persistence
 
-Add a platform-neutral `WidgetCardAppearance` model under `shared/src/commonMain/.../domain/model/`:
+Add an Android-only `WidgetCardAppearance` model under `shared/src/androidMain/.../domain/model/`:
 
 - `surfaceColor: Int?`
 - `surfaceOpacityPercent: Int`
@@ -91,7 +91,7 @@ Add a platform-neutral `WidgetCardAppearance` model under `shared/src/commonMain
 
 `WidgetCardItemSeparation` contains `SPACING`, `DIVIDER`, and `NONE`. `WidgetCardImageSizing` contains `THUMBNAIL` and `FILL_ROW_HEIGHT`.
 
-`WidgetCardAppearance` represents normalized user settings, not theme-resolved Android colors. Theme resolution remains in Android widget code.
+`WidgetCardAppearance` is scoped to `androidMain` because only the Android widget consumes it. It represents normalized user settings rather than theme-resolved renderer colors.
 
 Persist the fields in `WidgetSettingsRepository` using:
 
@@ -197,9 +197,27 @@ The layout contract is:
 - The image is center-cropped and never stretched.
 - The image uses the configured Card radius as its uniform Glance corner radius. Uniform rounding may also round the image's inner corners; per-corner clipping is outside this change.
 
-If the date is absent or the image fails to load, the fixed row height remains stable and text uses the additional horizontal space.
+Before using fill-height geometry, calculate the available slab width from `LocalSize.current.width` after the existing outer horizontal insets. Fill mode requires room for:
 
-Image requests use the viewport's actual dp dimensions converted through `LocalContext.current.resources.displayMetrics`. Bitmap state and asynchronous loading are keyed by both image URL and target pixel dimensions so switching image mode, widget font size, density, or system font scale cannot reuse an undersized thumbnail request.
+- A 16 dp leading text inset.
+- At least 96 dp of readable text width.
+- A 16 dp gap between text and image.
+- The square image at the calculated row height.
+
+If the available width is smaller than that total, render the selected `FILL_ROW_HEIGHT` mode as `THUMBNAIL` for that widget render. The fallback uses the complete Thumbnail geometry, including its normal row height and 50 dp image request; the stored user preference remains unchanged. The preview uses the same width rule. This makes the 256 dp minimum widget deterministic at large widget or Android system font scales.
+
+If the date is absent or the image fails to load, the resolved row geometry remains stable and text uses the additional horizontal space.
+
+Image requests first convert the resolved viewport dimensions through `LocalContext.current.resources.displayMetrics`. They are then bounded by a per-widget bitmap policy. `N` is the number of articles in the widget update that have an image URL while images are enabled:
+
+- Maximum decoded edge: 512 pixels.
+- Maximum combined raw article-bitmap payload: 6 MiB per widget update, assuming four bytes per pixel.
+- For `N` image-bearing articles, calculate `budgetEdgePx = floor(sqrt((6 * 1024 * 1024) / (4 * max(1, N))))`.
+- The square request edge is `min(displayTargetPx, 512, budgetEdgePx)`.
+
+The same bounded edge is used for both request dimensions. The bitmap handed to `ImageProvider` must not exceed that edge in either dimension; an oversized decoder result is downscaled before it enters the `RemoteViews` payload. With 15 image-bearing articles, the calculated requests remain within the 6 MiB raw-pixel budget. The viewport remains the resolved dp size, so the host may perform limited upscaling only when the explicit memory bound is smaller than the display target.
+
+Bitmap state and asynchronous loading are keyed by image URL and the final bounded request dimensions. Switching image mode, widget width, widget font size, density, system font scale, or image-count budget cannot reuse a request with different target dimensions.
 
 ## Configuration Preview
 
@@ -246,6 +264,7 @@ Add focused tests for:
 
 - Missing preferences produce the compatibility defaults.
 - Every Card value persists and is emitted as part of the grouped appearance.
+- Each in-app Card update method calls `WidgetUpdater.update()` once for a changed value and zero times for an unchanged value.
 - Card setters and getters normalize opacity, radius, custom color alpha, and unknown enum values.
 - The default automatic Card resolves to the current themed surface and themed `onSurface` text.
 - Zero Card opacity produces no visible surface color.
@@ -253,8 +272,10 @@ Add focused tests for:
 - Existing Light and Dark modes override automatic Card text.
 - Divider alpha is the configured final alpha and no divider is emitted after the final item.
 - Row-height calculation accommodates minimum, default, and maximum widget font settings across representative Android system font scales.
-- Thumbnail and fill-height modes produce the correct viewport and request dimensions.
-- Changing target dimensions changes the image-loading key.
+- The 96 dp readable-text rule selects Fill mode when it fits and the complete Thumbnail fallback when it does not, including a 256 dp widget at maximum font scales.
+- Thumbnail and fill-height modes produce the correct viewport and bounded request dimensions.
+- Changing target dimensions or image-count budget changes the image-loading key.
+- A 15-image update keeps the calculated raw bitmap payload at or below 6 MiB and every decoded edge at or below 512 pixels.
 
 ### Preview coverage
 
@@ -273,17 +294,19 @@ On a connected Android device:
 3. Verify Spacing, Divider, and None, including no divider after the final article.
 4. Verify radius 0 and 32 dp.
 5. Verify fill-height images align to row bounds, remain square, center-crop, and do not stretch.
-6. Verify changing between image modes requests an appropriately sized image.
-7. Verify missing and failed images collapse horizontally without breaking the row.
-8. Verify article rows remain clickable across text and image regions.
-9. Compare the preview with the placed widget at minimum, default, and maximum widget font settings.
+6. Resize to the 256 dp minimum width at maximum widget and Android system font scales and verify the complete Thumbnail fallback leaves at least 96 dp for text.
+7. Verify changing between image modes requests an appropriately bounded image.
+8. Update a widget containing 15 image-bearing articles and verify it renders without bitmap-allocation or `RemoteViews` failure.
+9. Verify missing and failed images collapse horizontally without breaking the row.
+10. Verify article rows remain clickable across text and image regions.
+11. Compare the preview with the placed widget at minimum, default, and maximum widget font settings.
 
 ## Expected File Areas
 
 Implementation is expected to touch:
 
 - `shared/src/androidMain/.../WidgetSettingsRepository.kt`
-- `shared/src/commonMain/.../domain/model/WidgetCardAppearance.kt`
+- `shared/src/androidMain/.../domain/model/WidgetCardAppearance.kt`
 - `androidApp/src/main/.../widget/WidgetSettingsState.kt`
 - Both Android widget settings view models and their callback plumbing
 - `WidgetSettingsContent.kt`
@@ -316,8 +339,11 @@ After implementation:
 - Card radius is configurable from 0 through 32 dp.
 - Existing Light and Dark widget text modes apply to Card text.
 - Thumbnail mode remains 50 dp and visually unchanged.
-- Fill-height images are square, center-cropped, aligned to row bounds, and requested at their display size.
-- Image mode or geometry changes cannot reuse an undersized request.
+- Every effective in-app Card setting change updates placed widgets exactly once; unchanged callbacks do not update them.
+- Fill-height images are square, center-cropped, aligned to row bounds, and requested at display size up to the explicit bitmap limits.
+- A fill-height image never reduces readable text below 96 dp; the renderer uses the complete Thumbnail fallback when necessary.
+- Image mode, geometry, or image-count budget changes cannot reuse a request with different bounded dimensions.
+- Up to 15 image-bearing articles stay within the 6 MiB raw bitmap budget and 512-pixel per-edge cap.
 - Missing or failed images do not leave an empty image region.
 - Preview controls and sample rows show every Card option without clipping.
 - Invalid values for the new Card preferences cannot crash configuration or rendering.
