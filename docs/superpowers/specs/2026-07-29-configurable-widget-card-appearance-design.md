@@ -4,76 +4,83 @@ Date: 2026-07-29
 
 ## Summary
 
-FeedFlow's Android feed widget currently lets users configure the outer widget background, but the `Card` feed layout always renders each article with a fully opaque themed surface and a fixed 50 dp thumbnail. This makes it impossible to build a transparent, layered widget composition or adapt the cards to launchers with their own visual treatment.
+FeedFlow's Android widget already allows the outer widget background to be customized, but every article in the `Card` layout still uses a fixed themed slab and a fixed 50 dp thumbnail.
 
-This change makes the existing `Card` layout fully configurable while preserving its current appearance for existing installations. Users will be able to choose the card surface color and opacity, corner radius, item separation, divider opacity, and image sizing. The feature remains generic and launcher-neutral so it is suitable for an upstream FeedFlow pull request.
+This change has two purposes:
+
+1. Let users personalize the article slabs in the existing `Card` layout.
+2. Let users keep the current thumbnail or use a correctly sized square image that fills the row height.
+
+The current Card appearance remains the default. The `List` layout and unrelated widget behavior do not change.
 
 ## Goals
 
-- Allow card surfaces to be fully transparent independently of the outer widget background.
-- Allow a custom card surface color and opacity.
-- Support spaced cards, divider-separated cards, and cards with no visual separator.
-- Allow article images to retain the current thumbnail treatment or fill the rendered row height.
-- Keep the widget preview behaviorally aligned with the real Glance widget.
-- Preserve the current appearance when the new settings have never been changed.
-- Keep the implementation generic, maintainable, and suitable for upstream review.
+- Configure the Card slab's color, opacity, corner radius, and separation.
+- Support spaced slabs, divider-separated slabs, and slabs with no separator.
+- Allow fully transparent slabs independently of the outer widget background.
+- Keep the current 50 dp thumbnail as the compatibility default.
+- Add a square, center-cropped image mode that fills the rendered row height without stretching or thumbnail upscaling.
+- Make the configuration preview use the same normalized settings, separation rules, and image geometry as the placed widget.
 
 ## Non-goals
 
-- Integrating with Smart Launcher or any other launcher API.
-- Producing or controlling launcher-side wallpaper blur.
-- Detecting or synchronizing launcher colors, fonts, opacity, or widget stacking.
-- Bundling or selecting custom font families.
-- Changing the `List` layout.
-- Migrating the widget from Jetpack Glance to hand-written `RemoteViews`.
-- Converting global widget preferences into per-widget-instance preferences.
-- Adding new feed filtering, sorting, refresh, or interaction behavior.
+- Launcher integrations, wallpaper blur, or launcher color synchronization.
+- Custom fonts or other typography features.
+- Changes to the `List` layout.
+- Per-widget-instance preferences; widget appearance remains global.
+- Changes to feed loading, synchronization, filtering, sorting, refresh, or article interactions.
+- Replacing Jetpack Glance with hand-written `RemoteViews`.
+- Unrelated preference migrations or repository refactoring.
 
-## Existing Behavior and Problem
+## Existing Behavior
 
-The outer widget background is resolved in `WidgetContent` from the configured background color and opacity. In contrast, `WidgetFeedItemCard` independently uses `GlanceTheme.colors.secondaryContainer`, `16.dp` corners, fixed vertical spacing, and themed `onSurface` text. Its article image is always requested and rendered as a cropped `50.dp` square.
+`WidgetContent` resolves the outer widget background from the existing background color and opacity settings. `WidgetFeedItemCard` separately renders every Card item with:
 
-Consequently, setting the widget background opacity to zero only removes the outer canvas. It does not affect the opaque article cards. The configuration preview repeats this mismatch by drawing card items with `MaterialTheme.colorScheme.secondaryContainer`, so neither the preview nor the real widget can represent transparent cards.
+- `GlanceTheme.colors.secondaryContainer`.
+- `16.dp` corner radius.
+- The existing `Spacing.xsmall` vertical wrapper padding.
+- `GlanceTheme.colors.onSurface` for both primary and secondary text.
+- A trailing, center-cropped `50.dp` square image with `8.dp` corners.
 
-## Design Principles
-
-1. **Backward-compatible defaults:** an untouched installation must look the same after upgrading.
-2. **Generic terminology:** settings describe card surfaces, separators, and image sizing rather than a specific launcher or workaround.
-3. **One resolved appearance:** settings are normalized into one appearance value consumed by both renderer-facing state and the preview.
-4. **Progressive disclosure:** card-only controls appear only when `Card` is selected, and dependent controls appear only when relevant.
-5. **Best-effort automatic contrast:** automatic text colors use the surfaces FeedFlow can observe; manual light or dark text remains the escape hatch for transparent widgets placed over external content.
+The Card renderer currently ignores the existing widget text-color mode. The preview similarly hard-codes its Card surface and text colors.
 
 ## User-facing Settings
 
-The existing `Feed Layout`, header, image visibility, widget background, text color, and font size settings remain. When `Feed Layout` is `Card`, the configuration screen adds a `Card appearance` section.
+When `Feed Layout` is `Card`, add a `Card appearance` section with these controls:
 
 | Setting | Values | Default | Visibility |
 | --- | --- | --- | --- |
 | Card surface color | Themed default or custom RGB color | Themed default | Card layout |
 | Card surface opacity | 0-100 percent | 100 percent | Card layout |
-| Card corner radius | 0-32 dp, in 2 dp steps | 16 dp | Card layout |
+| Card corner radius | 0-32 dp in 2 dp steps | 16 dp | Card layout |
 | Item separation | Spacing, Divider, None | Spacing | Card layout |
 | Divider opacity | 0-100 percent | 20 percent | Card layout and Divider separation |
 | Image sizing | Thumbnail, Fill row height | Thumbnail | Card layout and images visible |
 
-The established color-picker dialog is reused for card surface color, with parameterized labels rather than a duplicate picker implementation. Resetting the card color removes the custom value and restores the themed default.
+The existing color-picker dialog is reused. Its title and descriptive labels are parameters so the same implementation can edit either the widget background or Card surface. Resetting the Card color removes the custom value and restores the themed default.
 
-Settings continue to save immediately through the existing view-model callbacks. The add-widget confirmation behavior does not change.
+Settings continue to persist through the existing view-model callbacks. The existing add-widget confirmation behavior does not change.
 
-### Intended transparent composition
+## Compatibility
 
-The target layered composition is expressible without a launcher-specific preset:
+Missing Card preferences resolve to:
 
-- Widget background opacity: `0%`
-- Card surface opacity: `0%`
-- Item separation: `Divider`
-- Divider opacity: approximately `20%`
-- Image sizing: `Fill row height`
-- Text color: `Light` when automatic contrast cannot observe the external background
+- Themed `secondaryContainer` surface.
+- 100 percent surface opacity.
+- 16 dp corner radius.
+- `SPACING` separation.
+- 20 percent divider opacity.
+- `THUMBNAIL` image sizing.
 
-## Domain and Persistence Model
+With those defaults and `AUTOMATIC` text color, the placed widget must retain the current Card rendering, including themed `onSurface` for both text roles. This compatibility path avoids a subtle color or secondary-alpha change after upgrade.
 
-The card-specific values are defined in a shared `WidgetCardAppearance` model under `shared/src/commonMain/.../domain/model/` rather than passed as unrelated primitive parameters throughout the renderer. The value contains:
+The existing `Light` and `Dark` text modes will begin applying to Card text. That is an intentional correction needed for readable transparent slabs; it may change Card text for an existing user who already selected one of those modes. It does not add a new text setting.
+
+No preference migration is required.
+
+## Settings Model and Persistence
+
+Add a platform-neutral `WidgetCardAppearance` model under `shared/src/commonMain/.../domain/model/`:
 
 - `surfaceColor: Int?`
 - `surfaceOpacityPercent: Int`
@@ -82,11 +89,11 @@ The card-specific values are defined in a shared `WidgetCardAppearance` model un
 - `dividerOpacityPercent: Int`
 - `imageSizing: WidgetCardImageSizing`
 
-`WidgetCardItemSeparation` has `SPACING`, `DIVIDER`, and `NONE`. `WidgetCardImageSizing` has `THUMBNAIL` and `FILL_ROW_HEIGHT`.
+`WidgetCardItemSeparation` contains `SPACING`, `DIVIDER`, and `NONE`. `WidgetCardImageSizing` contains `THUMBNAIL` and `FILL_ROW_HEIGHT`.
 
-`WidgetSettingsRepository` persists each field alongside the existing widget settings. Enum values are stored by stable enum name, matching the existing layout and text-color conventions. Nullable surface color follows the existing widget-background convention: absence of the preference means themed default.
+`WidgetCardAppearance` represents normalized user settings, not theme-resolved Android colors. Theme resolution remains in Android widget code.
 
-The persisted keys are:
+Persist the fields in `WidgetSettingsRepository` using:
 
 - `WIDGET_CARD_SURFACE_COLOR`
 - `WIDGET_CARD_SURFACE_OPACITY_PERCENT`
@@ -95,254 +102,223 @@ The persisted keys are:
 - `WIDGET_CARD_DIVIDER_OPACITY_PERCENT`
 - `WIDGET_CARD_IMAGE_SIZING`
 
-### Compatibility and invalid data
+Enum values are stored by enum name. Absence of `WIDGET_CARD_SURFACE_COLOR` means the themed default.
 
-No migration is required because every new key has a default matching the current renderer:
+Both reads and writes normalize Card values before returning, storing, or emitting them:
 
-- Surface color: themed `secondaryContainer`
-- Surface opacity: `100`
-- Corner radius: `16`
-- Item separation: `SPACING`
-- Divider opacity: `20`
-- Image sizing: `THUMBNAIL`
+- Opacity is clamped to `0..100`.
+- Radius is clamped to `0..32` and normalized to an even value; an odd midpoint rounds upward.
+- Unknown enum names fall back to their defaults.
+- A custom surface color is treated as opaque RGB; transparency comes only from `surfaceOpacityPercent`.
 
-Repository reads must clamp numeric values to their supported ranges. A stored radius that is not an even number is rounded to the nearest supported two-dp step, with an exact midpoint rounded upward. Unknown or malformed enum names fall back to their defaults instead of throwing. Existing keys and their semantics are unchanged.
+The repository exposes one coherent Card appearance to `FeedFlowWidget`, `WidgetConfigurationViewModel`, and the in-app widget settings view model. The model is included in `WidgetSettingsState` so the settings UI and preview consume the same normalized values.
 
-The project currently applies widget appearance globally to all FeedFlow widget instances. This change preserves that behavior; per-instance configuration is a separate feature.
+## Surface and Text Resolution
 
-## Appearance Resolution
+The Card surface is resolved in Android code:
 
-Card rendering must not directly read individual repository flows. `FeedFlowWidget` collects the new values and constructs the card appearance passed through `WidgetContent` to the card renderer.
+1. Use the custom opaque RGB color when present; otherwise use the renderer's themed `secondaryContainer`.
+2. Apply the normalized Card surface opacity.
+3. At zero opacity, render no visible slab fill.
 
-The resolved card surface follows these rules:
+The existing widget text-color mode applies to Card text:
 
-1. If a custom card color exists, use its opaque RGB value as the surface base.
-2. Otherwise use `GlanceTheme.colors.secondaryContainer`.
-3. Apply the configured card surface opacity after clamping it to `0..100`.
-4. At zero opacity, the card contributes no visible fill.
+- `LIGHT` uses the existing light text colors.
+- `DARK` uses the existing dark text colors.
+- `AUTOMATIC` derives readable text from the effective Card background.
 
-For automatic text contrast, calculate the effective card background by compositing the card surface over the effective outer widget background. The effective outer background continues to use the existing widget-background resolver. When both layers are transparent, FeedFlow cannot inspect another widget or the live launcher background; automatic contrast therefore falls back to the themed widget underlay. Existing `Light` and `Dark` text modes override automatic contrast and must work unchanged.
+For automatic contrast outside the compatibility path:
 
-Both primary and secondary card text colors come from the same resolved contrast result. This fixes the current behavior in which `Card` mode ignores the configured text-color mode.
+1. Resolve the outer widget background using its configured color and opacity.
+2. Composite it over the renderer's opaque themed widget underlay because FeedFlow cannot inspect launcher content behind a transparent widget.
+3. Composite the Card surface over that effective outer background.
+4. Use the existing luminance-based text-color helper on the result.
 
-The divider color is derived from the resolved secondary text color and then uses the configured divider opacity. It does not introduce a separate color picker.
+When the Card uses the themed default surface at 100 percent opacity and text mode is `AUTOMATIC`, use themed `onSurface` for both text roles to preserve the current placed-widget appearance.
 
-## Card Layout and Separation
+The Compose preview and Glance renderer use the same normalization and compositing algorithm, while each supplies its equivalent theme colors. The preview wallpaper is visual context only; it is not treated as observable launcher content when resolving automatic text.
 
-`WidgetFeedItemCard` remains the clickable unit for an article. Its visible surface, geometry, and outer separation are driven by the resolved card appearance.
+## Separation and Corner Radius
+
+`WidgetFeedItemCard` remains the clickable article slab. Separators are outside the article click target.
 
 ### Spacing
 
-`SPACING` preserves the current vertical `Spacing.xsmall` gap around each card. No divider is rendered. This is the compatibility default.
+`SPACING` preserves the current Card wrapper and modifier order, including the existing `Spacing.xsmall` vertical padding. No divider is rendered. This is the compatibility default.
 
 ### Divider
 
-`DIVIDER` removes the inter-card gap and inserts a one-dp horizontal divider between adjacent items. The divider:
+`DIVIDER` removes the Card wrapper's vertical spacing and renders a 1 dp horizontal divider only between adjacent articles.
 
-- Is rendered after an item only when another item follows.
-- Uses the configured opacity and resolved secondary text color.
-- Is horizontally inset by the card content padding so it aligns with native information-widget separators and does not touch the widget edge.
-- Is decorative and has no click or accessibility semantics.
+The divider:
+
+- Is not rendered after the final article.
+- Is inset horizontally by 16 dp.
+- Uses the RGB of the resolved secondary text color.
+- Uses `dividerOpacityPercent / 100f` as its final alpha, replacing rather than multiplying the secondary text alpha.
+- Is decorative and has no click action or content description.
 
 ### None
 
-`NONE` removes both the inter-card gap and divider. Individual rows remain independently clickable.
+`NONE` removes both the Card wrapper's vertical spacing and the divider. Rows remain independently clickable.
 
-Corner radius is applied to the visible card surface in all modes, while the article click target continues to span the complete row. At zero surface opacity the radius has no visible fill effect but remains stored so restoring opacity restores the chosen geometry.
+The configured radius is applied uniformly to each Card surface in every separation mode using Glance's supported uniform corner radius. In `DIVIDER` or `NONE`, a nonzero per-row radius may reveal the outer background at the edges where rows meet. This is accepted behavior; selecting a zero radius produces continuous straight edges without requiring grouped or per-corner clipping support.
 
-## Image Rendering
+## Image Sizing
 
-Image visibility remains controlled by the existing `Hide article image` setting. If images are visible and an article has an image URL, behavior depends on `Image sizing`.
+The existing `Hide article image` setting remains authoritative. If images are hidden or an article has no image URL, no image region is rendered and text uses the available width.
 
 ### Thumbnail
 
-`THUMBNAIL` preserves the current behavior:
+`THUMBNAIL` preserves the current rendering:
 
-- `50.dp` square target.
-- Center-cropped content.
-- `8.dp` image corner radius.
-- Existing trailing placement and padding.
+- 50 dp square viewport.
+- Center crop.
+- 8 dp uniform corner radius.
+- Existing Card placement, padding, and row-height behavior.
+
+The request target is 50 dp converted to pixels with the widget context's display metrics.
 
 ### Fill row height
 
-`FILL_ROW_HEIGHT` makes the image a trailing visual region whose height equals the rendered card row height:
+`FILL_ROW_HEIGHT` uses a deterministic fixed row height because Glance cannot measure a sibling and then size the image from that runtime measurement.
 
-- The image keeps a square viewport, so its width equals the row height.
-- Content uses center crop and is never stretched.
-- Text retains the existing internal content padding.
-- The image has no vertical inset; its top and bottom align with the row bounds.
-- The image's outer corners respect the configured card radius, within Glance's supported uniform-corner behavior.
-- Text remains limited to the existing maximum of two title lines.
+The layout contract is:
 
-Because Glance is backed by `RemoteViews`, the implementation uses a centralized deterministic row-height calculation derived from the current font scale rather than runtime sibling measurement. The calculated height must be at least the height of the feed-name line, two title lines, date line, their existing inter-line spacing, and 16 dp top and bottom text padding. The image and row have equal rendered heights at every supported font scale without clipping that maximum text case.
+- Feed source: at most one line.
+- Title: at most two lines.
+- Date: at most one line when present.
+- The text column has 16 dp top and bottom padding.
+- The text retains a 16 dp horizontal inset from the slab edge and image.
+- The row height is a centralized conservative calculation that accommodates those maximum lines, their spacing, the selected widget font sizes, and `Resources.configuration.fontScale`.
+- The row and image viewport use the same calculated height.
+- The image viewport is square, so its width equals the row height.
+- The image touches the row's top, bottom, and trailing bounds.
+- The image is center-cropped and never stretched.
+- The image uses the configured Card radius as its uniform Glance corner radius. Uniform rounding may also round the image's inner corners; per-corner clipping is outside this change.
 
-Image requests must target the actual display dimensions at device density rather than reuse the current 50-by-50-pixel request. This avoids visibly upscaling a thumbnail into the fill-height viewport. The existing asynchronous loading model remains.
+If the date is absent or the image fails to load, the fixed row height remains stable and text uses the additional horizontal space.
 
-If an image URL is missing or loading fails, omit the image region and let text use the available width. Do not add a placeholder or error badge.
+Image requests use the viewport's actual dp dimensions converted through `LocalContext.current.resources.displayMetrics`. Bitmap state and asynchronous loading are keyed by both image URL and target pixel dimensions so switching image mode, widget font size, density, or system font scale cannot reuse an undersized thumbnail request.
 
 ## Configuration Preview
 
-The configuration preview must expose every visual choice before the widget is added or updated.
+The preview must show the selected Card surface color, opacity, radius, separation, divider opacity, image sizing, and text-color mode.
 
-- It uses the same default values, clamping, color compositing, and text-color resolution as the widget renderer.
-- Card preview rows use the configured surface color, opacity, radius, separator, and image sizing.
-- The card preview contains at least two sample articles so `Spacing`, `Divider`, and `None` are distinguishable.
-- The preview's light/dark backdrop toggle remains and continues to demonstrate contrast behavior.
-- At zero widget and card opacity, the preview wallpaper remains visible through both layers.
-- Fill-height preview images use representative artwork blocks with the same geometry as the real row.
+It contains at least two sample articles so all separation modes are visible. Its container may grow with the selected widget font size; it must not clip two fill-height sample rows merely to preserve the current fixed preview height.
 
-Shared pure helpers should resolve appearance where possible. Compose preview UI and Glance UI remain separate renderers, but neither should independently reinterpret persistence defaults or percentage values.
+The light/dark wallpaper toggle remains to show transparency over contrasting visual backgrounds. Automatic text resolution still uses the renderer's themed fallback, matching what the placed widget can know. Any outline used solely to show preview bounds is preview chrome and must not be presented as part of the placed widget appearance.
 
-## Component Boundaries
+## Interaction and Accessibility
 
-The implementation should keep the following responsibilities separate:
-
-- **Persistence:** `WidgetSettingsRepository` owns defaults, validation, storage, and flows.
-- **Settings state:** `WidgetSettingsState` exposes one coherent snapshot to both widget configuration entry points.
-- **Settings UI:** `WidgetSettingsContent` renders conditional controls and reuses the color picker.
-- **Appearance resolution:** pure helpers clamp percentages, resolve themed/custom surfaces, composite known layers, and derive text/divider colors.
-- **Glance rendering:** `WidgetContent` arranges the feed; `WidgetFeedItemCard` renders one card using a resolved appearance.
-- **Image loading:** the image component chooses request and viewport dimensions from `WidgetCardImageSizing` and resolved row geometry.
-- **Preview rendering:** `WidgetPreviewSection` mirrors the resolved appearance without owning persistence logic.
-
-Both `WidgetConfigurationViewModel` and the in-app widget settings view model must expose and update the new fields. Their mapping should use a grouped intermediate value if necessary to keep coroutine `combine` calls readable.
-
-## Accessibility and Interaction
-
-- Article rows retain their current click actions and complete clickable bounds.
-- Transparency and separators must not split or shrink the touch target.
-- Divider views are decorative and receive no content description.
-- Article images remain decorative because the article text identifies the target.
-- New setting rows use the existing accessible setting components and minimum touch sizes.
-- Slider values are exposed in their visible labels, including percent or dp units.
-
-## Performance
-
-- Do not create per-item surface bitmaps; use Glance colors and layout primitives.
-- Do not reload feed data when only appearance settings change.
-- Request article bitmaps at the display target appropriate to the selected image mode.
-- Preserve the current lazy feed list and asynchronous image loading.
-- Updating any setting triggers the existing widget update path once; no polling or background service is introduced.
+- Every article keeps its existing action and independently clickable slab bounds.
+- Spacing, transparency, and image mode do not shrink or split the article click target.
+- Dividers and article images are decorative.
+- New setting controls reuse existing accessible setting components and touch targets.
+- Opacity and radius values are shown with percent or dp units.
 
 ## Error Handling
 
-- Clamp stored and incoming opacity values to `0..100`.
-- Clamp radius values to `0..32` and normalize them to the supported two-dp step.
-- Fall back safely on unknown enum values.
-- Preserve the current custom-color validation and reset behavior.
-- Omit failed article images without affecting row text or click behavior.
-- If automatic contrast cannot know an external background, use the existing themed underlay and allow the user to choose explicit light or dark text.
-
-No new user-visible error state is required.
+- Invalid values for the six new Card preferences fall back or normalize without crashing.
+- Failed image loads omit the image and leave the article text and click action intact.
+- Fully transparent outer and Card surfaces use the themed underlay only for automatic contrast calculation; they do not render that fallback as an opaque slab.
+- No new user-visible error state is required.
 
 ## Internationalization
 
 Add English source strings for:
 
-- Card appearance section title.
+- Card appearance.
 - Card surface color and themed-default label.
-- Card surface opacity label.
-- Card corner radius label.
+- Card surface opacity.
+- Card corner radius.
 - Item separation and its three values.
-- Divider opacity label.
+- Divider opacity.
 - Image sizing and its two values.
 
-No strings are hard-coded in Kotlin. Generated translation bindings are refreshed using the repository script. Other-language translations are not authored manually.
+Do not hard-code strings in Kotlin or manually author other-language translations. Run `.scripts/refresh-translations.sh` after adding the English resources.
 
-## Testing Strategy
+## Testing
 
 ### Unit tests
 
-Add behavior-focused tests covering:
+Add focused tests for:
 
-- Repository defaults reproduce the existing card appearance when new keys are absent.
-- Every card appearance value persists and is emitted through its flow.
-- Invalid stored enum names fall back without throwing.
-- Opacity and radius values are clamped and radius steps are normalized.
-- Surface opacity zero resolves to a transparent card.
-- Automatic card text uses the composited card-plus-widget background.
-- Explicit light and dark text modes override automatic contrast for cards.
-- Divider color derives from secondary text color with the selected opacity.
-- Row-height calculation accommodates the minimum and maximum supported font scales.
-- Thumbnail and fill-height modes produce their specified image target geometry.
+- Missing preferences produce the compatibility defaults.
+- Every Card value persists and is emitted as part of the grouped appearance.
+- Card setters and getters normalize opacity, radius, custom color alpha, and unknown enum values.
+- The default automatic Card resolves to the current themed surface and themed `onSurface` text.
+- Zero Card opacity produces no visible surface color.
+- Custom and translucent surfaces use composited automatic contrast.
+- Existing Light and Dark modes override automatic Card text.
+- Divider alpha is the configured final alpha and no divider is emitted after the final item.
+- Row-height calculation accommodates minimum, default, and maximum widget font settings across representative Android system font scales.
+- Thumbnail and fill-height modes produce the correct viewport and request dimensions.
+- Changing target dimensions changes the image-loading key.
 
-Pure appearance and geometry tests belong in Android unit tests next to the existing widget color tests. Repository tests should use in-memory settings and assert observable values rather than implementation details.
+### Preview coverage
 
-### Configuration UI coverage
+Add Compose previews for:
 
-Update Compose previews to cover:
-
-- Compatibility-default cards.
-- Transparent cards with dividers and fill-height images.
-- A custom translucent card surface on both light and dark preview backdrops.
-
-If the existing Maestro/debug-seed infrastructure can open the Android widget settings screen without production-only hooks, add a flow that verifies conditional controls and preview changes. If launcher-hosted widget placement remains impractical in Maestro, document that limitation in the Maestro test catalogue rather than adding a brittle launcher automation.
+- Compatibility-default Cards.
+- Transparent Cards with dividers and fill-height images.
+- A custom translucent Card surface over light and dark preview backdrops.
 
 ### Device verification
 
-Validate the actual AppWidget on a connected Android device at minimum, default, and maximum supported font scales:
+On a connected Android device:
 
-1. Confirm an untouched Card widget matches the pre-change appearance.
-2. Confirm zero card opacity removes every opaque article slab.
-3. Confirm dividers appear only between entries and remain subtle over light and dark backgrounds.
-4. Confirm fill-height images align with row top and bottom, remain square, center-crop, and do not distort.
-5. Confirm missing and failed images collapse cleanly.
-6. Confirm every row remains clickable across text and image regions.
-7. Confirm the configuration preview is materially consistent with the placed widget.
-8. Confirm the transparent FeedFlow widget can be layered above a launcher-provided blurred surface without opaque artifacts.
-
-### Build gates
-
-After implementation:
-
-1. Run `.scripts/refresh-translations.sh`.
-2. Run the focused Android widget unit tests during iteration.
-3. Run `./gradlew --quiet --console=plain :androidApp:assembleGooglePlayDebug` and deploy the resulting APK for visual verification.
-4. Run `./gradlew --quiet --console=plain detekt allTests` before handoff.
+1. Compare the default Card widget with a pre-change baseline.
+2. Verify zero Card opacity removes the article slabs.
+3. Verify Spacing, Divider, and None, including no divider after the final article.
+4. Verify radius 0 and 32 dp.
+5. Verify fill-height images align to row bounds, remain square, center-crop, and do not stretch.
+6. Verify changing between image modes requests an appropriately sized image.
+7. Verify missing and failed images collapse horizontally without breaking the row.
+8. Verify article rows remain clickable across text and image regions.
+9. Compare the preview with the placed widget at minimum, default, and maximum widget font settings.
 
 ## Expected File Areas
 
-Implementation is expected to touch, but is not rigidly limited to:
+Implementation is expected to touch:
 
 - `shared/src/androidMain/.../WidgetSettingsRepository.kt`
-- A new `shared/src/commonMain/.../domain/model/WidgetCardAppearance.kt`
+- `shared/src/commonMain/.../domain/model/WidgetCardAppearance.kt`
 - `androidApp/src/main/.../widget/WidgetSettingsState.kt`
 - Both Android widget settings view models and their callback plumbing
 - `WidgetSettingsContent.kt`
 - `WidgetPreviewSection.kt`
+- `FeedFlowWidget.kt`
 - `WidgetContent.kt`
 - `components/WidgetFeedListItem.kt`
-- Widget appearance, persistence, and geometry unit tests
+- `androidApp/src/debug/.../E2eSeedActivity.kt` so debug reset restores all new defaults
+- Focused widget appearance, persistence, and geometry tests
 - English i18n resources and generated translation bindings
-- Maestro catalogue or flow if configuration coverage is feasible
 
-No unrelated feed, synchronization, desktop, or iOS behavior should change.
+No unrelated feed, synchronization, desktop, iOS, or launcher behavior changes.
 
-## Pull Request Shape
+## Verification Gates
 
-The upstream pull request should describe the feature as expanded Android widget card customization. It should include before-and-after screenshots demonstrating:
+After implementation:
 
-- Existing default cards unchanged.
-- A translucent custom-color card layout.
-- A fully transparent divider-separated layout with fill-height images.
-
-The PR should explain that transparent surfaces enable composition with launcher-provided backgrounds without naming or depending on a specific launcher. Fonts and launcher palette synchronization remain explicitly outside the change.
+1. Run `.scripts/refresh-translations.sh`.
+2. Run focused Android widget and repository tests during iteration.
+3. Run `./gradlew --quiet --console=plain :androidApp:assembleGooglePlayDebug` for device verification.
+4. Run `./gradlew --quiet --console=plain detekt allTests` before handoff.
 
 ## Acceptance Criteria
 
-The implementation is accepted when all of the following are true:
-
-- Existing users see the current Card appearance without changing settings.
+- Default Card surface, spacing, radius, thumbnail geometry, and automatic themed text match the current placed widget.
 - Card color and opacity are independent of the outer widget background.
-- A card opacity of zero produces no visible slab behind article content.
-- Users can select spacing, dividers, or no separator.
-- Dividers never appear after the final article.
-- Divider opacity is configurable and uses the resolved secondary text color.
+- Zero Card opacity renders no article slab fill.
+- Users can select Spacing, Divider, or None.
+- Dividers use the configured final opacity and never appear after the final article.
 - Card radius is configurable from 0 through 32 dp.
-- Users can select current thumbnails or square images that fill row height.
-- Fill-height images are not stretched, clipped incorrectly, or loaded only at thumbnail resolution.
-- Text-color overrides apply consistently to Card mode.
-- Preview behavior matches the placed widget closely enough to make configuration reliable.
-- Invalid or missing persisted values cannot crash widget configuration or rendering.
-- Unit tests, Android build, device checks, Detekt, and the full test gate pass.
-- The implementation contains no Smart Launcher dependency, custom-font work, or unrelated refactoring.
+- Existing Light and Dark widget text modes apply to Card text.
+- Thumbnail mode remains 50 dp and visually unchanged.
+- Fill-height images are square, center-cropped, aligned to row bounds, and requested at their display size.
+- Image mode or geometry changes cannot reuse an undersized request.
+- Missing or failed images do not leave an empty image region.
+- Preview controls and sample rows show every Card option without clipping.
+- Invalid values for the new Card preferences cannot crash configuration or rendering.
+- The implementation contains no launcher integration, custom-font work, List-layout changes, or unrelated refactoring.
