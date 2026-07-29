@@ -220,12 +220,14 @@ If the date is absent or the image fails to load, the resolved row geometry rema
 
 The budget deliberately does not use the number of articles in the current feed emission. `FeedWidgetRepository` has a fixed maximum of 15 widget articles. Extract that value into a shared `MAX_WIDGET_FEED_ITEMS = 15` constant used by both the repository query and the Android bitmap-budget resolver so the two limits cannot drift.
 
-Every Exact-size composition synchronously copies `LocalAppWidgetOptions.current` into an immutable `WidgetOptionsSnapshot`. A pure `resolveExactSizes(snapshot, currentSize)` helper derives both the stable snapshot key and complete size set from that same immutable value:
+Every Exact-size composition synchronously copies `LocalAppWidgetOptions.current` into an immutable `WidgetOptionsSnapshot`. A pure `resolveExactSizes(snapshot, currentSize, sdkInt)` helper derives the stable snapshot key and complete size set from that same immutable value using Glance 1.1.1's SDK-specific rules:
 
-1. If `OPTION_APPWIDGET_SIZES` contains usable Android 12+ sizes, normalize, deduplicate, and use that explicit list.
-2. Otherwise derive the same legacy candidates used by Glance 1.1.1 from the minimum/maximum option fields: portrait uses minimum width with maximum height, and landscape uses maximum width with minimum height.
-3. Remove nonpositive and duplicate candidates.
-4. If no usable candidate remains, use `LocalSize.current` as a single fallback size.
+1. On API 31 and newer, normalize and deduplicate a nonempty `OPTION_APPWIDGET_SIZES` list and use it when at least one usable size remains.
+2. On API 31 and newer when the explicit list is absent, empty, or has no usable sizes, derive portrait and landscape legacy candidates only when all four minimum/maximum width and height fields are positive. If any one of the four fields is missing or zero, use `currentSize` as the single fallback instead of accepting one partial orientation pair.
+3. On API 26 through 30, derive the portrait candidate when minimum width and maximum height are positive, and derive the landscape candidate independently when maximum width and minimum height are positive. One valid pair does not require the other.
+4. Remove duplicate candidates. If the selected SDK path produces no usable candidate, use `currentSize` as a single fallback size.
+
+The stable resolution key includes the canonical options snapshot and SDK branch so the size set and key always describe the same Glance behavior.
 
 `V` is the resulting size count, and `P = MAX_WIDGET_FEED_ITEMS * V` is the conservative number of serialized article-bitmap payloads. The same article in two size variants counts twice even if both requests resolve to the same dimensions; the budget does not assume Coil or `RemoteViews` bitmap deduplication.
 
@@ -318,8 +320,9 @@ Add focused tests for:
 - Thumbnail and fill-height modes produce the correct viewport and bounded request dimensions.
 - Fixed-capacity tests prove current feeds with one and 15 image-bearing articles use the same `MAX_WIDGET_FEED_ITEMS * V` payload count, per-payload budget, and request identity for otherwise identical images.
 - A budget-key regression test changes `V` or the device-derived budget so `payloadBudgetBytes` decreases while the bounded edge remains unchanged; the old bitmap is removed, its in-flight result is rejected, and only a bitmap validated against the new budget can render.
-- Pure options-snapshot tests cover Android 12+ explicit size lists, Android 8-11 legacy portrait/landscape derivation, invalid and duplicate candidates, and the `LocalSize.current` singleton fallback.
-- The same immutable `WidgetOptionsSnapshot` deterministically produces both its stable key and `V`; size resolution uses no manager query, asynchronous unresolved state, delay, retry, or polling.
+- Pure options-snapshot tests cover API 31+ explicit size lists, duplicate/invalid entries, complete four-field legacy fallback, and an empty explicit list with only one complete orientation pair—which must use `currentSize`.
+- API 26-30 tests cover independently valid portrait and landscape pairs, including either pair without the other, plus the `currentSize` fallback when neither pair is valid.
+- The same immutable `WidgetOptionsSnapshot` and SDK branch deterministically produce both the stable resolution key and `V`; size resolution uses no manager query, asynchronous unresolved state, delay, retry, or polling.
 - Device-limit tests use `Long` arithmetic and cover a 480 by 800 pixel display, the 6 MiB upper cap, and large dimensions without overflow.
 - Loader tests assert `allowHardware(false)` and the `ARGB_8888` preference, then inject hardware and `RGBA_F16` results to verify conversion or omission before `ImageProvider`.
 - Allocation tests use bitmaps whose `allocationByteCount` exceeds `width * height * 4`, verify further downscaling and revalidation, and verify omission when no compliant software bitmap can be produced.
@@ -397,7 +400,7 @@ After implementation:
 - `FeedFlowWidget` uses `SizeMode.Exact`; narrow-to-wide-to-narrow resizing changes Thumbnail fallback to Fill and back without another settings or feed event.
 - A fill-height image never reduces readable text below 96 dp; the renderer uses the complete Thumbnail fallback when necessary.
 - The provider-wide payload count always reserves `MAX_WIDGET_FEED_ITEMS = 15` for every exact-size variant, so feed emissions cannot create independently changing per-variant article budgets.
-- One immutable `WidgetOptionsSnapshot` synchronously produces both its stable key and complete `V`; image sizing uses no asynchronous manager query, unresolved interval, retry loop, timeout, or polling.
+- One immutable `WidgetOptionsSnapshot` synchronously produces both its stable key and complete `V` using Glance's distinct API 31+ and API 26-30 fallback rules; image sizing uses no asynchronous manager query, unresolved interval, retry loop, timeout, or polling.
 - The effective article-bitmap budget is the smaller of 6 MiB and 75 percent of Android's device-derived `RemoteViews` bitmap ceiling, calculated with `Long` arithmetic.
 - Only validated software `ARGB_8888` bitmaps whose actual `allocationByteCount` fits the per-payload budget reach `ImageProvider`; incompatible or oversized results are converted, further downscaled, or omitted.
 - The image request/state key includes `payloadBudgetBytes`, so a reduced budget invalidates an older bitmap even when its bounded dimensions are unchanged.
