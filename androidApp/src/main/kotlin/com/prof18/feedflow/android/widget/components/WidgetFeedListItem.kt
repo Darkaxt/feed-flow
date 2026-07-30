@@ -250,8 +250,8 @@ private fun WidgetCardSlabRow(
     }
 
     contentPaddingDp?.let { sizeModifier = sizeModifier.padding(it.dp) }
-    var slabModifier = sizeModifier.cornerRadius(cornerRadiusDp.dp)
-    slabFillColor?.let { slabModifier = slabModifier.background(it) }
+    val slabModifier = sizeModifier.cornerRadius(cornerRadiusDp.dp)
+        .background(slabFillColor ?: ColorProvider(Color.Transparent))
     Row(
         modifier = slabModifier.clickable(clickAction),
         verticalAlignment = Alignment.CenterVertically,
