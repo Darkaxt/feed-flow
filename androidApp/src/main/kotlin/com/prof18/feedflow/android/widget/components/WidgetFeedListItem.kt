@@ -1,8 +1,11 @@
 package com.prof18.feedflow.android.widget.components
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
@@ -10,6 +13,7 @@ import androidx.glance.GlanceModifier
 import androidx.glance.LocalContext
 import androidx.glance.action.Action
 import androidx.glance.action.clickable
+import androidx.glance.appwidget.AndroidRemoteViews
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.background
@@ -27,11 +31,15 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.prof18.feedflow.android.BrowserManager
 import com.prof18.feedflow.android.MainActivity
+import com.prof18.feedflow.android.R
 import com.prof18.feedflow.android.widget.ResolvedWidgetCardLayout
 import com.prof18.feedflow.android.widget.ResolvedWidgetListImageLayout
 import com.prof18.feedflow.android.widget.WIDGET_THUMBNAIL_VIEWPORT_DP
+import com.prof18.feedflow.android.widget.WidgetColorProviderSource
 import com.prof18.feedflow.android.widget.WidgetFontSizes
 import com.prof18.feedflow.android.widget.WidgetImageBudgetPolicy
+import com.prof18.feedflow.android.widget.createPreSWidgetCardSlabRemoteViews
+import com.prof18.feedflow.android.widget.usesResourceBackedWidgetCardSlab
 import com.prof18.feedflow.core.model.FeedItem
 import com.prof18.feedflow.core.model.ReaderModeEligibility
 import com.prof18.feedflow.core.model.isReaderMode
@@ -86,6 +94,8 @@ internal fun WidgetFeedItemCard(
     hideImages: Boolean,
     appearance: WidgetCardAppearance,
     slabFillColor: ColorProvider?,
+    slabFillColorSource: WidgetColorProviderSource,
+    resolvedSlabFillColor: Color?,
     primaryTextColor: ColorProvider,
     secondaryTextColor: ColorProvider,
     cardLayout: ResolvedWidgetCardLayout,
@@ -107,6 +117,8 @@ internal fun WidgetFeedItemCard(
                 hideImages = hideImages,
                 appearance = appearance,
                 slabFillColor = slabFillColor,
+                slabFillColorSource = slabFillColorSource,
+                resolvedSlabFillColor = resolvedSlabFillColor,
                 primaryTextColor = primaryTextColor,
                 secondaryTextColor = secondaryTextColor,
                 cardLayout = cardLayout,
@@ -122,6 +134,8 @@ internal fun WidgetFeedItemCard(
             hideImages = hideImages,
             appearance = appearance,
             slabFillColor = slabFillColor,
+            slabFillColorSource = slabFillColorSource,
+            resolvedSlabFillColor = resolvedSlabFillColor,
             primaryTextColor = primaryTextColor,
             secondaryTextColor = secondaryTextColor,
             cardLayout = cardLayout,
@@ -140,6 +154,8 @@ private fun WidgetFeedItemCardSlab(
     hideImages: Boolean,
     appearance: WidgetCardAppearance,
     slabFillColor: ColorProvider?,
+    slabFillColorSource: WidgetColorProviderSource,
+    resolvedSlabFillColor: Color?,
     primaryTextColor: ColorProvider,
     secondaryTextColor: ColorProvider,
     cardLayout: ResolvedWidgetCardLayout,
@@ -148,62 +164,97 @@ private fun WidgetFeedItemCardSlab(
     clickAction: Action,
     modifier: GlanceModifier = GlanceModifier,
 ) {
-    val cornerRadius = appearance.cornerRadiusDp.dp
     when (cardLayout.imageSizing) {
-        WidgetCardImageSizing.THUMBNAIL -> {
-            var slabModifier = modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-                .cornerRadius(cornerRadius)
-            slabFillColor?.let { colorProvider ->
-                slabModifier = slabModifier.background(colorProvider)
-            }
-            slabModifier = slabModifier.clickable(clickAction)
-
-            Row(
-                modifier = slabModifier,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ThumbnailContent(
-                    feedItem = feedItem,
-                    fontSizes = fontSizes,
-                    hideImages = hideImages,
-                    primaryTextColor = primaryTextColor,
-                    secondaryTextColor = secondaryTextColor,
-                    imageBudgetPolicy = imageBudgetPolicy,
-                    imageDisplayTargetPx = imageDisplayTargetPx,
-                )
-            }
+        WidgetCardImageSizing.THUMBNAIL -> WidgetCardSlabRow(
+            cornerRadiusDp = appearance.cornerRadiusDp,
+            slabFillColor = slabFillColor,
+            slabFillColorSource = slabFillColorSource,
+            resolvedSlabFillColor = resolvedSlabFillColor,
+            clickAction = clickAction,
+            contentPaddingDp = 16,
+            modifier = modifier,
+        ) {
+            ThumbnailContent(
+                feedItem = feedItem,
+                fontSizes = fontSizes,
+                hideImages = hideImages,
+                primaryTextColor = primaryTextColor,
+                secondaryTextColor = secondaryTextColor,
+                imageBudgetPolicy = imageBudgetPolicy,
+                imageDisplayTargetPx = imageDisplayTargetPx,
+            )
         }
-        WidgetCardImageSizing.FILL_ROW_HEIGHT -> {
-            val rowHeight = requireNotNull(cardLayout.fixedRowHeightDp).dp
-            var slabModifier = modifier
-                .fillMaxWidth()
-                .height(rowHeight)
-                .cornerRadius(cornerRadius)
-            slabFillColor?.let { colorProvider ->
-                slabModifier = slabModifier.background(colorProvider)
-            }
-            slabModifier = slabModifier.clickable(clickAction)
-
-            Row(
-                modifier = slabModifier,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                FillContent(
-                    feedItem = feedItem,
-                    fontSizes = fontSizes,
-                    hideImages = hideImages,
-                    primaryTextColor = primaryTextColor,
-                    secondaryTextColor = secondaryTextColor,
-                    imageBudgetPolicy = imageBudgetPolicy,
-                    imageDisplayTargetPx = imageDisplayTargetPx,
-                    rowHeightDp = cardLayout.imageViewportDp,
-                    cornerRadiusDp = appearance.cornerRadiusDp,
-                )
-            }
+        WidgetCardImageSizing.FILL_ROW_HEIGHT -> WidgetCardSlabRow(
+            cornerRadiusDp = appearance.cornerRadiusDp,
+            slabFillColor = slabFillColor,
+            slabFillColorSource = slabFillColorSource,
+            resolvedSlabFillColor = resolvedSlabFillColor,
+            clickAction = clickAction,
+            rowHeightDp = requireNotNull(cardLayout.fixedRowHeightDp),
+            modifier = modifier,
+        ) {
+            FillContent(
+                feedItem = feedItem,
+                fontSizes = fontSizes,
+                hideImages = hideImages,
+                primaryTextColor = primaryTextColor,
+                secondaryTextColor = secondaryTextColor,
+                imageBudgetPolicy = imageBudgetPolicy,
+                imageDisplayTargetPx = imageDisplayTargetPx,
+                rowHeightDp = cardLayout.imageViewportDp,
+                cornerRadiusDp = appearance.cornerRadiusDp,
+            )
         }
     }
+}
+
+@SuppressLint("RestrictedApi")
+@Composable
+private fun WidgetCardSlabRow(
+    cornerRadiusDp: Int,
+    slabFillColor: ColorProvider?,
+    slabFillColorSource: WidgetColorProviderSource,
+    resolvedSlabFillColor: Color?,
+    clickAction: Action,
+    modifier: GlanceModifier = GlanceModifier,
+    rowHeightDp: Int? = null,
+    contentPaddingDp: Int? = null,
+    content: @Composable RowScope.() -> Unit,
+) {
+    var sizeModifier = modifier.fillMaxWidth()
+    rowHeightDp?.let { sizeModifier = sizeModifier.height(it.dp) }
+
+    if (usesResourceBackedWidgetCardSlab(Build.VERSION.SDK_INT)) {
+        AndroidRemoteViews(
+            remoteViews = createPreSWidgetCardSlabRemoteViews(
+                context = LocalContext.current,
+                cornerRadiusDp = cornerRadiusDp,
+                colorSource = slabFillColorSource,
+                resolvedSlabFillColor = resolvedSlabFillColor,
+            ),
+            containerViewId = R.id.widget_card_slab_content,
+            modifier = sizeModifier.clickable(clickAction),
+        ) {
+            var rowModifier = GlanceModifier.fillMaxWidth()
+            rowHeightDp?.let { rowModifier = rowModifier.height(it.dp) }
+            contentPaddingDp?.let { rowModifier = rowModifier.padding(it.dp) }
+            Row(
+                modifier = rowModifier,
+                verticalAlignment = Alignment.CenterVertically,
+                content = content,
+            )
+        }
+        return
+    }
+
+    contentPaddingDp?.let { sizeModifier = sizeModifier.padding(it.dp) }
+    var slabModifier = sizeModifier.cornerRadius(cornerRadiusDp.dp)
+    slabFillColor?.let { slabModifier = slabModifier.background(it) }
+    Row(
+        modifier = slabModifier.clickable(clickAction),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
 }
 
 @Composable

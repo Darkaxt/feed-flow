@@ -1,5 +1,10 @@
 package com.prof18.feedflow.android.widget
 
+import android.content.Context
+import android.widget.RemoteViews
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import com.prof18.feedflow.android.R
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import kotlin.math.ceil
 import kotlin.math.roundToInt
@@ -13,6 +18,74 @@ private const val IMAGE_GAP_DP = 16
 internal const val WIDGET_SCAFFOLD_HORIZONTAL_PADDING_DP = 12
 internal const val WIDGET_THUMBNAIL_VIEWPORT_DP = 50
 private const val FALLBACK_SLAB_WIDTH_DP = 96
+private const val ANDROID_S_API = 31
+private const val FULL_OPACITY_ALPHA = 255
+private const val MIN_CARD_CORNER_RADIUS_DP = 0
+private const val MAX_CARD_CORNER_RADIUS_DP = 32
+private const val CARD_CORNER_RADIUS_STEP_DP = 2
+private val widgetCardCornerRadiusOutlineResources = intArrayOf(
+    R.drawable.widget_card_slab_outline_0,
+    R.drawable.widget_card_slab_outline_2,
+    R.drawable.widget_card_slab_outline_4,
+    R.drawable.widget_card_slab_outline_6,
+    R.drawable.widget_card_slab_outline_8,
+    R.drawable.widget_card_slab_outline_10,
+    R.drawable.widget_card_slab_outline_12,
+    R.drawable.widget_card_slab_outline_14,
+    R.drawable.widget_card_slab_outline_16,
+    R.drawable.widget_card_slab_outline_18,
+    R.drawable.widget_card_slab_outline_20,
+    R.drawable.widget_card_slab_outline_22,
+    R.drawable.widget_card_slab_outline_24,
+    R.drawable.widget_card_slab_outline_26,
+    R.drawable.widget_card_slab_outline_28,
+    R.drawable.widget_card_slab_outline_30,
+    R.drawable.widget_card_slab_outline_32,
+)
+
+internal fun usesResourceBackedWidgetCardSlab(sdkInt: Int): Boolean = sdkInt < ANDROID_S_API
+
+internal fun widgetCardCornerRadiusOutlineResource(cornerRadiusDp: Int): Int {
+    require(
+        cornerRadiusDp in MIN_CARD_CORNER_RADIUS_DP..MAX_CARD_CORNER_RADIUS_DP &&
+            cornerRadiusDp % CARD_CORNER_RADIUS_STEP_DP == 0,
+    ) {
+        "Unsupported normalized widget Card corner radius: $cornerRadiusDp"
+    }
+    return widgetCardCornerRadiusOutlineResources[cornerRadiusDp / CARD_CORNER_RADIUS_STEP_DP]
+}
+
+internal fun createPreSWidgetCardSlabRemoteViews(
+    context: Context,
+    cornerRadiusDp: Int,
+    colorSource: WidgetColorProviderSource,
+    resolvedSlabFillColor: Color?,
+): RemoteViews {
+    val layoutResource = when (colorSource) {
+        WidgetColorProviderSource.THEMED -> R.layout.widget_card_slab_themed
+        WidgetColorProviderSource.RESOLVED -> R.layout.widget_card_slab_resolved
+    }
+    return RemoteViews(context.packageName, layoutResource).apply {
+        setInt(
+            R.id.widget_card_slab_root,
+            "setBackgroundResource",
+            widgetCardCornerRadiusOutlineResource(cornerRadiusDp),
+        )
+        if (colorSource == WidgetColorProviderSource.RESOLVED) {
+            val fillColor = resolvedSlabFillColor ?: Color.Transparent
+            setInt(
+                R.id.widget_card_slab_background,
+                "setColorFilter",
+                fillColor.copy(alpha = 1f).toArgb(),
+            )
+            setInt(
+                R.id.widget_card_slab_background,
+                "setImageAlpha",
+                (fillColor.alpha * FULL_OPACITY_ALPHA).roundToInt(),
+            )
+        }
+    }
+}
 
 internal fun calculateWidgetAvailableSlabWidthDp(widgetWidthDp: Float): Float =
     widgetWidthDp

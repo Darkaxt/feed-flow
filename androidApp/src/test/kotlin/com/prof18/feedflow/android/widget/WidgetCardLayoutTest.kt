@@ -1,8 +1,10 @@
 package com.prof18.feedflow.android.widget
 
+import com.prof18.feedflow.android.R
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -243,6 +245,42 @@ class WidgetCardLayoutTest {
                     ),
                 )
             }
+    }
+
+    @Test
+    fun `pre S uses resource-backed slab while S keeps native Glance rounding`() {
+        assertTrue(usesResourceBackedWidgetCardSlab(sdkInt = 26))
+        assertTrue(usesResourceBackedWidgetCardSlab(sdkInt = 30))
+        assertFalse(usesResourceBackedWidgetCardSlab(sdkInt = 31))
+        assertFalse(usesResourceBackedWidgetCardSlab(sdkInt = 35))
+    }
+
+    @Test
+    fun `every normalized corner radius maps to a pre S outline resource`() {
+        val expectedResources = listOf(
+            R.drawable.widget_card_slab_outline_0,
+            R.drawable.widget_card_slab_outline_2,
+            R.drawable.widget_card_slab_outline_4,
+            R.drawable.widget_card_slab_outline_6,
+            R.drawable.widget_card_slab_outline_8,
+            R.drawable.widget_card_slab_outline_10,
+            R.drawable.widget_card_slab_outline_12,
+            R.drawable.widget_card_slab_outline_14,
+            R.drawable.widget_card_slab_outline_16,
+            R.drawable.widget_card_slab_outline_18,
+            R.drawable.widget_card_slab_outline_20,
+            R.drawable.widget_card_slab_outline_22,
+            R.drawable.widget_card_slab_outline_24,
+            R.drawable.widget_card_slab_outline_26,
+            R.drawable.widget_card_slab_outline_28,
+            R.drawable.widget_card_slab_outline_30,
+            R.drawable.widget_card_slab_outline_32,
+        )
+
+        assertEquals(
+            expectedResources,
+            (0..32 step 2).map(::widgetCardCornerRadiusOutlineResource),
+        )
     }
 
     private fun assertThumbnailGeometry(layout: ResolvedWidgetCardLayout) {
