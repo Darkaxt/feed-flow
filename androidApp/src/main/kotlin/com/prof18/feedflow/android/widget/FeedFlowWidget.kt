@@ -14,11 +14,14 @@ import androidx.glance.appwidget.LocalAppWidgetOptions
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.provideContent
 import com.prof18.feedflow.android.BrowserManager
+import com.prof18.feedflow.core.model.FeedItem
 import com.prof18.feedflow.shared.data.WidgetSettingsRepository
 import com.prof18.feedflow.shared.domain.feed.FeedWidgetRepository
 import com.prof18.feedflow.shared.domain.model.filterWidgetItemsByFreshness
 import com.prof18.feedflow.shared.ui.utils.ProvideFeedFlowStrings
 import com.prof18.feedflow.shared.ui.utils.rememberFeedFlowStrings
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.first
 
 internal class FeedFlowWidget(
@@ -71,6 +74,10 @@ internal class FeedFlowWidget(
                     exactSizes = exactSizes,
                     feedItemCount = filteredFeedItems.size,
                 )
+                val displayFeedItems = limitWidgetFeedItems(
+                    feedItems = filteredFeedItems,
+                    itemCapacity = imageBudgetPolicy.itemCapacity,
+                )
                 val displayDensity = displayMetrics.density.takeIf { it.isFinite() && it > 0f } ?: 1f
                 val systemFontScale = glanceContext.resources.configuration.fontScale
                     .takeIf { it.isFinite() && it > 0f }
@@ -78,7 +85,7 @@ internal class FeedFlowWidget(
 
                 GlanceTheme {
                     WidgetContent(
-                        feedItems = filteredFeedItems,
+                        feedItems = displayFeedItems,
                         feedLayout = feedLayout,
                         browserManager = browserManager,
                         showHeader = showHeader,
@@ -100,3 +107,8 @@ internal class FeedFlowWidget(
         }
     }
 }
+
+internal fun limitWidgetFeedItems(
+    feedItems: ImmutableList<FeedItem>,
+    itemCapacity: Int,
+): ImmutableList<FeedItem> = feedItems.take(itemCapacity).toImmutableList()

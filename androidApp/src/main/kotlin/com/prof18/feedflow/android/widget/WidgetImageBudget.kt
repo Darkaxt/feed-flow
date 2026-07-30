@@ -2,6 +2,7 @@ package com.prof18.feedflow.android.widget
 
 import kotlin.math.sqrt
 
+private const val MAX_SERIALIZED_ITEM_VARIANT_PAYLOAD_SLOTS = 80
 private const val REMOTE_VIEWS_BYTES_PER_PIXEL_WITH_HEADROOM = 6L
 private const val ARTICLE_BUDGET_NUMERATOR = 3L
 private const val ARTICLE_BUDGET_DENOMINATOR = 4L
@@ -18,6 +19,8 @@ internal fun resolveWidgetImageBudget(
     require(exactSizes.payloadVariantCount > 0)
     require(feedItemCount >= 0)
 
+    val maxItemsForHost = MAX_SERIALIZED_ITEM_VARIANT_PAYLOAD_SLOTS / exactSizes.payloadVariantCount
+    val itemCapacity = minOf(feedItemCount, maxItemsForHost)
     val screenPixelCount = saturatedMultiply(
         screenWidthPx.coerceAtLeast(0).toLong(),
         screenHeightPx.coerceAtLeast(0).toLong(),
@@ -35,17 +38,17 @@ internal fun resolveWidgetImageBudget(
         MAX_ARTICLE_BUDGET_BYTES,
         deviceArticleBudgetBytes,
     )
-    val reservedItemCount = maxOf(feedItemCount, 1).toLong()
     val payloadCount = saturatedMultiply(
-        reservedItemCount,
+        maxItemsForHost.toLong(),
         exactSizes.payloadVariantCount.toLong(),
-    )
+    ).coerceAtLeast(1L)
     val payloadBudgetBytes = effectiveArticleBudgetBytes / payloadCount
     val budgetEdgePx = sqrt(payloadBudgetBytes.toDouble() / ARGB_8888_BYTES_PER_PIXEL).toInt()
 
     return WidgetImageBudgetPolicy(
         exactSizeKey = exactSizes.stableKey,
         feedItemCount = feedItemCount,
+        itemCapacity = itemCapacity,
         payloadCount = payloadCount,
         remoteViewsLimitBytes = remoteViewsLimitBytes,
         effectiveArticleBudgetBytes = effectiveArticleBudgetBytes,
@@ -74,6 +77,7 @@ private fun multiplyDivideFloor(
 internal data class WidgetImageBudgetPolicy(
     val exactSizeKey: String,
     val feedItemCount: Int,
+    val itemCapacity: Int,
     val payloadCount: Long,
     val remoteViewsLimitBytes: Long,
     val effectiveArticleBudgetBytes: Long,
@@ -82,7 +86,6 @@ internal data class WidgetImageBudgetPolicy(
 ) {
     val identity = WidgetImageBudgetIdentity(
         exactSizeKey = exactSizeKey,
-        feedItemCount = feedItemCount,
         payloadCount = payloadCount,
         payloadBudgetBytes = payloadBudgetBytes,
     )
@@ -105,7 +108,6 @@ internal data class WidgetImageBudgetPolicy(
                 imageUrl = imageUrl,
                 edgePx = edgePx,
                 exactSizeKey = exactSizeKey,
-                feedItemCount = feedItemCount,
                 payloadCount = payloadCount,
                 payloadBudgetBytes = payloadBudgetBytes,
             ),
@@ -115,7 +117,6 @@ internal data class WidgetImageBudgetPolicy(
 
 internal data class WidgetImageBudgetIdentity(
     val exactSizeKey: String,
-    val feedItemCount: Int,
     val payloadCount: Long,
     val payloadBudgetBytes: Long,
 )
@@ -129,7 +130,6 @@ internal data class WidgetImageRequestIdentity(
     val imageUrl: String,
     val edgePx: Int,
     val exactSizeKey: String,
-    val feedItemCount: Int,
     val payloadCount: Long,
     val payloadBudgetBytes: Long,
     val softwareCornerRadiusDp: Int = 0,
