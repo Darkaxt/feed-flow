@@ -52,6 +52,147 @@ class WidgetExactSizeResolverTest {
             result.sizes,
         )
         assertEquals(2, result.variantCount)
+        assertEquals(4, result.payloadVariantCount)
+    }
+
+    @Test
+    fun `payload variant count matches Glance 1_1_1 exact compositions across option shapes`() {
+        val cases = listOf(
+            GlanceCase(
+                description = "api 31 normal explicit sizes",
+                snapshot = options(explicitSizes = listOf(size(100, 200), size(240, 120))),
+                sdkInt = 31,
+            ),
+            GlanceCase(
+                description = "api 31 mixed valid malformed and duplicate explicit sizes",
+                snapshot = options(
+                    explicitSizes = listOf(
+                        size(100, 200),
+                        size(0, 200),
+                        size(100, 200),
+                        size(-40, 200),
+                    ),
+                ),
+                sdkInt = 35,
+            ),
+            GlanceCase(
+                description = "api 31 empty explicit sizes use complete legacy fields",
+                snapshot = options(
+                    explicitSizes = emptyList(),
+                    minWidthDp = 80,
+                    maxWidthDp = 160,
+                    minHeightDp = 60,
+                    maxHeightDp = 240,
+                ),
+                sdkInt = 31,
+            ),
+            GlanceCase(
+                description = "api 31 absent explicit sizes deduplicate equal legacy pairs",
+                snapshot = options(
+                    minWidthDp = 100,
+                    maxWidthDp = 100,
+                    minHeightDp = 200,
+                    maxHeightDp = 200,
+                ),
+                sdkInt = 31,
+            ),
+            GlanceCase(
+                description = "api 31 missing legacy field uses current size",
+                snapshot = options(minWidthDp = 80, maxHeightDp = 240),
+                sdkInt = 31,
+            ),
+            GlanceCase(
+                description = "api 31 zero legacy field uses current size",
+                snapshot = options(
+                    explicitSizes = emptyList(),
+                    minWidthDp = 0,
+                    maxWidthDp = 160,
+                    minHeightDp = 60,
+                    maxHeightDp = 240,
+                ),
+                sdkInt = 31,
+            ),
+            GlanceCase(
+                description = "api 31 negative nonzero legacy fields still create variants",
+                snapshot = options(
+                    minWidthDp = -80,
+                    maxWidthDp = -160,
+                    minHeightDp = -60,
+                    maxHeightDp = -240,
+                ),
+                sdkInt = 31,
+            ),
+            GlanceCase(
+                description = "api 26 complete legacy pairs",
+                snapshot = options(
+                    minWidthDp = 80,
+                    maxWidthDp = 160,
+                    minHeightDp = 60,
+                    maxHeightDp = 240,
+                ),
+                sdkInt = 30,
+            ),
+            GlanceCase(
+                description = "api 26 partial legacy fields create one orientation",
+                snapshot = options(minWidthDp = 80, maxHeightDp = 240),
+                sdkInt = 26,
+            ),
+            GlanceCase(
+                description = "api 26 zero and missing legacy fields use current size",
+                snapshot = options(minWidthDp = 0, maxHeightDp = 240),
+                sdkInt = 30,
+            ),
+            GlanceCase(
+                description = "api 26 negative nonzero legacy pair still creates a variant",
+                snapshot = options(maxWidthDp = -160, minHeightDp = -60),
+                sdkInt = 26,
+            ),
+            GlanceCase(
+                description = "api 26 equal orientation pairs are deduplicated",
+                snapshot = options(
+                    minWidthDp = 100,
+                    maxWidthDp = 100,
+                    minHeightDp = 200,
+                    maxHeightDp = 200,
+                ),
+                sdkInt = 30,
+            ),
+        )
+
+        cases.forEach { case ->
+            val glanceVariantCount = glance111ExactVariantCount(
+                snapshot = case.snapshot,
+                currentSize = CURRENT_SIZE,
+                sdkInt = case.sdkInt,
+            )
+            val result = resolveExactSizes(case.snapshot, CURRENT_SIZE, case.sdkInt)
+
+            assertEquals(case.description, glanceVariantCount, result.payloadVariantCount)
+        }
+    }
+
+    @Test
+    fun `non-finite explicit sizes are conservatively counted and payload count never reaches zero`() {
+        val malformed = resolveExactSizes(
+            snapshot = options(
+                explicitSizes = listOf(
+                    WidgetExactSize(Float.NaN, 200f),
+                    WidgetExactSize(Float.POSITIVE_INFINITY, 100f),
+                    WidgetExactSize(Float.NaN, 200f),
+                ),
+            ),
+            currentSize = CURRENT_SIZE,
+            sdkInt = 31,
+        )
+        val missing = resolveExactSizes(
+            snapshot = options(),
+            currentSize = CURRENT_SIZE,
+            sdkInt = 31,
+        )
+
+        assertEquals(listOf(CURRENT_SIZE), malformed.sizes)
+        assertEquals(2, malformed.payloadVariantCount)
+        assertEquals(1, missing.payloadVariantCount)
     }
 
     @Test
@@ -172,6 +313,72 @@ class WidgetExactSizeResolverTest {
         assertEquals(first.variantCount, second.variantCount)
         assertNotEquals(first.stableKey, legacyBranch.stableKey)
     }
+
+    private fun glance111ExactVariantCount(
+        snapshot: WidgetOptionsSnapshot,
+        currentSize: DpSize,
+        sdkInt: Int,
+    ): Int {
+        val appWidgetUtils = Class.forName("androidx.glance.appwidget.AppWidgetUtilsKt")
+        val extractedSizes = if (sdkInt >= 31) {
+            val extractAllSizes = appWidgetUtils.getMethod(
+                "extractAllSizes",
+                Bundle::class.java,
+                Function0::class.java,
+            )
+            @Suppress("UNCHECKED_CAST")
+            extractAllSizes.invoke(
+                null,
+                snapshot.toBundle(),
+                { currentSize },
+            ) as List<DpSize>
+        } else {
+            val extractOrientationSizes = appWidgetUtils.getMethod(
+                "extractOrientationSizes",
+                Bundle::class.java,
+            )
+            @Suppress("UNCHECKED_CAST")
+            (extractOrientationSizes.invoke(null, snapshot.toBundle()) as List<DpSize>)
+                .ifEmpty { listOf(currentSize) }
+        }
+        return extractedSizes.distinct().size
+    }
+
+    private fun WidgetOptionsSnapshot.toBundle(): Bundle = Bundle().apply {
+        explicitSizes?.let { sizes ->
+            putParcelableArrayList(
+                AppWidgetManager.OPTION_APPWIDGET_SIZES,
+                ArrayList(sizes.map { size -> SizeF(size.widthDp, size.heightDp) }),
+            )
+        }
+        minWidthDp?.let { putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, it) }
+        maxWidthDp?.let { putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, it) }
+        minHeightDp?.let { putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, it) }
+        maxHeightDp?.let { putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, it) }
+    }
+
+    private fun options(
+        explicitSizes: List<WidgetExactSize>? = null,
+        minWidthDp: Int? = null,
+        maxWidthDp: Int? = null,
+        minHeightDp: Int? = null,
+        maxHeightDp: Int? = null,
+    ): WidgetOptionsSnapshot = WidgetOptionsSnapshot(
+        explicitSizes = explicitSizes,
+        minWidthDp = minWidthDp,
+        maxWidthDp = maxWidthDp,
+        minHeightDp = minHeightDp,
+        maxHeightDp = maxHeightDp,
+    )
+
+    private fun size(widthDp: Int, heightDp: Int): WidgetExactSize =
+        WidgetExactSize(widthDp.toFloat(), heightDp.toFloat())
+
+    private data class GlanceCase(
+        val description: String,
+        val snapshot: WidgetOptionsSnapshot,
+        val sdkInt: Int,
+    )
 
     private fun legacyBundle(
         minWidth: Int,

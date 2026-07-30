@@ -41,6 +41,7 @@ class WidgetBitmapValidatorTest {
                     sizes = List(variantCount) { index ->
                         DpSize((100 + index).dp, (200 + index).dp)
                     },
+                    payloadVariantCount = variantCount,
                 ),
             )
             val slotCount = MAX_WIDGET_FEED_ITEMS * variantCount

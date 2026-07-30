@@ -15,7 +15,7 @@ internal fun resolveWidgetImageBudget(
     screenHeightPx: Int,
     exactSizes: WidgetExactSizeResolution,
 ): WidgetImageBudgetPolicy {
-    require(exactSizes.variantCount > 0)
+    require(exactSizes.payloadVariantCount > 0)
 
     val screenPixelCount = saturatedMultiply(
         screenWidthPx.coerceAtLeast(0).toLong(),
@@ -36,7 +36,7 @@ internal fun resolveWidgetImageBudget(
     )
     val payloadCount = saturatedMultiply(
         MAX_WIDGET_FEED_ITEMS.toLong(),
-        exactSizes.variantCount.toLong(),
+        exactSizes.payloadVariantCount.toLong(),
     )
     val payloadBudgetBytes = effectiveArticleBudgetBytes / payloadCount
     val budgetEdgePx = sqrt(payloadBudgetBytes.toDouble() / ARGB_8888_BYTES_PER_PIXEL).toInt()

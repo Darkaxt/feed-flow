@@ -22,6 +22,37 @@ class WidgetImageBudgetTest {
     }
 
     @Test
+    fun `budget reserves 15 payloads for every Glance variant including unusable layout sizes`() {
+        val exactSizes = resolveExactSizes(
+            snapshot = WidgetOptionsSnapshot(
+                explicitSizes = listOf(
+                    WidgetExactSize(100f, 200f),
+                    WidgetExactSize(0f, 200f),
+                    WidgetExactSize(100f, 200f),
+                    WidgetExactSize(-40f, 200f),
+                ),
+                minWidthDp = null,
+                maxWidthDp = null,
+                minHeightDp = null,
+                maxHeightDp = null,
+            ),
+            currentSize = DpSize(120.dp, 180.dp),
+            sdkInt = 31,
+        )
+
+        val budget = resolveWidgetImageBudget(
+            screenWidthPx = 480,
+            screenHeightPx = 800,
+            exactSizes = exactSizes,
+        )
+
+        assertEquals(1, exactSizes.variantCount)
+        assertEquals(3, exactSizes.payloadVariantCount)
+        assertEquals(MAX_WIDGET_FEED_ITEMS.toLong() * 3L, budget.payloadCount)
+        assertTrue(budget.exactSizeKey.contains("payloadVariants=3"))
+    }
+
+    @Test
     fun `list policy keeps 50dp viewport and fixed 15 by variant shared budget`() {
         val variantCount = 3
         val imageLayout = resolveWidgetListImageLayout(displayDensity = 2f)
@@ -150,6 +181,7 @@ class WidgetImageBudgetTest {
             sizes = List(variantCount) { index ->
                 DpSize((100 + index).dp, (200 + index).dp)
             },
+            payloadVariantCount = variantCount,
         ),
     )
 }
