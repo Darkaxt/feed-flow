@@ -79,7 +79,9 @@ internal class FeedFlowWidget(
                         hideImages = hideImages,
                         cardAppearance = cardAppearance,
                         imageBudgetPolicy = imageBudgetPolicy,
-                        availableSlabWidthDp = currentSize.width.value,
+                        availableSlabWidthDp = calculateWidgetAvailableSlabWidthDp(
+                            widgetWidthDp = currentSize.width.value,
+                        ),
                         displayDensity = displayDensity,
                         systemFontScale = systemFontScale,
                     )

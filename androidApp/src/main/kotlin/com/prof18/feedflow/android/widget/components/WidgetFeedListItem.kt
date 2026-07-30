@@ -29,6 +29,7 @@ import com.prof18.feedflow.android.BrowserManager
 import com.prof18.feedflow.android.MainActivity
 import com.prof18.feedflow.android.widget.ResolvedWidgetCardAppearance
 import com.prof18.feedflow.android.widget.ResolvedWidgetCardLayout
+import com.prof18.feedflow.android.widget.ResolvedWidgetListImageLayout
 import com.prof18.feedflow.android.widget.WIDGET_THUMBNAIL_VIEWPORT_DP
 import com.prof18.feedflow.android.widget.WidgetFontSizes
 import com.prof18.feedflow.android.widget.WidgetImageBudgetPolicy
@@ -52,7 +53,7 @@ internal fun WidgetFeedItemList(
     primaryTextColor: ColorProvider,
     secondaryTextColor: ColorProvider,
     imageBudgetPolicy: WidgetImageBudgetPolicy,
-    imageDisplayTargetPx: Int,
+    imageLayout: ResolvedWidgetListImageLayout,
     modifier: GlanceModifier = GlanceModifier,
 ) {
     val context = LocalContext.current.applicationContext
@@ -72,7 +73,8 @@ internal fun WidgetFeedItemList(
             primaryTextColor = primaryTextColor,
             secondaryTextColor = secondaryTextColor,
             imageBudgetPolicy = imageBudgetPolicy,
-            imageDisplayTargetPx = imageDisplayTargetPx,
+            imageDisplayTargetPx = imageLayout.displayTargetPx,
+            imageDisplayViewportDp = imageLayout.displayViewportDp,
         )
     }
 }
@@ -207,6 +209,7 @@ private fun RowScope.ThumbnailContent(
     imageBudgetPolicy: WidgetImageBudgetPolicy,
     imageDisplayTargetPx: Int,
     modifier: GlanceModifier = GlanceModifier,
+    imageDisplayViewportDp: Int = WIDGET_THUMBNAIL_VIEWPORT_DP,
 ) {
     val textModifier = modifier.defaultWeight()
 
@@ -250,7 +253,7 @@ private fun RowScope.ThumbnailContent(
         hideImages = hideImages,
         imageBudgetPolicy = imageBudgetPolicy,
         imageDisplayTargetPx = imageDisplayTargetPx,
-        displayViewportDp = WIDGET_THUMBNAIL_VIEWPORT_DP,
+        displayViewportDp = imageDisplayViewportDp,
         cornerRadiusDp = THUMBNAIL_CORNER_RADIUS_DP,
     )
 }

@@ -22,6 +22,40 @@ class WidgetImageBudgetTest {
     }
 
     @Test
+    fun `list policy keeps 50dp viewport and fixed 15 by variant shared budget`() {
+        val variantCount = 3
+        val imageLayout = resolveWidgetListImageLayout(displayDensity = 2f)
+        val budget = resolveBudget(variantCount = variantCount)
+        val requests = List(MAX_WIDGET_FEED_ITEMS * variantCount) { index ->
+            requireNotNull(
+                budget.resolveRequest(
+                    imageUrl = "https://example.com/list-image-$index",
+                    displayTargetPx = imageLayout.displayTargetPx,
+                ),
+            )
+        }
+
+        assertEquals(50, imageLayout.displayViewportDp)
+        assertEquals(100, imageLayout.displayTargetPx)
+        assertEquals((MAX_WIDGET_FEED_ITEMS * variantCount).toLong(), budget.payloadCount)
+        assertTrue(requests.all { it.identity.payloadBudgetBytes == budget.payloadBudgetBytes })
+        assertTrue(requests.all { it.identity.exactSizeKey == budget.exactSizeKey })
+    }
+
+    @Test
+    fun `aggregate payload allocations stay within effective budget for multiple variant counts`() {
+        listOf(1, 2, 3, 5).forEach { variantCount ->
+            val budget = resolveBudget(variantCount = variantCount)
+            val payloadAllocations = List(MAX_WIDGET_FEED_ITEMS * variantCount) {
+                budget.payloadBudgetBytes
+            }
+
+            assertEquals(budget.payloadCount, payloadAllocations.size.toLong())
+            assertTrue(payloadAllocations.sum() <= budget.effectiveArticleBudgetBytes)
+        }
+    }
+
+    @Test
     fun `480 by 800 display uses Android ceiling with 25 percent reserve`() {
         val budget = resolveBudget(
             screenWidthPx = 480,

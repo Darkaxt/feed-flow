@@ -4,6 +4,7 @@ import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WidgetCardLayoutTest {
@@ -46,6 +47,64 @@ class WidgetCardLayoutTest {
         assertEquals(100, layout.fixedRowHeightDp)
         assertEquals(100, layout.imageViewportDp)
         assertEquals(100, layout.displayTargetDp)
+    }
+
+    @Test
+    fun `scaffold inset makes a previously fitting fill row fall back`() {
+        val widgetWidthDp = 240f
+        val unadjustedLayout = resolveWidgetCardLayout(
+            requestedImageSizing = WidgetCardImageSizing.FILL_ROW_HEIGHT,
+            availableSlabWidthDp = widgetWidthDp,
+            fontSizes = widgetFontSizes(0),
+            systemFontScale = 1f,
+        )
+        val availableSlabWidthDp = calculateWidgetAvailableSlabWidthDp(widgetWidthDp)
+        val adjustedLayout = resolveWidgetCardLayout(
+            requestedImageSizing = WidgetCardImageSizing.FILL_ROW_HEIGHT,
+            availableSlabWidthDp = availableSlabWidthDp,
+            fontSizes = widgetFontSizes(0),
+            systemFontScale = 1f,
+        )
+
+        assertEquals(WidgetCardImageSizing.FILL_ROW_HEIGHT, unadjustedLayout.imageSizing)
+        assertEquals(216f, availableSlabWidthDp, 0f)
+        assertEquals(
+            84f,
+            calculateWidgetCardReadableTextWidthDp(
+                availableSlabWidthDp = availableSlabWidthDp,
+                imageViewportDp = unadjustedLayout.imageViewportDp,
+            ),
+            0f,
+        )
+        assertThumbnailGeometry(adjustedLayout)
+    }
+
+    @Test
+    fun `fill row keeps at least 96dp readable width after scaffold inset`() {
+        val availableSlabWidthDp = calculateWidgetAvailableSlabWidthDp(widgetWidthDp = 252f)
+        val layout = resolveWidgetCardLayout(
+            requestedImageSizing = WidgetCardImageSizing.FILL_ROW_HEIGHT,
+            availableSlabWidthDp = availableSlabWidthDp,
+            fontSizes = widgetFontSizes(0),
+            systemFontScale = 1f,
+        )
+
+        assertEquals(WidgetCardImageSizing.FILL_ROW_HEIGHT, layout.imageSizing)
+        assertTrue(
+            calculateWidgetCardReadableTextWidthDp(
+                availableSlabWidthDp = availableSlabWidthDp,
+                imageViewportDp = layout.imageViewportDp,
+            ) >= 96f,
+        )
+    }
+
+    @Test
+    fun `scaffold inset clamps available slab width to nonnegative`() {
+        assertEquals(0f, calculateWidgetAvailableSlabWidthDp(widgetWidthDp = -1f), 0f)
+        assertEquals(0f, calculateWidgetAvailableSlabWidthDp(widgetWidthDp = 0f), 0f)
+        assertEquals(0f, calculateWidgetAvailableSlabWidthDp(widgetWidthDp = 23f), 0f)
+        assertEquals(0f, calculateWidgetAvailableSlabWidthDp(widgetWidthDp = 24f), 0f)
+        assertEquals(1f, calculateWidgetAvailableSlabWidthDp(widgetWidthDp = 25f), 0f)
     }
 
     @Test
@@ -92,7 +151,7 @@ class WidgetCardLayoutTest {
     fun `256dp width at maximum widget and system scale uses complete thumbnail fallback`() {
         val layout = resolveWidgetCardLayout(
             requestedImageSizing = WidgetCardImageSizing.FILL_ROW_HEIGHT,
-            availableSlabWidthDp = 256f,
+            availableSlabWidthDp = calculateWidgetAvailableSlabWidthDp(widgetWidthDp = 256f),
             fontSizes = widgetFontSizes(MAX_WIDGET_FONT_SCALE),
             systemFontScale = 1.3f,
         )

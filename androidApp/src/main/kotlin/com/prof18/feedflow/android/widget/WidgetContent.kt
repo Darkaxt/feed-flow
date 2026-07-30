@@ -108,10 +108,8 @@ internal fun WidgetContent(
         fontSizes = fontSizes,
         systemFontScale = systemFontScale,
     )
+    val listImageLayout = resolveWidgetListImageLayout(displayDensity = displayDensity)
     val imageDensity = displayDensity.takeIf { it.isFinite() && it > 0f } ?: 1f
-    val thumbnailImageTargetPx = (WIDGET_THUMBNAIL_VIEWPORT_DP * imageDensity)
-        .roundToInt()
-        .coerceAtLeast(1)
     val cardImageTargetPx = (cardLayout.displayTargetDp * imageDensity)
         .roundToInt()
         .coerceAtLeast(1)
@@ -185,7 +183,7 @@ internal fun WidgetContent(
                 resolvedCardAppearance = resolvedCardAppearance,
                 cardLayout = cardLayout,
                 imageBudgetPolicy = imageBudgetPolicy,
-                thumbnailImageTargetPx = thumbnailImageTargetPx,
+                listImageLayout = listImageLayout,
                 cardImageTargetPx = cardImageTargetPx,
             )
         }
@@ -206,7 +204,7 @@ private fun WidgetFeedItems(
     resolvedCardAppearance: ResolvedWidgetCardAppearance,
     cardLayout: ResolvedWidgetCardLayout,
     imageBudgetPolicy: WidgetImageBudgetPolicy,
-    thumbnailImageTargetPx: Int,
+    listImageLayout: ResolvedWidgetListImageLayout,
     cardImageTargetPx: Int,
 ) {
     LazyColumn {
@@ -225,7 +223,7 @@ private fun WidgetFeedItems(
                     primaryTextColor = primaryTextColor,
                     secondaryTextColor = secondaryTextColor,
                     imageBudgetPolicy = imageBudgetPolicy,
-                    imageDisplayTargetPx = thumbnailImageTargetPx,
+                    imageLayout = listImageLayout,
                 )
                 WidgetFeedLayout.CARD -> {
                     Column(modifier = GlanceModifier.fillMaxWidth()) {
