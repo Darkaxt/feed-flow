@@ -82,6 +82,7 @@ internal fun WidgetFeedItemList(
             imageBudgetPolicy = imageBudgetPolicy,
             imageDisplayTargetPx = imageLayout.displayTargetPx,
             imageDisplayViewportDp = imageLayout.displayViewportDp,
+            imageRenderPolicy = WidgetArticleImageRenderPolicy.GLANCE_ONLY,
         )
     }
 }
@@ -182,6 +183,7 @@ private fun WidgetFeedItemCardSlab(
                 secondaryTextColor = secondaryTextColor,
                 imageBudgetPolicy = imageBudgetPolicy,
                 imageDisplayTargetPx = imageDisplayTargetPx,
+                imageRenderPolicy = WidgetArticleImageRenderPolicy.CARD_COMPATIBLE,
             )
         }
         WidgetCardImageSizing.FILL_ROW_HEIGHT -> WidgetCardSlabRow(
@@ -266,6 +268,7 @@ private fun RowScope.ThumbnailContent(
     secondaryTextColor: ColorProvider,
     imageBudgetPolicy: WidgetImageBudgetPolicy,
     imageDisplayTargetPx: Int,
+    imageRenderPolicy: WidgetArticleImageRenderPolicy,
     modifier: GlanceModifier = GlanceModifier,
     imageDisplayViewportDp: Int = WIDGET_THUMBNAIL_VIEWPORT_DP,
 ) {
@@ -313,6 +316,7 @@ private fun RowScope.ThumbnailContent(
         imageDisplayTargetPx = imageDisplayTargetPx,
         displayViewportDp = imageDisplayViewportDp,
         cornerRadiusDp = THUMBNAIL_CORNER_RADIUS_DP,
+        renderPolicy = imageRenderPolicy,
     )
 }
 
@@ -369,6 +373,7 @@ private fun RowScope.FillContent(
         imageDisplayTargetPx = imageDisplayTargetPx,
         displayViewportDp = rowHeightDp,
         cornerRadiusDp = cornerRadiusDp,
+        renderPolicy = WidgetArticleImageRenderPolicy.CARD_COMPATIBLE,
     )
 }
 
@@ -380,6 +385,7 @@ private fun ArticleImageIfAvailable(
     imageDisplayTargetPx: Int,
     displayViewportDp: Int,
     cornerRadiusDp: Int,
+    renderPolicy: WidgetArticleImageRenderPolicy,
 ) {
     if (hideImages) {
         return
@@ -392,6 +398,7 @@ private fun ArticleImageIfAvailable(
         ),
         displayViewportDp = displayViewportDp.dp,
         cornerRadiusDp = cornerRadiusDp.dp,
+        renderPolicy = renderPolicy,
     )
 }
 

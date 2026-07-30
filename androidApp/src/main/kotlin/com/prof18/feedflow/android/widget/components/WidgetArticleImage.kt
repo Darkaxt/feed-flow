@@ -47,11 +47,16 @@ private const val ARGB_8888_BYTES_PER_PIXEL = 4.0
 
 internal fun resolveWidgetArticleImageIdentity(
     requestIdentity: WidgetImageRequestIdentity?,
+    renderPolicy: WidgetArticleImageRenderPolicy,
     sdkInt: Int,
     cornerRadiusDp: Int,
     displayViewportDp: Int,
 ): WidgetImageRequestIdentity? {
-    val usesSoftwareRounding = sdkInt < ANDROID_S_API && cornerRadiusDp > 0 && displayViewportDp > 0
+    val usesSoftwareRounding =
+        renderPolicy == WidgetArticleImageRenderPolicy.CARD_COMPATIBLE &&
+            sdkInt < ANDROID_S_API &&
+            cornerRadiusDp > 0 &&
+            displayViewportDp > 0
     return requestIdentity?.copy(
         softwareCornerRadiusDp = if (usesSoftwareRounding) cornerRadiusDp else 0,
         softwareDisplayViewportDp = if (usesSoftwareRounding) displayViewportDp else 0,
@@ -63,11 +68,13 @@ internal fun WidgetArticleImage(
     requestPolicy: WidgetImageRequestPolicy?,
     displayViewportDp: Dp,
     cornerRadiusDp: Dp,
+    renderPolicy: WidgetArticleImageRenderPolicy,
     modifier: GlanceModifier = GlanceModifier,
 ) {
     val context = LocalContext.current
     val fullKey = resolveWidgetArticleImageIdentity(
         requestIdentity = requestPolicy?.identity,
+        renderPolicy = renderPolicy,
         sdkInt = Build.VERSION.SDK_INT,
         cornerRadiusDp = cornerRadiusDp.value.roundToInt(),
         displayViewportDp = displayViewportDp.value.roundToInt(),
@@ -102,6 +109,11 @@ internal fun WidgetArticleImage(
                 .cornerRadius(cornerRadiusDp),
         )
     }
+}
+
+internal enum class WidgetArticleImageRenderPolicy {
+    GLANCE_ONLY,
+    CARD_COMPATIBLE,
 }
 
 internal data class WidgetArticleImageState<T>(

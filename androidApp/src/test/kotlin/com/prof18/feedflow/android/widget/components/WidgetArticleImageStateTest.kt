@@ -57,6 +57,7 @@ class WidgetArticleImageStateTest {
         val oldKey = requireNotNull(
             resolveWidgetArticleImageIdentity(
                 requestIdentity = requestIdentity,
+                renderPolicy = WidgetArticleImageRenderPolicy.CARD_COMPATIBLE,
                 sdkInt = 30,
                 cornerRadiusDp = 8,
                 displayViewportDp = 50,
@@ -65,6 +66,7 @@ class WidgetArticleImageStateTest {
         val currentKey = requireNotNull(
             resolveWidgetArticleImageIdentity(
                 requestIdentity = requestIdentity,
+                renderPolicy = WidgetArticleImageRenderPolicy.CARD_COMPATIBLE,
                 sdkInt = 30,
                 cornerRadiusDp = 32,
                 displayViewportDp = 100,

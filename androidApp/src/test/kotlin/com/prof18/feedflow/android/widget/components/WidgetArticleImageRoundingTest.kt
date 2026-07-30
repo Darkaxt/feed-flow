@@ -24,6 +24,7 @@ class WidgetArticleImageRoundingTest {
         val key = requireNotNull(
             resolveWidgetArticleImageIdentity(
                 requestIdentity = requestIdentity(edgePx = 50, payloadBudgetBytes = 10_000L),
+                renderPolicy = WidgetArticleImageRenderPolicy.CARD_COMPATIBLE,
                 sdkInt = 30,
                 cornerRadiusDp = 8,
                 displayViewportDp = 50,
@@ -44,10 +45,42 @@ class WidgetArticleImageRoundingTest {
     }
 
     @Test
+    fun `pre S List keeps legacy square bitmap and does not key on radius`() {
+        val requestIdentity = requestIdentity(edgePx = 50, payloadBudgetBytes = 10_000L)
+        val radius8Key = requireNotNull(
+            resolveWidgetArticleImageIdentity(
+                requestIdentity = requestIdentity,
+                renderPolicy = WidgetArticleImageRenderPolicy.GLANCE_ONLY,
+                sdkInt = 30,
+                cornerRadiusDp = 8,
+                displayViewportDp = 50,
+            ),
+        )
+        val radius32Key = requireNotNull(
+            resolveWidgetArticleImageIdentity(
+                requestIdentity = requestIdentity,
+                renderPolicy = WidgetArticleImageRenderPolicy.GLANCE_ONLY,
+                sdkInt = 30,
+                cornerRadiusDp = 32,
+                displayViewportDp = 100,
+            ),
+        )
+        val source = opaqueBitmap(width = 50, height = 50)
+
+        val rendered = requireNotNull(validateAndRenderWidgetArticleBitmap(source, radius8Key))
+
+        assertEquals(requestIdentity, radius8Key)
+        assertEquals(requestIdentity, radius32Key)
+        assertSame(source, rendered)
+        assertSquareCorners(rendered)
+    }
+
+    @Test
     fun `pre S Fill bitmap center-crops and applies configured radius to all four corners`() {
         val key = requireNotNull(
             resolveWidgetArticleImageIdentity(
                 requestIdentity = requestIdentity(edgePx = 160, payloadBudgetBytes = 102_400L),
+                renderPolicy = WidgetArticleImageRenderPolicy.CARD_COMPATIBLE,
                 sdkInt = 26,
                 cornerRadiusDp = 32,
                 displayViewportDp = 100,
@@ -71,6 +104,7 @@ class WidgetArticleImageRoundingTest {
         val key = requireNotNull(
             resolveWidgetArticleImageIdentity(
                 requestIdentity = requestIdentity(edgePx = 50, payloadBudgetBytes = 10_000L),
+                renderPolicy = WidgetArticleImageRenderPolicy.CARD_COMPATIBLE,
                 sdkInt = 30,
                 cornerRadiusDp = 0,
                 displayViewportDp = 50,
@@ -91,12 +125,14 @@ class WidgetArticleImageRoundingTest {
         val requestIdentity = requestIdentity(edgePx = 100, payloadBudgetBytes = 40_000L)
         val radius8 = resolveWidgetArticleImageIdentity(
             requestIdentity = requestIdentity,
+            renderPolicy = WidgetArticleImageRenderPolicy.CARD_COMPATIBLE,
             sdkInt = 31,
             cornerRadiusDp = 8,
             displayViewportDp = 50,
         )
         val radius32 = resolveWidgetArticleImageIdentity(
             requestIdentity = requestIdentity,
+            renderPolicy = WidgetArticleImageRenderPolicy.GLANCE_ONLY,
             sdkInt = 35,
             cornerRadiusDp = 32,
             displayViewportDp = 100,
@@ -111,6 +147,7 @@ class WidgetArticleImageRoundingTest {
         val key = requireNotNull(
             resolveWidgetArticleImageIdentity(
                 requestIdentity = requestIdentity(edgePx = 100, payloadBudgetBytes = 10_000L),
+                renderPolicy = WidgetArticleImageRenderPolicy.CARD_COMPATIBLE,
                 sdkInt = 30,
                 cornerRadiusDp = 24,
                 displayViewportDp = 100,
@@ -131,6 +168,7 @@ class WidgetArticleImageRoundingTest {
         val key = requireNotNull(
             resolveWidgetArticleImageIdentity(
                 requestIdentity = requestIdentity(edgePx = 50, payloadBudgetBytes = 10_000L),
+                renderPolicy = WidgetArticleImageRenderPolicy.CARD_COMPATIBLE,
                 sdkInt = 30,
                 cornerRadiusDp = 8,
                 displayViewportDp = 50,
