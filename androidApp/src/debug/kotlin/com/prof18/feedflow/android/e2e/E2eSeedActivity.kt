@@ -30,7 +30,7 @@ import com.prof18.feedflow.android.MainActivity
 import com.prof18.feedflow.android.base.BaseThemeActivity
 import com.prof18.feedflow.core.model.WidgetFeedLayout
 import com.prof18.feedflow.shared.data.WidgetSettingsRepository
-import com.prof18.feedflow.shared.domain.model.DEFAULT_WIDGET_MAXIMUM_ARTICLES
+import com.prof18.feedflow.shared.domain.model.DEFAULT_WIDGET_FRESHNESS
 import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
@@ -136,6 +136,7 @@ class E2eSeedActivity : BaseThemeActivity() {
 
         val profile = E2eSeedProfile.fromQueryValue(profileName)
             ?: E2eSeedProfile.CONTENT_RICH
+        val freshnessReferenceNowMillis = System.currentTimeMillis()
 
         uiState = E2eSeedUiState.Running
         lifecycleScope.launch {
@@ -143,6 +144,7 @@ class E2eSeedActivity : BaseThemeActivity() {
                 resetWidgetSettings()
                 seedRunner.run(action = action, profileName = profileName, accountName = accountName)
                 if (action != E2eSeedRunner.ACTION_RESET && profile == E2eSeedProfile.ANDROID_WIDGET) {
+                    seedRunner.seedAndroidWidgetFreshnessProfile(freshnessReferenceNowMillis)
                     applyAndroidWidgetProfile()
                 }
                 uiState = E2eSeedUiState.Success(profile.queryValue)
@@ -162,7 +164,7 @@ class E2eSeedActivity : BaseThemeActivity() {
         widgetSettingsRepository.setWidgetBackgroundOpacityPercent(100)
         widgetSettingsRepository.setWidgetTextColorMode(WidgetTextColorMode.AUTOMATIC)
         widgetSettingsRepository.setWidgetHideImages(false)
-        widgetSettingsRepository.setWidgetMaximumArticles(DEFAULT_WIDGET_MAXIMUM_ARTICLES)
+        widgetSettingsRepository.setWidgetFreshness(DEFAULT_WIDGET_FRESHNESS)
         widgetSettingsRepository.setWidgetCardAppearance(WidgetCardAppearance())
     }
 

@@ -4,7 +4,7 @@
 
 **Goal:** Add configurable Android widget Card slabs and safe Thumbnail/Fill-row-height article images while preserving the current default Card and List appearance.
 
-**Architecture:** Persist one normalized Android-only `WidgetCardAppearance`, resolve colors and geometry through pure Android helpers, and pass one composition-wide Exact-size image policy to both List and Card renderers. Budget every Exact-size variant against the fixed 15-item repository capacity, validate actual software bitmap allocations before `ImageProvider`, and keep settings/preview state grouped around the same appearance value.
+**Architecture:** Persist normalized Android-only Card appearance and freshness settings, resolve colors/geometry/freshness through pure helpers, and pass one composition-wide Exact-size image policy to both List and Card renderers. Query at most 100 unread candidates, filter once from one `nowMillis`, budget every Exact-size variant against the actual immutable filtered count with a one-slot empty reserve, validate actual software bitmap allocations before `ImageProvider`, and keep settings/preview state coherent.
 
 **Tech Stack:** Kotlin Multiplatform, Android, Jetpack Glance 1.1.1, Compose Material 3, Coil 3.5.0, Multiplatform Settings, Kotlin coroutines/Flow, JUnit 4, Robolectric, Turbine, Maestro.
 
@@ -21,7 +21,7 @@
 - `androidApp/src/main/kotlin/com/prof18/feedflow/android/widget/WidgetCardAppearanceResolver.kt` — pure Card surface/text/divider resolution.
 - `androidApp/src/main/kotlin/com/prof18/feedflow/android/widget/WidgetCardLayout.kt` — deterministic row height and width fallback.
 - `androidApp/src/main/kotlin/com/prof18/feedflow/android/widget/WidgetExactSizeResolver.kt` — immutable options snapshot and SDK-aware exact-size resolution.
-- `androidApp/src/main/kotlin/com/prof18/feedflow/android/widget/WidgetImageBudget.kt` — device-derived fixed-capacity bitmap budget and request key.
+- `androidApp/src/main/kotlin/com/prof18/feedflow/android/widget/WidgetImageBudget.kt` — device-derived actual-count bitmap budget and complete request key.
 - `androidApp/src/main/kotlin/com/prof18/feedflow/android/widget/components/WidgetArticleImage.kt` — safe Coil loading, conversion, allocation validation, and Glance image rendering.
 - `androidApp/src/test/kotlin/com/prof18/feedflow/android/widget/WidgetCardAppearanceResolverTest.kt`
 - `androidApp/src/test/kotlin/com/prof18/feedflow/android/widget/WidgetCardLayoutTest.kt`
@@ -57,7 +57,7 @@
 
 ## Stage 1: Persistence Foundation
 
-### Task 1: Share the fixed widget item capacity
+### Task 1: Bound widget candidates with an internal safety capacity
 
 **Files:**
 - Modify: `shared/src/commonMain/kotlin/com/prof18/feedflow/shared/domain/feed/FeedWidgetRepository.kt`
@@ -65,15 +65,15 @@
 
 - [ ] **Step 1: Write a failing capacity test**
 
-Add a test that seeds more than 15 items and asserts `getFeeds().first()` emits exactly `MAX_WIDGET_FEED_ITEMS`.
+Add a test that seeds more than 100 items and asserts `getFeeds().first()` emits exactly `WIDGET_FEED_ITEM_SAFETY_CAPACITY` candidates.
 
 ```kotlin
 @Test
-fun `widget feed uses shared maximum item count`() = runTest(testDispatcher) {
+fun `widget feed uses internal safety capacity`() = runTest(testDispatcher) {
     val feedSource = createFeedSource(id = "source-1", title = "Widget Feed")
     databaseHelper.insertFeedSource(listOf(feedSource.toParsedFeedSource()))
     databaseHelper.insertFeedItems(
-        items = (0 until MAX_WIDGET_FEED_ITEMS + 2).map { index ->
+        items = (0 until WIDGET_FEED_ITEM_SAFETY_CAPACITY + 2).map { index ->
             buildFeedItem(
                 id = "item-$index",
                 title = "Item $index",
@@ -85,7 +85,7 @@ fun `widget feed uses shared maximum item count`() = runTest(testDispatcher) {
     )
 
     createRepository().getFeeds().test {
-        assertEquals(MAX_WIDGET_FEED_ITEMS, awaitItem().size)
+        assertEquals(WIDGET_FEED_ITEM_SAFETY_CAPACITY, awaitItem().size)
         cancelAndIgnoreRemainingEvents()
     }
 }
@@ -97,15 +97,15 @@ fun `widget feed uses shared maximum item count`() = runTest(testDispatcher) {
 ./gradlew --quiet --console=plain :shared:jvmTest --tests "com.prof18.feedflow.shared.domain.feed.FeedWidgetRepositoryTest"
 ```
 
-Expected: compilation failure because `MAX_WIDGET_FEED_ITEMS` does not exist.
+Expected: compilation failure because `WIDGET_FEED_ITEM_SAFETY_CAPACITY` does not exist.
 
 - [ ] **Step 3: Extract and use the constant**
 
 ```kotlin
-const val MAX_WIDGET_FEED_ITEMS = 15
+const val WIDGET_FEED_ITEM_SAFETY_CAPACITY = 100
 
 fun getFeeds(): Flow<ImmutableList<FeedItem>> =
-    databaseHelper.getFeedWidgetItems(pageSize = MAX_WIDGET_FEED_ITEMS)
+    databaseHelper.getFeedWidgetItems(pageSize = WIDGET_FEED_ITEM_SAFETY_CAPACITY.toLong())
         .map { items -> items.map { it.toFeedItem(dateFormatter, settings) }.toImmutableList() }
 ```
 
@@ -340,13 +340,13 @@ Do not query `GlanceAppWidgetManager`, launch effects, retry, or poll.
 
 - [ ] Run `WidgetExactSizeResolverTest`; expect PASS.
 
-### Task 7: Implement fixed-capacity device bitmap budgeting
+### Task 7: Implement actual-count device bitmap budgeting
 
 **Files:**
 - Create: `androidApp/src/main/kotlin/com/prof18/feedflow/android/widget/WidgetImageBudget.kt`
 - Create: `androidApp/src/test/kotlin/com/prof18/feedflow/android/widget/WidgetImageBudgetTest.kt`
 
-- [ ] Write tests for 15 × V payloads, 6MiB cap, 480×800 device limit/headroom, 512px edge, overflow-safe large dimensions, and budget-key changes with unchanged edge.
+- [ ] Write tests for actual filtered counts 0/1/15/100 across one and multiple variants, the one-slot empty reserve, 6MiB cap, 480×800 device limit/headroom, 512px edge, overflow-safe large dimensions, and count/budget-key changes with unchanged edge.
 - [ ] Implement saturating `Long` calculations:
 
 ```kotlin
@@ -360,10 +360,11 @@ fun resolveWidgetImageBudget(
     screenWidthPx: Int,
     screenHeightPx: Int,
     exactSizes: ResolvedExactSizes,
+    feedItemCount: Int,
 ): WidgetImageBudget
 ```
 
-`payloadCount = MAX_WIDGET_FEED_ITEMS * exactSizes.sizes.size`; reserve 25% and cap article budget at 6MiB.
+`payloadCount = maxOf(feedItemCount, 1) * exactSizes.payloadVariantCount`; include actual count and payload count in budget/request identity, reserve 25%, and cap article budget at 6MiB.
 
 - [ ] Run `WidgetImageBudgetTest`; expect PASS.
 
@@ -373,7 +374,7 @@ fun resolveWidgetImageBudget(
 - [ ] Divider alpha replaces, not multiplies, secondary alpha.
 - [ ] Fill geometry includes system font scale and 96dp fallback.
 - [ ] API 31+ and API 26–30 size extraction match the spec.
-- [ ] Budget always reserves 15 articles for every variant and respects device limit.
+- [ ] Budget uses the actual immutable filtered count for every serialized variant, reserves one slot only when empty, and respects the device limit.
 - [ ] Run all five new helper test classes and `:androidApp:compileGooglePlayDebugKotlin`.
 - [ ] Commit:
 
@@ -457,7 +458,7 @@ git commit -m "Add safe widget image loading"
 
 - [ ] Override `val sizeMode = SizeMode.Exact`.
 - [ ] Collect grouped `widgetCardAppearance`.
-- [ ] In composition, copy `LocalAppWidgetOptions.current`, resolve exact sizes, calculate one fixed-capacity budget, and pass it to both layouts.
+- [ ] In composition, copy `LocalAppWidgetOptions.current`, resolve exact sizes, calculate one actual-filtered-count budget, and pass it with the same immutable list to both layouts.
 - [ ] Pass Card appearance into `WidgetContent` without direct repository reads below `FeedFlowWidget`.
 - [ ] Compile Android; expect PASS.
 
@@ -669,42 +670,68 @@ git commit -m "Validate widget card customization"
 
 ---
 
-## Stage 8 Addendum: Configurable Total-item Cap
+## Stage 8 Addendum: Article Freshness Window (Supersedes Configurable Total-item Cap)
 
-### Task 21: Persist and expose the normalized global limit
+This addendum withdraws the previously approved 1–15 `Maximum articles` control and every implementation detail tied to it. There is no count slider, count preference, compatibility key, coalesced callback, or user-visible count promise.
+
+### Task 21: Add the shared freshness model, pure policy, and safe persistence
 
 **Files:**
-- Create: `shared/src/androidMain/kotlin/com/prof18/feedflow/shared/domain/model/WidgetArticleLimit.kt`
+- Replace: `shared/src/androidMain/kotlin/com/prof18/feedflow/shared/domain/model/WidgetArticleLimit.kt` with `WidgetFreshness.kt`
 - Modify: `shared/src/androidMain/kotlin/com/prof18/feedflow/shared/data/WidgetSettingsRepository.kt`
 - Modify: `shared/src/androidHostTest/kotlin/com/prof18/feedflow/shared/data/WidgetSettingsRepositoryTest.kt`
+- Test: `shared/src/androidHostTest/kotlin/com/prof18/feedflow/shared/domain/model/WidgetFreshnessTest.kt`
 
-- [ ] Add failing Android-host tests for default 15, round-trip/flow emission, lower clamp to 1, upper clamp to 15, and malformed stored values.
-- [ ] Add `WIDGET_MAXIMUM_ARTICLES`, normalized getter/setter, and `StateFlow<Int>` separate from `WidgetCardAppearance`.
-- [ ] Run `./gradlew --quiet --console=plain :shared:testAndroidHostTest --tests "com.prof18.feedflow.shared.data.WidgetSettingsRepositoryTest"`.
+- [ ] Write failing tests for the exact enum values `LAST_24_HOURS`, `LAST_3_DAYS`, and `LAST_7_DAYS`; default `LAST_3_DAYS`; round-trip and `StateFlow` emission; unknown-name and wrong-type stored-value fallback; inclusive cutoff; undated exclusion; future-date inclusion; empty input; and preservation of input order. Every policy test supplies a fixed `nowMillis`.
+- [ ] Run `./gradlew --quiet --console=plain :shared:testAndroidHostTest --tests "com.prof18.feedflow.shared.data.WidgetSettingsRepositoryTest" --tests "com.prof18.feedflow.shared.domain.model.WidgetFreshnessTest"` and confirm the new tests fail for missing freshness APIs.
+- [ ] Implement the Android-shared `WidgetFreshness` enum and generic immutable filtering policy. Persist enum names under only `WIDGET_FRESHNESS`, expose `getWidgetFreshness()`, `setWidgetFreshness()`, and `StateFlow<WidgetFreshness>`, and fall back safely to `LAST_3_DAYS` for malformed storage.
+- [ ] Re-run the focused shared tests and confirm they pass.
 
-### Task 22: Wire settings state, ViewModels, and the app-owned slider
+### Task 22: Replace the slider with one effective-change dropdown callback
 
 **Files:**
-- Modify: both widget ViewModels, `WidgetSettingsState.kt`, `WidgetSettingsContent.kt`, `WidgetSettingsScaffold.kt`, both settings entry points, `SettingsE2eIds.kt`, English strings, and `E2eSeedActivity.kt`
+- Modify: `WidgetSettingsState.kt`, both widget ViewModels, `WidgetSettingsContent.kt`, `WidgetSettingsScaffold.kt`, `WidgetSettingsScreen.kt`, `WidgetConfigurationActivity.kt`, `SettingsE2eIds.kt`, English strings, and `E2eSeedActivity.kt`
 - Test: `androidApp/src/test/kotlin/com/prof18/feedflow/android/widget/WidgetSettingsViewModelTest.kt`
 
-- [ ] Add failing tests proving each effective in-app slider value persists immediately, rapid values such as 14→15 retain the final repository value without a dispatch advance, one interaction completion invokes `WidgetUpdater` once, and a normalized no-op invokes neither persistence nor updater; configuration persists without updater behavior.
-- [ ] Add a discrete 1..15 slider immediately after Feed Layout with `Maximum articles: %s`, a localized accessible name that preserves progress/range semantics, stable E2E ID, default/reset value 15, and separate value-change/value-change-finished callback plumbing.
-- [ ] Run `.scripts/refresh-translations.sh` and the focused ViewModel tests.
+- [ ] Replace the count/coalescing tests with failing tests proving an effective in-app freshness selection persists immediately and calls `WidgetUpdater` exactly once after coroutine dispatch, an unchanged selection does neither, and configuration persists an effective change without an updater.
+- [ ] Run `./gradlew --quiet --console=plain :androidApp:testGooglePlayDebugUnitTest --tests "com.prof18.feedflow.android.widget.WidgetSettingsViewModelTest"` and confirm the freshness tests fail.
+- [ ] Remove all maximum-count state, callbacks, imports, persistence counting, accessibility copy, and slider plumbing. Add an `Article age` `CompactSettingDropdownRow` immediately after Feed Layout with localized `Last 24 hours`, `Last 3 days`, and `Last 7 days` options plus stable row and option E2E IDs.
+- [ ] Reset debug seeds to `LAST_3_DAYS`. Keep the in-app repository-value guard synchronous and one-callback/one-updater; keep configuration persistence updater-free.
+- [ ] Refresh translations and re-run the focused ViewModel tests.
 
-### Task 23: Cap renderer and preview without changing capacity or budget
+### Task 23: Apply one-snapshot filtering and a 100-item repository safety capacity
 
 **Files:**
-- Modify: `FeedFlowWidget.kt`, `WidgetContent.kt`, `WidgetPreviewSection.kt`, and `WidgetImageBudgetTest.kt`
-- Create: `androidApp/src/test/kotlin/com/prof18/feedflow/android/widget/WidgetArticleLimitTest.kt`
+- Modify: `shared/src/commonMain/kotlin/com/prof18/feedflow/shared/domain/feed/FeedWidgetRepository.kt`
+- Modify: `shared/src/commonTest/kotlin/com/prof18/feedflow/shared/domain/feed/FeedWidgetRepositoryTest.kt`
+- Modify: `FeedFlowWidget.kt`, `WidgetContent.kt`, and `WidgetPreviewSection.kt`
+- Replace: `androidApp/src/test/kotlin/com/prof18/feedflow/android/widget/WidgetArticleLimitTest.kt` with preview freshness coverage
 
-- [ ] Add failing renderer tests for caps 1, midrange, 15, invalid low/high values, order, empty input, and one-row preview selection; retain the existing production-budget test that asserts `MAX_WIDGET_FEED_ITEMS * payloadVariantCount` without introducing a selected-limit seam.
-- [ ] Collect the limit reactively and apply it before the shared List/Card `LazyColumn` branch; do not change `FeedWidgetRepository`'s 15-item query.
-- [ ] Keep the preview's first sample only at limit 1 and both deterministic samples at limits 2..15.
-- [ ] Do not pass the selected limit into `WidgetImageBudget`; a lower visible cap must never increase per-image budget.
+- [ ] Write failing tests that name and enforce `WIDGET_FEED_ITEM_SAFETY_CAPACITY = 100`, plus deterministic preview profiles whose fixed 12-hour and 2-day samples yield row counts 1, 2, and 2 for the three freshness options.
+- [ ] Run the focused shared repository and Android preview tests and confirm the new expectations fail.
+- [ ] Query at most the 100 newest unread widget candidates while preserving raw nullable `FeedItem.pubDateMillis` and newest-first order.
+- [ ] Capture `nowMillis` once in `provideGlance`, before `provideContent` can serialize multiple Exact variants. Collect freshness and filter with the shared policy into one immutable list before resolving the image budget or invoking `WidgetContent`; pass that same list to List/Card rendering and remove all count limiting from `WidgetContent`.
+- [ ] Give preview samples fixed publication timestamps relative to an injected/reference `nowMillis`, use the same freshness policy rather than date text, and preserve the existing widget empty state.
+- [ ] Re-run focused tests and confirm they pass.
 
-### Task 24: E2E, documentation, and runtime validation
+### Task 24: Budget actual filtered items across every Exact variant
 
-- [ ] Extend REG-164 only to verify the app-owned slider/value plumbing and explicitly retain launcher row count and visual parity as manual coverage.
-- [ ] Run shared Android-host tests, Android unit tests, compile/assemble, `detekt allTests`, and `git diff --check` with the project Gradle flags.
-- [ ] On an available Android widget host, verify limits 1, midrange, and 15 in both layouts, reactive placed-widget updates, preserved ordering/empty state, preview one-row behavior at 1, and that launcher size—not this setting—determines simultaneous visibility. Record unavailable host validation without claiming it passed.
+**Files:**
+- Modify: `WidgetImageBudget.kt`, `WidgetImageBudgetTest.kt`, `components/WidgetBitmapValidatorTest.kt`, and request-identity test fixtures
+
+- [ ] First change tests to cover filtered counts 0, 1, 15, and 100, one and multiple serialized Exact variants, a one-slot reserve for count 0, actual-count payload division, aggregate delivered-allocation validation, and request/budget identity invalidation whenever the actual count changes, including 0 to 1.
+- [ ] Run the focused image-budget and bitmap-validator tests and confirm the former fixed-15 behavior fails.
+- [ ] Add `feedItemCount` to `resolveWidgetImageBudget`; calculate `payloadCount = maxOf(feedItemCount, 1) * payloadVariantCount` with saturated `Long` multiplication. Preserve the device-derived ceiling, 6 MiB cap, 512-pixel edge cap, software bitmap allocation validation, and full Exact-size/budget identity, while adding actual count and payload count to both budget and request identities.
+- [ ] Re-run all focused image-policy tests and confirm they pass.
+
+### Task 25: Deterministic E2E profile, catalog, spec, and physical validation
+
+**Files:**
+- Modify: `shared/src/commonMain/kotlin/com/prof18/feedflow/shared/e2e/E2eSeedRunner.kt`, `E2eSeedActivity.kt`, REG-164, the Maestro catalog, and the existing design specification
+
+- [ ] Seed the Android-widget debug profile with publication times derived from one supplied reference `nowMillis` so 24-hour, 3-day, and 7-day selections have deterministic candidates without putting wall-clock reads in tests.
+- [ ] Update REG-164 to select `Article age` through stable IDs. State in the catalog that launcher placement, row counts, and visual behavior remain manual physical coverage; do not claim launcher automation.
+- [ ] Update the design specification so this addendum explicitly supersedes the count selector and documents default 3 days, inclusive cutoff, undated exclusion, 100-item safety capacity, actual-count multi-variant budgeting, identity invalidation, tests, and physical runtime checks.
+- [ ] Run `.scripts/refresh-translations.sh`, focused red/green suites, `./gradlew --quiet --console=plain :shared:allTests`, all Android tests, `:androidApp:compileGooglePlayDebugKotlin`, `:androidApp:assembleGooglePlayDebug`, and `./gradlew --quiet --console=plain detekt allTests`.
+- [ ] Run `git diff --check`, inspect `git diff` for dead maximum-count plumbing, confirm the transparent `Color.Transparent` RemoteViews recycling fix remains and no scrollbar/version/publishing change was made, then validate List and Card freshness behavior on the available Android widget host. Record any unavailable physical validation honestly.
+- [ ] Create one simple implementation commit with the required harness attribution. Do not push, publish, or bump the version.

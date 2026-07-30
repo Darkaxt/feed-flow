@@ -188,6 +188,8 @@ class WidgetArticleImageRoundingTest {
         imageUrl = "https://example.com/article.png",
         edgePx = edgePx,
         exactSizeKey = "same-exact-sizes",
+        feedItemCount = 1,
+        payloadCount = 1,
         payloadBudgetBytes = payloadBudgetBytes,
     )
 

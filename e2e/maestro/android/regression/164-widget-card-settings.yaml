@@ -20,13 +20,15 @@ appId: com.prof18.feedflow.debug
     id: widget_settings_preview
 - scrollUntilVisible:
     element:
-      id: widget_settings_maximum_articles
+      id: widget_settings_article_age
     direction: DOWN
     timeout: 10000
-- assertVisible: "Maximum articles: 15"
+- assertVisible: "Last 3 days"
 - tapOn:
-    id: widget_settings_maximum_articles
-- assertVisible: "Maximum articles: 8"
+    id: widget_settings_article_age
+- tapOn:
+    id: widget_settings_article_age_last_24_hours
+- assertVisible: "Last 24 hours"
 - scrollUntilVisible:
     element:
       id: widget_settings_feed_layout

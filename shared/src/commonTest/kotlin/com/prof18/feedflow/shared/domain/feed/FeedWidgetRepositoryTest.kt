@@ -65,11 +65,40 @@ class FeedWidgetRepositoryTest : KoinTestBase() {
     }
 
     @Test
-    fun `getFeeds emits at most the widget item limit`() = runTest(testDispatcher) {
+    fun `getFeeds preserves raw nullable publication timestamps for freshness filtering`() = runTest(testDispatcher) {
         val feedSource = createFeedSource(id = "source-1", title = "Widget Feed")
         databaseHelper.insertFeedSource(listOf(feedSource.toParsedFeedSource()))
         databaseHelper.insertFeedItems(
-            (0 until MAX_WIDGET_FEED_ITEMS + 2).map { index ->
+            listOf(
+                buildFeedItem(
+                    id = "dated",
+                    title = "Dated",
+                    pubDateMillis = 2_000,
+                    source = feedSource,
+                ),
+                buildFeedItem(
+                    id = "undated",
+                    title = "Undated",
+                    pubDateMillis = 1_000,
+                    source = feedSource,
+                ).copy(pubDateMillis = null),
+            ),
+            lastSyncTimestamp = 0,
+        )
+
+        createRepository().getFeeds().test {
+            val result = awaitItem()
+            assertEquals(listOf(2_000L, null), result.map { it.pubDateMillis })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `getFeeds emits at most the widget safety capacity`() = runTest(testDispatcher) {
+        val feedSource = createFeedSource(id = "source-1", title = "Widget Feed")
+        databaseHelper.insertFeedSource(listOf(feedSource.toParsedFeedSource()))
+        databaseHelper.insertFeedItems(
+            (0 until WIDGET_FEED_ITEM_SAFETY_CAPACITY + 2).map { index ->
                 buildFeedItem(
                     id = "item-$index",
                     title = "Item $index",
@@ -81,7 +110,7 @@ class FeedWidgetRepositoryTest : KoinTestBase() {
         )
 
         createRepository().getFeeds().test {
-            assertEquals(MAX_WIDGET_FEED_ITEMS, awaitItem().size)
+            assertEquals(WIDGET_FEED_ITEM_SAFETY_CAPACITY, awaitItem().size)
             cancelAndIgnoreRemainingEvents()
         }
     }

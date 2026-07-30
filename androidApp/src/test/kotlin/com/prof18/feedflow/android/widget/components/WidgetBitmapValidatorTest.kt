@@ -13,7 +13,6 @@ import coil3.size.Size
 import com.prof18.feedflow.android.widget.WidgetExactSizeResolution
 import com.prof18.feedflow.android.widget.WidgetImageRequestIdentity
 import com.prof18.feedflow.android.widget.resolveWidgetImageBudget
-import com.prof18.feedflow.shared.domain.feed.MAX_WIDGET_FEED_ITEMS
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -31,52 +30,58 @@ import org.robolectric.annotation.Config
 class WidgetBitmapValidatorTest {
 
     @Test
-    fun `validated allocations for every fixed slot stay within aggregate image budget`() {
-        listOf(1, 2, 3, 5).forEach { variantCount ->
-            val budget = resolveWidgetImageBudget(
-                screenWidthPx = 480,
-                screenHeightPx = 800,
-                exactSizes = WidgetExactSizeResolution(
-                    stableKey = "sizes-$variantCount",
-                    sizes = List(variantCount) { index ->
-                        DpSize((100 + index).dp, (200 + index).dp)
-                    },
-                    payloadVariantCount = variantCount,
-                ),
-            )
-            val slotCount = MAX_WIDGET_FEED_ITEMS * variantCount
-            val allocationByteCounts = List(slotCount) { slotIndex ->
-                val request = requireNotNull(
-                    budget.resolveRequest(
-                        imageUrl = "https://example.com/image-$slotIndex",
-                        displayTargetPx = 1_000,
+    fun `validated allocations for actual items and every variant stay within aggregate image budget`() {
+        listOf(1, 15, 100).forEach { feedItemCount ->
+            listOf(1, 3).forEach { variantCount ->
+                val budget = resolveWidgetImageBudget(
+                    screenWidthPx = 480,
+                    screenHeightPx = 800,
+                    exactSizes = WidgetExactSizeResolution(
+                        stableKey = "sizes-$variantCount",
+                        sizes = List(variantCount) { index ->
+                            DpSize((100 + index).dp, (200 + index).dp)
+                        },
+                        payloadVariantCount = variantCount,
                     ),
+                    feedItemCount = feedItemCount,
                 )
-                assertEquals(budget.budgetEdgePx, request.edgePx)
+                val slotCount = feedItemCount * variantCount
+                val allocationByteCounts = List(slotCount) { slotIndex ->
+                    val request = requireNotNull(
+                        budget.resolveRequest(
+                            imageUrl = "https://example.com/image-$slotIndex",
+                            displayTargetPx = 1_000,
+                        ),
+                    )
+                    assertEquals(
+                        minOf(budget.budgetEdgePx, EXPECTED_MAX_IMAGE_EDGE_PX),
+                        request.edgePx,
+                    )
 
-                val decodedBitmap = Bitmap.createBitmap(
-                    request.edgePx,
-                    request.edgePx,
-                    Bitmap.Config.ARGB_8888,
-                )
-                val validatedBitmap = requireNotNull(
-                    WidgetBitmapValidator.validate(
-                        bitmap = decodedBitmap,
-                        requestEdgePx = request.edgePx,
-                        payloadBudgetBytes = request.identity.payloadBudgetBytes,
-                    ),
-                )
-                val allocationByteCount = validatedBitmap.allocationByteCount.toLong()
+                    val decodedBitmap = Bitmap.createBitmap(
+                        request.edgePx,
+                        request.edgePx,
+                        Bitmap.Config.ARGB_8888,
+                    )
+                    val validatedBitmap = requireNotNull(
+                        WidgetBitmapValidator.validate(
+                            bitmap = decodedBitmap,
+                            requestEdgePx = request.edgePx,
+                            payloadBudgetBytes = request.identity.payloadBudgetBytes,
+                        ),
+                    )
+                    val allocationByteCount = validatedBitmap.allocationByteCount.toLong()
 
-                assertTrue(validatedBitmap.width <= request.edgePx)
-                assertTrue(validatedBitmap.height <= request.edgePx)
-                assertTrue(allocationByteCount <= request.identity.payloadBudgetBytes)
-                validatedBitmap.recycle()
-                allocationByteCount
+                    assertTrue(validatedBitmap.width <= request.edgePx)
+                    assertTrue(validatedBitmap.height <= request.edgePx)
+                    assertTrue(allocationByteCount <= request.identity.payloadBudgetBytes)
+                    validatedBitmap.recycle()
+                    allocationByteCount
+                }
+
+                assertEquals(budget.payloadCount, allocationByteCounts.size.toLong())
+                assertTrue(allocationByteCounts.sum() <= budget.effectiveArticleBudgetBytes)
             }
-
-            assertEquals(budget.payloadCount, allocationByteCounts.size.toLong())
-            assertTrue(allocationByteCounts.sum() <= budget.effectiveArticleBudgetBytes)
         }
     }
 
@@ -226,6 +231,10 @@ class WidgetBitmapValidatorTest {
         imageUrl = "https://example.com/article.png",
         edgePx = edgePx,
         exactSizeKey = "same-exact-size",
+        feedItemCount = 1,
+        payloadCount = 1,
         payloadBudgetBytes = payloadBudgetBytes,
     )
 }
+
+private const val EXPECTED_MAX_IMAGE_EDGE_PX = 512

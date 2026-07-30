@@ -9,8 +9,8 @@ import com.prof18.feedflow.shared.data.WidgetSettingsRepository
 import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
+import com.prof18.feedflow.shared.domain.model.WidgetFreshness
 import com.prof18.feedflow.shared.domain.model.WidgetTextColorMode
-import com.prof18.feedflow.shared.domain.model.normalizeWidgetMaximumArticles
 import com.prof18.feedflow.shared.domain.model.normalized
 import com.prof18.feedflow.shared.presentation.WidgetUpdater
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,8 +30,6 @@ class WidgetSettingsViewModel(
         WidgetSettingsState(),
     )
     val settingsState: StateFlow<WidgetSettingsState> = _settingsState.asStateFlow()
-
-    private var maximumArticlesUpdatePending = false
 
     init {
         viewModelScope.launch {
@@ -63,13 +61,13 @@ class WidgetSettingsViewModel(
                 globalSyncSettingsFlow,
                 widgetAppearanceSettingsWithTextColorFlow,
                 widgetSettingsRepository.widgetHideImages,
-                widgetSettingsRepository.widgetMaximumArticles,
+                widgetSettingsRepository.widgetFreshness,
                 widgetSettingsRepository.widgetCardAppearance,
-            ) { syncPeriod, widgetAppearanceSettings, hideImages, maximumArticles, cardAppearance ->
+            ) { syncPeriod, widgetAppearanceSettings, hideImages, freshness, cardAppearance ->
                 WidgetSettingsState(
                     syncPeriod = syncPeriod,
                     feedLayout = widgetAppearanceSettings.feedLayout,
-                    maximumArticles = maximumArticles,
+                    freshness = freshness,
                     showHeader = widgetAppearanceSettings.showHeader,
                     fontScale = widgetAppearanceSettings.fontScale,
                     backgroundColor = widgetAppearanceSettings.backgroundColor,
@@ -97,21 +95,12 @@ class WidgetSettingsViewModel(
         }
     }
 
-    fun updateMaximumArticles(maximumArticles: Int) {
-        val normalizedValue = normalizeWidgetMaximumArticles(maximumArticles)
-        if (widgetSettingsRepository.widgetMaximumArticles.value == normalizedValue) {
+    fun updateWidgetFreshness(freshness: WidgetFreshness) {
+        if (widgetSettingsRepository.widgetFreshness.value == freshness) {
             return
         }
-        _settingsState.update { it.copy(maximumArticles = normalizedValue) }
-        widgetSettingsRepository.setWidgetMaximumArticles(normalizedValue)
-        maximumArticlesUpdatePending = true
-    }
-
-    fun finishMaximumArticlesUpdate() {
-        if (!maximumArticlesUpdatePending) {
-            return
-        }
-        maximumArticlesUpdatePending = false
+        _settingsState.update { it.copy(freshness = freshness) }
+        widgetSettingsRepository.setWidgetFreshness(freshness)
         viewModelScope.launch {
             widgetUpdater.update()
         }

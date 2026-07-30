@@ -46,7 +46,9 @@ import com.prof18.feedflow.core.model.WidgetFeedLayout
 import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
+import com.prof18.feedflow.shared.domain.model.WidgetFreshness
 import com.prof18.feedflow.shared.domain.model.WidgetTextColorMode
+import com.prof18.feedflow.shared.domain.model.filterWidgetItemsByFreshness
 import com.prof18.feedflow.shared.domain.model.normalized
 import com.prof18.feedflow.shared.ui.style.Spacing
 import com.prof18.feedflow.shared.ui.theme.FeedFlowTheme
@@ -85,7 +87,7 @@ private fun WidgetPreviewSectionContent(
 
     WidgetPreviewWallpaper(
         feedLayout = settingsState.feedLayout,
-        maximumArticles = settingsState.maximumArticles,
+        freshness = settingsState.freshness,
         showWidgetHeader = settingsState.showHeader,
         hideImages = settingsState.hideImages,
         fontSizes = widgetFontSizes(settingsState.fontScale),
@@ -104,7 +106,7 @@ private fun WidgetPreviewSectionContent(
 @Composable
 private fun WidgetPreviewWallpaper(
     feedLayout: WidgetFeedLayout,
-    maximumArticles: Int,
+    freshness: WidgetFreshness,
     showWidgetHeader: Boolean,
     hideImages: Boolean,
     fontSizes: WidgetFontSizes,
@@ -131,7 +133,7 @@ private fun WidgetPreviewWallpaper(
     ) {
         WidgetPreview(
             feedLayout = feedLayout,
-            maximumArticles = maximumArticles,
+            freshness = freshness,
             showWidgetHeader = showWidgetHeader,
             hideImages = hideImages,
             fontSizes = fontSizes,
@@ -191,7 +193,7 @@ private fun PreviewBackdropToggleButton(
 @Composable
 private fun WidgetPreview(
     feedLayout: WidgetFeedLayout,
-    maximumArticles: Int,
+    freshness: WidgetFreshness,
     showWidgetHeader: Boolean,
     hideImages: Boolean,
     fontSizes: WidgetFontSizes,
@@ -228,21 +230,24 @@ private fun WidgetPreview(
                 Spacer(modifier = Modifier.height(Spacing.small))
             }
 
-            val items = limitWidgetFeedItems(
-                feedItems = listOf(
+            val items = resolveWidgetPreviewSamples(
+                freshness = freshness,
+                nowMillis = PREVIEW_NOW_MILLIS,
+            ).map { sample ->
+                if (sample.isRecent) {
                     WidgetPreviewItem(
                         feedSource = strings.settingsFontScaleFeedSourceExample,
                         title = strings.settingsFontScaleTitleExample,
                         date = "25/12 - 14:30",
-                    ),
+                    )
+                } else {
                     WidgetPreviewItem(
                         feedSource = strings.settingsFontScaleFeedSourceExample,
                         title = strings.settingsFontScaleSubtitleExample,
                         date = "24/12 - 09:15",
-                    ),
-                ),
-                maximumArticles = maximumArticles,
-            )
+                    )
+                }
+            }
 
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 val cardLayout = resolveWidgetCardLayout(
@@ -293,6 +298,30 @@ private fun WidgetPreview(
         }
     }
 }
+
+internal fun resolveWidgetPreviewSamples(
+    freshness: WidgetFreshness,
+    nowMillis: Long,
+) = filterWidgetItemsByFreshness(
+    items = listOf(
+        WidgetPreviewSample(
+            isRecent = true,
+            pubDateMillis = nowMillis - PREVIEW_RECENT_ITEM_AGE_MILLIS,
+        ),
+        WidgetPreviewSample(
+            isRecent = false,
+            pubDateMillis = nowMillis - PREVIEW_OLDER_ITEM_AGE_MILLIS,
+        ),
+    ),
+    freshness = freshness,
+    nowMillis = nowMillis,
+    pubDateMillis = WidgetPreviewSample::pubDateMillis,
+)
+
+internal data class WidgetPreviewSample(
+    val isRecent: Boolean,
+    val pubDateMillis: Long,
+)
 
 private data class WidgetPreviewItem(
     val feedSource: String,
@@ -599,6 +628,9 @@ internal data class ResolvedWidgetPreviewAppearance(
 
 private const val MAX_PERCENT = 100
 private const val PERCENT_DIVISOR = 100f
+internal const val PREVIEW_NOW_MILLIS = 1_800_000_000_000L
+internal const val PREVIEW_RECENT_ITEM_AGE_MILLIS = 12L * 60L * 60L * 1_000L
+internal const val PREVIEW_OLDER_ITEM_AGE_MILLIS = 2L * 24L * 60L * 60L * 1_000L
 private val PreviewToggleDarkChromeColor = Color(0xFF20283A)
 private val PreviewLightWallpaperColors = listOf(
     Color(0xFFE9EEF8),

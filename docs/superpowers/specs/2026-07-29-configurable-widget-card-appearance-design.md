@@ -28,17 +28,21 @@ The current Card appearance remains the default. The `List` layout's appearance,
 - Custom fonts or other typography features.
 - Changes to the `List` layout's appearance, geometry, settings, or interactions. Its existing thumbnails still use the shared provider-level Exact-mode request and bitmap-budget safeguards.
 - Per-widget-instance preferences; widget appearance remains global.
-- Changes to feed loading, synchronization, filtering, sorting, refresh, or article interactions.
+- Changes to feed loading, synchronization, sorting, refresh, or article interactions beyond the superseding freshness policy below.
 - Replacing Jetpack Glance with hand-written `RemoteViews`.
 - Unrelated preference migrations or repository refactoring.
 
-## User-approved Addendum: Maximum Articles
+## User-approved Addendum: Article Freshness (Supersedes Maximum Articles)
 
-Add one global Android widget setting labeled `Maximum articles`, stored separately from `WidgetCardAppearance`. It accepts integers from 1 through 15 and defaults to 15, preserving existing behavior. The value applies equally to List and Card layouts and caps the total ordered feed items emitted into the widget; it does not promise that exactly that many rows fit on screen simultaneously.
+The previously approved 1–15 `Maximum articles` addendum is withdrawn. Remove its count model, persistence key and flow, slider, coalesced callbacks, accessibility copy, preview cap, E2E plumbing, tests, and documentation claims without a compatibility layer.
 
-`WidgetSettingsRepository` normalizes malformed stored and supplied values, exposes the normalized integer as a `StateFlow`, and keeps the database query capacity fixed at `MAX_WIDGET_FEED_ITEMS = 15`. `FeedFlowWidget` collects the setting reactively, and `WidgetContent` applies the cap once before `LazyColumn` item emission so item order and the existing empty state remain unchanged. Each effective in-app slider value persists immediately and updates the app preview, while launcher refresh is coalesced to one `WidgetUpdater` call when that drag, tap, keyboard, or accessibility interaction finishes. Returning through multiple values, including 14 back to 15, must persist the final repository value without waiting for state collection. An interaction with no effective value change invokes neither persistence nor the updater. Configuration callbacks persist without invoking the updater, matching existing behavior.
+Add one global Android widget setting labeled `Article age`, stored separately from `WidgetCardAppearance`, with exactly `Last 24 hours`, `Last 3 days`, and `Last 7 days`. The default is `Last 3 days`; the setting applies equally to List and Card layouts. `WidgetSettingsRepository` stores the safely parsed enum name, exposes a synchronous getter plus `StateFlow`, and falls back to the default for absent, unknown, or wrong-type storage. An effective in-app dropdown selection persists immediately and invokes `WidgetUpdater` exactly once; an unchanged callback does neither. Configuration callbacks persist without invoking the updater, matching existing behavior.
 
-The slider retains its discrete progress/range semantics, stable E2E ID, and a localized accessible name. The image budget remains invariant: `payloadCount` is always `MAX_WIDGET_FEED_ITEMS * payloadVariantCount`, even when the selected article cap is lower. The preview shows one deterministic sample row when the cap is 1 and retains its two sample rows for values 2 through 15. Focused tests cover persistence/default/clamping, no-dispatch final-value guards, coalesced ViewModel update counts, renderer caps at 1/midrange/15/invalid values, order and empty-state behavior, preview sample selection, the shared pre-layout policy, and the fixed-capacity production budget calculation. Runtime validation should confirm the app-owned slider and preview, then verify List and Card widgets update reactively while noting that launcher height determines how many capped rows are simultaneously visible.
+`FeedWidgetRepository` queries no more than the 100 newest unread candidates using `WIDGET_FEED_ITEM_SAFETY_CAPACITY = 100`. This is an internal safety capacity, not a user-visible count selector. `FeedFlowWidget` captures one `nowMillis` before multi-size composition, then uses one shared pure policy to retain only items whose non-null raw `pubDateMillis` is at or after the inclusive selected-window cutoff. Undated and older items are excluded, future-dated items remain eligible, and source newest-first order is preserved. Filtering produces one immutable list before image-budget resolution or `WidgetContent`, so List, Card, empty state, and bitmap budgeting consume exactly the same items.
+
+For `F` filtered items and `V` serialized Exact variants, reserve `R = max(F, 1)` slots and budget `P = R * V` article-bitmap payloads. The empty reserve keeps division defined; the resolver never reserves 15 or 100 slots when fewer items match. Budget and request identities include the actual item count, payload count, exact-size key, and per-payload bytes, so every count change—including 0 to 1, whose reserved payload count is equal—invalidates stale state. Preserve saturated `Long` arithmetic, Android's device-derived ceiling, the 6 MiB article cap, 512-pixel edge cap, complete request identity, and delivered `allocationByteCount` validation.
+
+The preview uses the same freshness policy with a fixed reference `nowMillis` and samples aged 12 hours and 2 days: Last 24 hours shows one row, while Last 3 days and Last 7 days show two. Debug reset restores Last 3 days, and the Android-widget E2E profile derives fresh, expired, and undated article timestamps from one supplied reference time. Focused tests cover enum parsing and malformed fallback, exact inclusive boundaries, undated exclusion, preserved order, effective/no-op updater counts, configuration persistence, 100-item safety capacity, preview counts, 0/1/15/100 budget counts, multiple variants, count identity invalidation, overflow/device/edge caps, and delivered allocations. Physical widget-host validation must cover both layouts, reactive freshness changes, inclusive and empty behavior, ordering, multi-size updates, and bitmap/`RemoteViews` stability; REG-164 covers only the app-owned dropdown and does not claim launcher visual automation.
 
 ## Existing Behavior
 
@@ -226,7 +230,7 @@ If the date is absent or the image fails to load, the resolved row geometry rema
 
 `SizeMode.Exact` applies to the whole widget provider, so the request and bitmap policy covers both Card images and the existing 50 dp List thumbnails. List geometry and image mode remain unchanged. Each composition converts its resolved viewport from dp to `displayTargetPx` with `LocalContext.current.resources.displayMetrics` before applying the shared bound.
 
-The budget deliberately does not use the number of articles in the current feed emission. `FeedWidgetRepository` has a fixed maximum of 15 widget articles. Extract that value into a shared `MAX_WIDGET_FEED_ITEMS = 15` constant used by both the repository query and the Android bitmap-budget resolver so the two limits cannot drift.
+`FeedWidgetRepository` limits its input query to `WIDGET_FEED_ITEM_SAFETY_CAPACITY = 100`, which bounds work but does not reserve image slots. The renderer budgets against the actual immutable post-freshness item count so a small matching feed receives a proportionate per-payload budget without pretending that all 100 candidate slots render.
 
 Every Exact-size composition synchronously copies `LocalAppWidgetOptions.current` into an immutable `WidgetOptionsSnapshot`. A pure `resolveExactSizes(snapshot, currentSize, sdkInt)` helper derives the stable snapshot key and complete size set from that same immutable value using Glance 1.1.1's SDK-specific rules:
 
@@ -237,16 +241,16 @@ Every Exact-size composition synchronously copies `LocalAppWidgetOptions.current
 
 The stable resolution key includes the canonical options snapshot and SDK branch so the size set and key always describe the same Glance behavior.
 
-`V` is the resulting size count, and `P = MAX_WIDGET_FEED_ITEMS * V` is the conservative number of serialized article-bitmap payloads. The same article in two size variants counts twice even if both requests resolve to the same dimensions; the budget does not assume Coil or `RemoteViews` bitmap deduplication.
+`V` is the serialized payload-variant count, `F` is the actual filtered item count, `R = max(F, 1)` is the reserved item count, and `P = R * V` is the number of budgeted article-bitmap payloads. The same article in two size variants counts twice even if both requests resolve to the same dimensions; the budget does not assume Coil or `RemoteViews` bitmap deduplication.
 
-Because the snapshot key and `V` come from one synchronous immutable input, there is no asynchronous size query, `Unresolved` state, retry loop, timer, or image-suppression interval. Because `P` always reserves all 15 article slots, a current feed transition from one to 15 image-bearing articles cannot change the per-payload budget or leave another Exact-size composition holding a bitmap validated under a larger article-count budget.
+Because the snapshot key and `V` come from one synchronous immutable input and `F` comes from one immutable pre-render freshness result, there is no asynchronous size query, `Unresolved` state, retry loop, timer, or image-suppression interval. A count change deliberately recalculates the per-payload budget and invalidates budget/request identity for all variants before serialization; the 0-item path reserves one slot only to keep division defined.
 
 Use `Long` arithmetic for all byte and pixel-count calculations:
 
 1. `remoteViewsLimitBytes = screenWidthPx.toLong() * screenHeightPx.toLong() * 4L * 3L / 2L`, matching Android's `1.5 * screenBytes` aggregate bitmap ceiling.
 2. `deviceArticleBudgetBytes = remoteViewsLimitBytes * 3L / 4L`, reserving 25 percent for non-article bitmaps and safety headroom.
 3. `effectiveArticleBudgetBytes = min(6L * 1024L * 1024L, deviceArticleBudgetBytes)`.
-4. `payloadCount = MAX_WIDGET_FEED_ITEMS.toLong() * V.toLong()`.
+4. `payloadCount = maxOf(filteredItemCount, 1).toLong() * V.toLong()` using saturated multiplication.
 5. `payloadBudgetBytes = effectiveArticleBudgetBytes / payloadCount`.
 6. `budgetEdgePx = floor(sqrt(payloadBudgetBytes.toDouble() / 4.0)).toInt()`.
 7. Each square request edge is `min(displayTargetPx, 512, budgetEdgePx)`.
@@ -265,7 +269,7 @@ Only a validated software `ARGB_8888` bitmap may enter the `RemoteViews` payload
 
 The viewport remains the resolved dp size, so the host may perform limited upscaling when the explicit memory bound is smaller than the display target. On a 480 by 800 pixel display, the Android ceiling is 2,304,000 bytes and the 25-percent reservation leaves an article budget of 1,728,000 bytes rather than 6 MiB.
 
-Bitmap state and asynchronous loading use a request key containing the image URL, final bounded dimensions, and `payloadBudgetBytes`. State is remembered by that complete key, and the loading effect applies a result only if the full key is still current. When the immutable options snapshot, `V`, display metrics, geometry, or the per-payload budget changes, the old state is discarded and an in-flight stale result cannot restore a bitmap validated against an older budget. A budget change must revalidate or reload even when target-size capping or integer rounding leaves the bounded pixel dimensions unchanged. Changes in the current feed count do not change the budget because all 15 repository slots are always reserved.
+Bitmap state and asynchronous loading use a request key containing the image URL, final bounded dimensions, immutable options key, actual filtered item count, payload count, and `payloadBudgetBytes`. State is remembered by that complete key, and the loading effect applies a result only if the full key is still current. When the feed count, immutable options snapshot, `V`, display metrics, geometry, or per-payload budget changes, old state is discarded and an in-flight stale result cannot restore a bitmap validated against an older aggregate policy. A count or budget change must revalidate or reload even when target-size capping, integer rounding, or the shared 0/1 reserved-slot count leaves bounded dimensions and bytes unchanged.
 
 Exact mode may run an image effect independently for each size composition. Identical List requests may be served from Coil's cache, but correctness and aggregate memory calculations do not rely on cache reuse. Every List and Card article-by-variant payload remains included in `P`.
 
@@ -312,7 +316,7 @@ Do not hard-code strings in Kotlin or manually author other-language translation
 
 Add focused tests for:
 
-- `FeedWidgetRepository` and the bitmap resolver use the same `MAX_WIDGET_FEED_ITEMS = 15` constant.
+- `FeedWidgetRepository` enforces the clearly named `WIDGET_FEED_ITEM_SAFETY_CAPACITY = 100` query ceiling while preserving raw nullable publication timestamps.
 - Missing preferences produce the compatibility defaults.
 - Every Card value persists and is emitted as part of the grouped appearance.
 - Each in-app Card update method calls `WidgetUpdater.update()` once for a changed value and zero times for an unchanged value.
@@ -326,7 +330,7 @@ Add focused tests for:
 - `FeedFlowWidget` uses `SizeMode.Exact`, and the width resolver produces Thumbnail, Fill, then Thumbnail for a narrow-to-wide-to-narrow size sequence without another settings or feed event.
 - The 96 dp readable-text rule selects Fill mode when it fits and the complete Thumbnail fallback when it does not, including a 256 dp widget at maximum font scales.
 - Thumbnail and fill-height modes produce the correct viewport and bounded request dimensions.
-- Fixed-capacity tests prove current feeds with one and 15 image-bearing articles use the same `MAX_WIDGET_FEED_ITEMS * V` payload count, per-payload budget, and request identity for otherwise identical images.
+- Actual-count tests cover 0, 1, 15, and 100 filtered items across one and multiple Exact variants, including the one-slot empty reserve, proportional per-payload bytes, and budget/request identity changes for every count transition.
 - A budget-key regression test changes `V` or the device-derived budget so `payloadBudgetBytes` decreases while the bounded edge remains unchanged; the old bitmap is removed, its in-flight result is rejected, and only a bitmap validated against the new budget can render.
 - Pure options-snapshot tests cover API 31+ explicit size lists, duplicate/invalid entries, complete four-field legacy fallback, and an empty explicit list with only one complete orientation pair—which must use `currentSize`.
 - API 26-30 tests cover independently valid portrait and landscape pairs, including either pair without the other, plus the `currentSize` fallback when neither pair is valid.
@@ -334,8 +338,8 @@ Add focused tests for:
 - Device-limit tests use `Long` arithmetic and cover a 480 by 800 pixel display, the 6 MiB upper cap, and large dimensions without overflow.
 - Loader tests assert `allowHardware(false)` and the `ARGB_8888` preference, then inject hardware and `RGBA_F16` results to verify conversion or omission before `ImageProvider`.
 - Allocation tests use bitmaps whose `allocationByteCount` exceeds `width * height * 4`, verify further downscaling and revalidation, and verify omission when no compliant software bitmap can be produced.
-- Bitmap-budget tests sum actual validated `allocationByteCount` values across one and multiple exact-size variants. A 15-image update remains within the effective device-derived budget and every decoded edge remains at or below 512 pixels.
-- A List regression test uses multiple Exact-mode variants and 15 image-bearing articles, preserves the 50 dp List viewport and existing layout, and subjects every List payload to the same reactive aggregate budget and request-key rules.
+- Bitmap-budget tests sum actual validated `allocationByteCount` values for 1, 15, and 100 delivered images across one and multiple exact-size variants. Every aggregate remains within the effective device-derived budget and every decoded edge remains at or below 512 pixels.
+- A List regression test uses multiple Exact-mode variants and the actual filtered item count, preserves the 50 dp List viewport and existing layout, and subjects every List payload to the same aggregate budget and request-key rules.
 
 ### Preview coverage
 
@@ -356,10 +360,10 @@ On a connected Android device:
 5. Verify fill-height images align to row bounds, remain square, center-crop, and do not stretch.
 6. At maximum widget and Android system font scales, resize narrow to wide to narrow. Verify the 256 dp state uses the complete Thumbnail fallback with at least 96 dp for text, the wide state uses Fill, and the final narrow state returns to Thumbnail without a refresh or widget re-addition.
 7. Verify changing between image modes and exact sizes requests appropriately bounded images.
-8. On Android 12 or newer, keep one active widget session while changing from one to 15 image-bearing articles and from one to at least two host-provided exact sizes. Verify the article-count change leaves the fixed-capacity per-payload budget unchanged, while the new immutable options snapshot synchronously updates `V` for the complete exact-size set.
+8. On Android 12 or newer, keep one active widget session while changing freshness so the filtered count changes and while moving between one and at least two host-provided exact sizes. Verify all variants refresh under the new count-specific identity and the immutable options snapshot synchronously updates `V` for the complete exact-size set.
 9. On Android 8 through 11, verify the complete legacy portrait/landscape size result is counted for both Card and List aggregate budgets rather than assuming one composition.
 10. On a 480 by 800 pixel display, verify every generated Card variant renders within the device-derived budget without bitmap-allocation, transaction, or `RemoteViews` failure.
-11. Repeat the 15-article, multi-size update in `List` layout and verify its 50 dp thumbnails, layout, and interactions remain unchanged while all variants stay within the same aggregate budget.
+11. Repeat the freshness and multi-size update in `List` layout and verify its 50 dp thumbnails, layout, ordering, empty state, and interactions remain unchanged while all variants stay within the actual-count aggregate budget.
 12. Verify missing and failed images collapse horizontally without breaking the row.
 13. Verify article rows remain clickable across text and image regions.
 14. Compare the preview with the placed widget at minimum, default, and maximum widget font settings.
@@ -368,7 +372,7 @@ On a connected Android device:
 
 Implementation is expected to touch:
 
-- `shared/src/commonMain/.../domain/feed/FeedWidgetRepository.kt` to expose the existing 15-item maximum as a shared constant
+- `shared/src/commonMain/.../domain/feed/FeedWidgetRepository.kt` to enforce the 100-item internal safety capacity
 - `shared/src/androidMain/.../WidgetSettingsRepository.kt`
 - `shared/src/androidMain/.../domain/model/WidgetCardAppearance.kt`
 - `androidApp/src/main/.../widget/WidgetSettingsState.kt`
@@ -395,6 +399,10 @@ After implementation:
 
 ## Acceptance Criteria
 
+- Article age offers exactly Last 24 hours, Last 3 days, and Last 7 days; Last 3 days is the safe persistence/default fallback.
+- One pre-composition `nowMillis` filters raw non-null publication times at the inclusive cutoff, preserves newest-first order, and supplies the same immutable list to both layouts and the image budget.
+- Effective in-app freshness selections persist and update placed widgets exactly once; unchanged selections do neither, while configuration persists without an updater.
+- The preview uses the same policy and fixed 12-hour/2-day sample ages to show 1, 2, and 2 rows for the three options.
 - Default Card surface, spacing, radius, thumbnail geometry, and automatic themed text match the current placed widget.
 - Card color and opacity are independent of the outer widget background.
 - Zero Card opacity renders no article slab fill.
@@ -407,12 +415,12 @@ After implementation:
 - Fill-height images are square, center-cropped, aligned to row bounds, and requested at display size up to the explicit bitmap limits.
 - `FeedFlowWidget` uses `SizeMode.Exact`; narrow-to-wide-to-narrow resizing changes Thumbnail fallback to Fill and back without another settings or feed event.
 - A fill-height image never reduces readable text below 96 dp; the renderer uses the complete Thumbnail fallback when necessary.
-- The provider-wide payload count always reserves `MAX_WIDGET_FEED_ITEMS = 15` for every exact-size variant, so feed emissions cannot create independently changing per-variant article budgets.
+- The repository query safety capacity is clearly internal and fixed at 100, while provider-wide payload count uses `maxOf(filteredItemCount, 1) * payloadVariantCount` for every exact-size variant.
 - One immutable `WidgetOptionsSnapshot` synchronously produces both its stable key and complete `V` using Glance's distinct API 31+ and API 26-30 fallback rules; image sizing uses no asynchronous manager query, unresolved interval, retry loop, timeout, or polling.
 - The effective article-bitmap budget is the smaller of 6 MiB and 75 percent of Android's device-derived `RemoteViews` bitmap ceiling, calculated with `Long` arithmetic.
 - Only validated software `ARGB_8888` bitmaps whose actual `allocationByteCount` fits the per-payload budget reach `ImageProvider`; incompatible or oversized results are converted, further downscaled, or omitted.
-- The image request/state key includes `payloadBudgetBytes`, so a reduced budget invalidates an older bitmap even when its bounded dimensions are unchanged.
-- Across every host-provided exact-size variant, the sum of actual allocations for up to 15 image-bearing articles stays within the effective aggregate budget and 512-pixel per-edge cap without assuming bitmap deduplication.
+- The image request/state key includes actual item count, payload count, Exact-size key, and `payloadBudgetBytes`, so any count or budget change invalidates an older bitmap even when reserved slots, bounded dimensions, or rounded bytes are unchanged.
+- Across every host-provided exact-size variant, the sum of actual allocations for every filtered image-bearing article stays within the effective aggregate budget and 512-pixel per-edge cap without assuming bitmap deduplication; tests cover actual counts through the 100-item safety ceiling.
 - List rows retain their current 50 dp thumbnail geometry, appearance, and interactions while participating in the same Exact-mode aggregate budget and request-key policy.
 - Missing or failed images do not leave an empty image region.
 - Preview controls and sample rows show every Card option without clipping.

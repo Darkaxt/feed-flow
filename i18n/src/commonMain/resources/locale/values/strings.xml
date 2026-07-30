@@ -283,8 +283,10 @@
     <string name="widget_configuration_confirm">Add Widget</string>
     <string name="widget_background_sync_disabled_warning">Background sync is currently disabled, so the widget will not refresh automatically.</string>
     <string name="widget_appearance_title">Appearance</string>
-    <string name="widget_maximum_articles_title">Maximum articles: %s</string>
-    <string name="widget_maximum_articles_accessibility_label">Maximum articles</string>
+    <string name="widget_article_age_title">Article age</string>
+    <string name="widget_article_age_last_24_hours">Last 24 hours</string>
+    <string name="widget_article_age_last_3_days">Last 3 days</string>
+    <string name="widget_article_age_last_7_days">Last 7 days</string>
     <string name="widget_show_header_title">Show header title</string>
     <string name="widget_background_color_title">Background color</string>
     <string name="widget_background_color_default">System</string>

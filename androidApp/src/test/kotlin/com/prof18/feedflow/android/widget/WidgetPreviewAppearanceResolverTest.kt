@@ -5,6 +5,7 @@ import com.prof18.feedflow.core.model.WidgetFeedLayout
 import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
+import com.prof18.feedflow.shared.domain.model.WidgetFreshness
 import com.prof18.feedflow.shared.domain.model.WidgetTextColorMode
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -74,6 +75,47 @@ class WidgetPreviewAppearanceResolverTest {
                 imageSizing = WidgetCardImageSizing.FILL_ROW_HEIGHT,
             ),
             result.cardAppearance,
+        )
+    }
+
+    @Test
+    fun `preview freshness profile shows one row for 24 hours and two for longer windows`() {
+        assertEquals(
+            1,
+            resolveWidgetPreviewSamples(
+                freshness = WidgetFreshness.LAST_24_HOURS,
+                nowMillis = PREVIEW_NOW_MILLIS,
+            ).size,
+        )
+        assertEquals(
+            2,
+            resolveWidgetPreviewSamples(
+                freshness = WidgetFreshness.LAST_3_DAYS,
+                nowMillis = PREVIEW_NOW_MILLIS,
+            ).size,
+        )
+        assertEquals(
+            2,
+            resolveWidgetPreviewSamples(
+                freshness = WidgetFreshness.LAST_7_DAYS,
+                nowMillis = PREVIEW_NOW_MILLIS,
+            ).size,
+        )
+    }
+
+    @Test
+    fun `preview freshness profile is deterministic for an injected now snapshot`() {
+        val samples = resolveWidgetPreviewSamples(
+            freshness = WidgetFreshness.LAST_7_DAYS,
+            nowMillis = PREVIEW_NOW_MILLIS,
+        )
+
+        assertEquals(
+            listOf(
+                PREVIEW_NOW_MILLIS - PREVIEW_RECENT_ITEM_AGE_MILLIS,
+                PREVIEW_NOW_MILLIS - PREVIEW_OLDER_ITEM_AGE_MILLIS,
+            ),
+            samples.map { it.pubDateMillis },
         )
     }
 

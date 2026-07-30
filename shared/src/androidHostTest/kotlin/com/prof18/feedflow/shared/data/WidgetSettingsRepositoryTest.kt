@@ -4,6 +4,7 @@ import app.cash.turbine.test
 import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
+import com.prof18.feedflow.shared.domain.model.WidgetFreshness
 import com.russhwolf.settings.MapSettings
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.set
@@ -20,56 +21,41 @@ import kotlin.test.assertTrue
 class WidgetSettingsRepositoryTest {
 
     @Test
-    fun `absent maximum articles setting uses compatibility default`() {
+    fun `absent freshness setting uses last three days default`() {
         val repository = WidgetSettingsRepository(MapSettings())
 
-        assertEquals(15, repository.getWidgetMaximumArticles())
-        assertEquals(15, repository.widgetMaximumArticles.value)
+        assertEquals(WidgetFreshness.LAST_3_DAYS, repository.getWidgetFreshness())
+        assertEquals(WidgetFreshness.LAST_3_DAYS, repository.widgetFreshness.value)
     }
 
     @Test
-    fun `maximum articles round trips and emits the update`() = runTest {
+    fun `freshness round trips and emits the update`() = runTest {
         val repository = WidgetSettingsRepository(MapSettings())
 
-        repository.widgetMaximumArticles.test {
-            assertEquals(15, awaitItem())
+        repository.widgetFreshness.test {
+            assertEquals(WidgetFreshness.LAST_3_DAYS, awaitItem())
 
-            repository.setWidgetMaximumArticles(7)
+            repository.setWidgetFreshness(WidgetFreshness.LAST_7_DAYS)
 
-            assertEquals(7, awaitItem())
-            assertEquals(7, repository.getWidgetMaximumArticles())
+            assertEquals(WidgetFreshness.LAST_7_DAYS, awaitItem())
+            assertEquals(WidgetFreshness.LAST_7_DAYS, repository.getWidgetFreshness())
             cancelAndIgnoreRemainingEvents()
         }
     }
 
     @Test
-    fun `maximum articles clamps set values to lower and upper bounds`() {
-        val repository = WidgetSettingsRepository(MapSettings())
-
-        repository.setWidgetMaximumArticles(Int.MIN_VALUE)
-        assertEquals(1, repository.getWidgetMaximumArticles())
-        assertEquals(1, repository.widgetMaximumArticles.value)
-
-        repository.setWidgetMaximumArticles(Int.MAX_VALUE)
-        assertEquals(15, repository.getWidgetMaximumArticles())
-        assertEquals(15, repository.widgetMaximumArticles.value)
-    }
-
-    @Test
-    fun `maximum articles normalizes malformed stored values safely`() {
-        val belowRange = WidgetSettingsRepository(
-            MapSettings().apply { this[WIDGET_MAXIMUM_ARTICLES_KEY] = -4 },
-        )
-        val aboveRange = WidgetSettingsRepository(
-            MapSettings().apply { this[WIDGET_MAXIMUM_ARTICLES_KEY] = 40 },
+    fun `freshness falls back safely for unknown and wrong type stored values`() {
+        val unknownName = WidgetSettingsRepository(
+            MapSettings().apply { this[WIDGET_FRESHNESS_KEY] = "LAST_30_DAYS" },
         )
         val wrongType = WidgetSettingsRepository(
-            MapSettings().apply { this[WIDGET_MAXIMUM_ARTICLES_KEY] = "not-an-integer" },
+            MapSettings().apply { this[WIDGET_FRESHNESS_KEY] = 3 },
         )
 
-        assertEquals(1, belowRange.getWidgetMaximumArticles())
-        assertEquals(15, aboveRange.getWidgetMaximumArticles())
-        assertEquals(15, wrongType.getWidgetMaximumArticles())
+        assertEquals(WidgetFreshness.LAST_3_DAYS, unknownName.getWidgetFreshness())
+        assertEquals(WidgetFreshness.LAST_3_DAYS, unknownName.widgetFreshness.value)
+        assertEquals(WidgetFreshness.LAST_3_DAYS, wrongType.getWidgetFreshness())
+        assertEquals(WidgetFreshness.LAST_3_DAYS, wrongType.widgetFreshness.value)
     }
 
     @Test
@@ -313,7 +299,7 @@ class WidgetSettingsRepositoryTest {
     }
 
     private companion object {
-        const val WIDGET_MAXIMUM_ARTICLES_KEY = "WIDGET_MAXIMUM_ARTICLES"
+        const val WIDGET_FRESHNESS_KEY = "WIDGET_FRESHNESS"
         const val WIDGET_CARD_SURFACE_COLOR_KEY = "WIDGET_CARD_SURFACE_COLOR"
         const val WIDGET_CARD_SURFACE_OPACITY_PERCENT_KEY = "WIDGET_CARD_SURFACE_OPACITY_PERCENT"
         const val WIDGET_CARD_CORNER_RADIUS_DP_KEY = "WIDGET_CARD_CORNER_RADIUS_DP"

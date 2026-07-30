@@ -158,6 +158,27 @@ class E2eSeedRunnerTest : KoinTestBase() {
     }
 
     @Test
+    fun `android widget freshness profile derives deterministic dates from supplied now`() = runTest {
+        val referenceNowMillis = 2_000_000_000_000L
+        seedRunner.resetAndSeed(E2eSeedProfile.ANDROID_WIDGET)
+
+        seedRunner.seedAndroidWidgetFreshnessProfile(referenceNowMillis)
+
+        val profileItems = databaseHelper.getFeedWidgetItems(pageSize = 200).first()
+            .filter { it.title?.startsWith("E2E Widget Freshness") == true }
+        assertEquals(
+            listOf(
+                referenceNowMillis - 12L * 60L * 60L * 1_000L,
+                referenceNowMillis - 2L * 24L * 60L * 60L * 1_000L,
+                referenceNowMillis - 5L * 24L * 60L * 60L * 1_000L,
+                referenceNowMillis - 8L * 24L * 60L * 60L * 1_000L,
+                null,
+            ),
+            profileItems.map { it.pub_date },
+        )
+    }
+
+    @Test
     fun `sync-linked-mock profile seeds selected network account`() = runTest {
         seedRunner.resetAndSeed(E2eSeedProfile.SYNC_LINKED_MOCK, E2eSeedAccount.FRESH_RSS)
 

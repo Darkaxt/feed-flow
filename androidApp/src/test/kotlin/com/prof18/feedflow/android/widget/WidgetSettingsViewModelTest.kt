@@ -6,6 +6,7 @@ import com.prof18.feedflow.shared.data.WidgetSettingsRepository
 import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
+import com.prof18.feedflow.shared.domain.model.WidgetFreshness
 import com.prof18.feedflow.shared.presentation.WidgetUpdater
 import com.russhwolf.settings.MapSettings
 import com.russhwolf.settings.Settings
@@ -37,7 +38,7 @@ class WidgetSettingsViewModelTest {
     }
 
     @Test
-    fun `effective maximum articles change persists normalized value and updates widget once`() = runTest(dispatcher) {
+    fun `effective freshness change persists and updates widget exactly once`() = runTest(dispatcher) {
         val settings = CountingWidgetSettings()
         val repository = WidgetSettingsRepository(settings)
         val widgetUpdater = FakeWidgetUpdater()
@@ -48,22 +49,20 @@ class WidgetSettingsViewModelTest {
         )
         advanceUntilIdle()
 
-        viewModel.updateMaximumArticles(Int.MIN_VALUE)
+        viewModel.updateWidgetFreshness(WidgetFreshness.LAST_24_HOURS)
 
-        assertEquals(1, viewModel.settingsState.value.maximumArticles)
-        assertEquals(1, repository.getWidgetMaximumArticles())
-        assertEquals(1, settings.maximumArticlesWriteCount)
+        assertEquals(WidgetFreshness.LAST_24_HOURS, viewModel.settingsState.value.freshness)
+        assertEquals(WidgetFreshness.LAST_24_HOURS, repository.getWidgetFreshness())
+        assertEquals(1, settings.freshnessWriteCount)
         assertEquals(0, widgetUpdater.updateCount)
 
-        viewModel.finishMaximumArticlesUpdate()
-        assertEquals(0, widgetUpdater.updateCount)
         advanceUntilIdle()
 
         assertEquals(1, widgetUpdater.updateCount)
     }
 
     @Test
-    fun `unchanged normalized maximum articles input does not persist or update widget`() = runTest(dispatcher) {
+    fun `unchanged freshness call neither persists nor updates widget`() = runTest(dispatcher) {
         val settings = CountingWidgetSettings()
         val repository = WidgetSettingsRepository(settings)
         val widgetUpdater = FakeWidgetUpdater()
@@ -74,19 +73,16 @@ class WidgetSettingsViewModelTest {
         )
         advanceUntilIdle()
 
-        viewModel.updateMaximumArticles(Int.MAX_VALUE)
-        viewModel.finishMaximumArticlesUpdate()
+        viewModel.updateWidgetFreshness(WidgetFreshness.LAST_3_DAYS)
         advanceUntilIdle()
 
-        assertEquals(15, viewModel.settingsState.value.maximumArticles)
-        assertEquals(0, settings.maximumArticlesWriteCount)
+        assertEquals(WidgetFreshness.LAST_3_DAYS, viewModel.settingsState.value.freshness)
+        assertEquals(0, settings.freshnessWriteCount)
         assertEquals(0, widgetUpdater.updateCount)
     }
 
     @Test
-    fun `maximum articles guard uses synchronous repository value when presentation state lags`() = runTest(
-        dispatcher,
-    ) {
+    fun `freshness guard uses synchronous repository value before presentation collection`() = runTest(dispatcher) {
         val settings = CountingWidgetSettings()
         val repository = WidgetSettingsRepository(settings)
         val widgetUpdater = FakeWidgetUpdater()
@@ -97,40 +93,13 @@ class WidgetSettingsViewModelTest {
         )
         advanceUntilIdle()
 
-        repository.setWidgetMaximumArticles(14)
-        viewModel.updateMaximumArticles(15)
+        viewModel.updateWidgetFreshness(WidgetFreshness.LAST_7_DAYS)
+        viewModel.updateWidgetFreshness(WidgetFreshness.LAST_7_DAYS)
 
-        assertEquals(15, repository.widgetMaximumArticles.value)
-        assertEquals(15, viewModel.settingsState.value.maximumArticles)
-        assertEquals(2, settings.maximumArticlesWriteCount)
+        assertEquals(WidgetFreshness.LAST_7_DAYS, repository.widgetFreshness.value)
+        assertEquals(WidgetFreshness.LAST_7_DAYS, viewModel.settingsState.value.freshness)
+        assertEquals(1, settings.freshnessWriteCount)
 
-        viewModel.finishMaximumArticlesUpdate()
-        advanceUntilIdle()
-        assertEquals(1, widgetUpdater.updateCount)
-    }
-
-    @Test
-    fun `rapid maximum articles return persists final value and refreshes once on completion`() = runTest(dispatcher) {
-        val settings = CountingWidgetSettings()
-        val repository = WidgetSettingsRepository(settings)
-        val widgetUpdater = FakeWidgetUpdater()
-        val viewModel = WidgetSettingsViewModel(
-            settingsRepository = SettingsRepository(MapSettings()),
-            widgetSettingsRepository = repository,
-            widgetUpdater = widgetUpdater,
-        )
-        advanceUntilIdle()
-
-        viewModel.updateMaximumArticles(14)
-        viewModel.updateMaximumArticles(15)
-
-        assertEquals(15, repository.widgetMaximumArticles.value)
-        assertEquals(15, repository.getWidgetMaximumArticles())
-        assertEquals(15, viewModel.settingsState.value.maximumArticles)
-        assertEquals(2, settings.maximumArticlesWriteCount)
-        assertEquals(0, widgetUpdater.updateCount)
-
-        viewModel.finishMaximumArticlesUpdate()
         advanceUntilIdle()
 
         assertEquals(1, widgetUpdater.updateCount)
@@ -243,7 +212,7 @@ class WidgetConfigurationViewModelTest {
     }
 
     @Test
-    fun `configuration maximum articles change persists without widget updater behavior`() = runTest(dispatcher) {
+    fun `configuration freshness change persists without widget updater behavior`() = runTest(dispatcher) {
         val settings = CountingWidgetSettings()
         val repository = WidgetSettingsRepository(settings)
         val viewModel = WidgetConfigurationViewModel(
@@ -252,18 +221,16 @@ class WidgetConfigurationViewModelTest {
         )
         advanceUntilIdle()
 
-        viewModel.updateMaximumArticles(7)
+        viewModel.updateWidgetFreshness(WidgetFreshness.LAST_7_DAYS)
         advanceUntilIdle()
 
-        assertEquals(7, repository.getWidgetMaximumArticles())
-        assertEquals(7, viewModel.settingsState.value.maximumArticles)
-        assertEquals(1, settings.maximumArticlesWriteCount)
+        assertEquals(WidgetFreshness.LAST_7_DAYS, repository.getWidgetFreshness())
+        assertEquals(WidgetFreshness.LAST_7_DAYS, viewModel.settingsState.value.freshness)
+        assertEquals(1, settings.freshnessWriteCount)
     }
 
     @Test
-    fun `configuration rapid maximum articles return persists final value without dispatch advance`() = runTest(
-        dispatcher,
-    ) {
+    fun `configuration ignores unchanged freshness input`() = runTest(dispatcher) {
         val settings = CountingWidgetSettings()
         val repository = WidgetSettingsRepository(settings)
         val viewModel = WidgetConfigurationViewModel(
@@ -272,32 +239,11 @@ class WidgetConfigurationViewModelTest {
         )
         advanceUntilIdle()
 
-        viewModel.updateMaximumArticles(14)
-        viewModel.updateMaximumArticles(15)
-
-        assertEquals(15, repository.widgetMaximumArticles.value)
-        assertEquals(15, repository.getWidgetMaximumArticles())
-        assertEquals(2, settings.maximumArticlesWriteCount)
-
-        advanceUntilIdle()
-        assertEquals(15, viewModel.settingsState.value.maximumArticles)
-    }
-
-    @Test
-    fun `configuration ignores unchanged normalized maximum articles input`() = runTest(dispatcher) {
-        val settings = CountingWidgetSettings()
-        val repository = WidgetSettingsRepository(settings)
-        val viewModel = WidgetConfigurationViewModel(
-            settingsRepository = SettingsRepository(MapSettings()),
-            widgetSettingsRepository = repository,
-        )
+        viewModel.updateWidgetFreshness(WidgetFreshness.LAST_3_DAYS)
         advanceUntilIdle()
 
-        viewModel.updateMaximumArticles(Int.MAX_VALUE)
-        advanceUntilIdle()
-
-        assertEquals(15, viewModel.settingsState.value.maximumArticles)
-        assertEquals(0, settings.maximumArticlesWriteCount)
+        assertEquals(WidgetFreshness.LAST_3_DAYS, viewModel.settingsState.value.freshness)
+        assertEquals(0, settings.freshnessWriteCount)
     }
 
     @Test
@@ -361,18 +307,18 @@ class WidgetConfigurationViewModelTest {
 private class CountingWidgetSettings(
     private val delegate: Settings = MapSettings(),
 ) : Settings by delegate {
-    var maximumArticlesWriteCount = 0
+    var freshnessWriteCount = 0
         private set
 
-    override fun putInt(key: String, value: Int) {
-        delegate.putInt(key, value)
-        if (key == WIDGET_MAXIMUM_ARTICLES_KEY) {
-            maximumArticlesWriteCount += 1
+    override fun putString(key: String, value: String) {
+        delegate.putString(key, value)
+        if (key == WIDGET_FRESHNESS_KEY) {
+            freshnessWriteCount += 1
         }
     }
 }
 
-private const val WIDGET_MAXIMUM_ARTICLES_KEY = "WIDGET_MAXIMUM_ARTICLES"
+private const val WIDGET_FRESHNESS_KEY = "WIDGET_FRESHNESS"
 private const val CUSTOM_COLOR_WITHOUT_ALPHA = 0x00123456
 private const val CUSTOM_COLOR = 0xFF123456.toInt()
 private const val CUSTOM_OPACITY_PERCENT = 72

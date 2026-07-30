@@ -30,8 +30,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -40,13 +38,11 @@ import com.github.skydoves.colorpicker.compose.HsvColorPicker
 import com.github.skydoves.colorpicker.compose.rememberColorPickerController
 import com.prof18.feedflow.android.settings.SettingsE2eIds
 import com.prof18.feedflow.core.model.WidgetFeedLayout
-import com.prof18.feedflow.shared.domain.feed.MAX_WIDGET_FEED_ITEMS
-import com.prof18.feedflow.shared.domain.model.MIN_WIDGET_MAXIMUM_ARTICLES
 import com.prof18.feedflow.shared.domain.model.SyncPeriod
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
+import com.prof18.feedflow.shared.domain.model.WidgetFreshness
 import com.prof18.feedflow.shared.domain.model.WidgetTextColorMode
-import com.prof18.feedflow.shared.domain.model.normalizeWidgetMaximumArticles
 import com.prof18.feedflow.shared.ui.readermode.SliderWithPlusMinus
 import com.prof18.feedflow.shared.ui.settings.CompactSettingDropdownRow
 import com.prof18.feedflow.shared.ui.settings.SettingDropdownOption
@@ -61,8 +57,7 @@ import kotlin.math.roundToInt
 fun WidgetSettingsContent(
     settingsState: WidgetSettingsState,
     onFeedLayoutSelected: (WidgetFeedLayout) -> Unit,
-    onMaximumArticlesSelected: (Int) -> Unit,
-    onMaximumArticlesChangeFinished: () -> Unit,
+    onWidgetFreshnessSelected: (WidgetFreshness) -> Unit,
     onShowHeaderSelected: (Boolean) -> Unit,
     onFontScaleSelected: (Int) -> Unit,
     onBackgroundColorSelected: (Int?) -> Unit,
@@ -80,7 +75,6 @@ fun WidgetSettingsContent(
     modifier: Modifier = Modifier,
 ) {
     val strings = LocalFeedFlowStrings.current
-    val maximumArticles = normalizeWidgetMaximumArticles(settingsState.maximumArticles)
     val backgroundOpacity = settingsState.backgroundOpacityPercent.coerceIn(minimumValue = 0, maximumValue = 100)
     val defaultBackgroundColor = MaterialTheme.colorScheme.surface
     val resolvedBackgroundColor = settingsState.backgroundColor?.let(::widgetColorFromArgb) ?: defaultBackgroundColor
@@ -117,23 +111,28 @@ fun WidgetSettingsContent(
             onFeedLayoutSelected = onFeedLayoutSelected,
         )
 
-        Text(
-            text = strings.widgetMaximumArticlesTitle(maximumArticles.toString()),
-            modifier = Modifier.padding(horizontal = Spacing.regular, vertical = Spacing.small),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        Slider(
-            modifier = Modifier
-                .padding(horizontal = Spacing.regular)
-                .testTag(SettingsE2eIds.WIDGET_MAXIMUM_ARTICLES)
-                .semantics {
-                    contentDescription = strings.widgetMaximumArticlesAccessibilityLabel
-                },
-            value = maximumArticles.toFloat(),
-            onValueChange = { onMaximumArticlesSelected(it.roundToInt()) },
-            onValueChangeFinished = onMaximumArticlesChangeFinished,
-            valueRange = MIN_WIDGET_MAXIMUM_ARTICLES.toFloat()..MAX_WIDGET_FEED_ITEMS.toFloat(),
-            steps = MAX_WIDGET_FEED_ITEMS - MIN_WIDGET_MAXIMUM_ARTICLES - 1,
+        CompactSettingDropdownRow(
+            title = strings.widgetArticleAgeTitle,
+            currentValue = settingsState.freshness,
+            options = persistentListOf(
+                SettingDropdownOption(
+                    WidgetFreshness.LAST_24_HOURS,
+                    strings.widgetArticleAgeLast24Hours,
+                    e2eId = SettingsE2eIds.WIDGET_ARTICLE_AGE_LAST_24_HOURS,
+                ),
+                SettingDropdownOption(
+                    WidgetFreshness.LAST_3_DAYS,
+                    strings.widgetArticleAgeLast3Days,
+                    e2eId = SettingsE2eIds.WIDGET_ARTICLE_AGE_LAST_3_DAYS,
+                ),
+                SettingDropdownOption(
+                    WidgetFreshness.LAST_7_DAYS,
+                    strings.widgetArticleAgeLast7Days,
+                    e2eId = SettingsE2eIds.WIDGET_ARTICLE_AGE_LAST_7_DAYS,
+                ),
+            ),
+            onOptionSelected = onWidgetFreshnessSelected,
+            modifier = Modifier.testTag(SettingsE2eIds.WIDGET_ARTICLE_AGE),
         )
 
         SettingSwitchItem(
@@ -609,8 +608,7 @@ private fun WidgetSettingsContentPreview() {
                     backgroundOpacityPercent = 80,
                 ),
                 onFeedLayoutSelected = {},
-                onMaximumArticlesSelected = {},
-                onMaximumArticlesChangeFinished = {},
+                onWidgetFreshnessSelected = {},
                 onShowHeaderSelected = {},
                 onFontScaleSelected = {},
                 onBackgroundColorSelected = {},

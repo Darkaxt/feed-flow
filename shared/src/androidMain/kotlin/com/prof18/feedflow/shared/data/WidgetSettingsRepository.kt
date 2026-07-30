@@ -1,10 +1,10 @@
 package com.prof18.feedflow.shared.data
 
 import com.prof18.feedflow.core.model.WidgetFeedLayout
-import com.prof18.feedflow.shared.domain.model.DEFAULT_WIDGET_MAXIMUM_ARTICLES
+import com.prof18.feedflow.shared.domain.model.DEFAULT_WIDGET_FRESHNESS
 import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
+import com.prof18.feedflow.shared.domain.model.WidgetFreshness
 import com.prof18.feedflow.shared.domain.model.WidgetTextColorMode
-import com.prof18.feedflow.shared.domain.model.normalizeWidgetMaximumArticles
 import com.prof18.feedflow.shared.domain.model.normalized
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.set
@@ -39,8 +39,8 @@ class WidgetSettingsRepository(
     private val widgetHideImagesMutableFlow = MutableStateFlow(getWidgetHideImages())
     val widgetHideImages: StateFlow<Boolean> = widgetHideImagesMutableFlow.asStateFlow()
 
-    private val widgetMaximumArticlesMutableFlow = MutableStateFlow(getWidgetMaximumArticles())
-    val widgetMaximumArticles: StateFlow<Int> = widgetMaximumArticlesMutableFlow.asStateFlow()
+    private val widgetFreshnessMutableFlow = MutableStateFlow(getWidgetFreshness())
+    val widgetFreshness: StateFlow<WidgetFreshness> = widgetFreshnessMutableFlow.asStateFlow()
 
     private val widgetCardAppearanceMutableFlow = MutableStateFlow(getWidgetCardAppearance())
     val widgetCardAppearance: StateFlow<WidgetCardAppearance> = widgetCardAppearanceMutableFlow.asStateFlow()
@@ -118,19 +118,16 @@ class WidgetSettingsRepository(
         widgetHideImagesMutableFlow.update { value }
     }
 
-    fun getWidgetMaximumArticles(): Int = normalizeWidgetMaximumArticles(
-        runCatching {
-            settings.getInt(
-                WidgetSettingsFields.WIDGET_MAXIMUM_ARTICLES.name,
-                DEFAULT_WIDGET_MAXIMUM_ARTICLES,
-            )
-        }.getOrDefault(DEFAULT_WIDGET_MAXIMUM_ARTICLES),
-    )
+    fun getWidgetFreshness(): WidgetFreshness = runCatching {
+        getEnumOrDefault(
+            field = WidgetSettingsFields.WIDGET_FRESHNESS,
+            default = DEFAULT_WIDGET_FRESHNESS,
+        )
+    }.getOrDefault(DEFAULT_WIDGET_FRESHNESS)
 
-    fun setWidgetMaximumArticles(value: Int) {
-        val normalizedValue = normalizeWidgetMaximumArticles(value)
-        settings[WidgetSettingsFields.WIDGET_MAXIMUM_ARTICLES.name] = normalizedValue
-        widgetMaximumArticlesMutableFlow.update { normalizedValue }
+    fun setWidgetFreshness(value: WidgetFreshness) {
+        settings[WidgetSettingsFields.WIDGET_FRESHNESS.name] = value.name
+        widgetFreshnessMutableFlow.update { value }
     }
 
     fun getWidgetCardAppearance(): WidgetCardAppearance = synchronized(widgetCardAppearanceLock) {
@@ -203,7 +200,7 @@ private enum class WidgetSettingsFields {
     WIDGET_BACKGROUND_OPACITY_PERCENT,
     WIDGET_TEXT_COLOR_MODE,
     WIDGET_HIDE_IMAGES,
-    WIDGET_MAXIMUM_ARTICLES,
+    WIDGET_FRESHNESS,
     WIDGET_CARD_SURFACE_COLOR,
     WIDGET_CARD_SURFACE_OPACITY_PERCENT,
     WIDGET_CARD_CORNER_RADIUS_DP,

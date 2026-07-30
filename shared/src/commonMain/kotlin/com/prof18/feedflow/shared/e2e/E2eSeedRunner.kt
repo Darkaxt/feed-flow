@@ -94,6 +94,49 @@ class E2eSeedRunner internal constructor(
         }
     }
 
+    suspend fun seedAndroidWidgetFreshnessProfile(referenceNowMillis: Long) {
+        databaseHelper.insertFeedItems(
+            listOf(
+                feedItem(
+                    id = WIDGET_FRESHNESS_RECENT_ARTICLE_ID,
+                    title = "E2E Widget Freshness Recent Article",
+                    subtitle = "Published 12 hours before the supplied widget reference time",
+                    feedSource = androidWeekly,
+                    pubDateMillis = referenceNowMillis - (ONE_HOUR_MILLIS * 12),
+                ),
+                feedItem(
+                    id = WIDGET_FRESHNESS_THREE_DAY_ARTICLE_ID,
+                    title = "E2E Widget Freshness Three Day Article",
+                    subtitle = "Published two days before the supplied widget reference time",
+                    feedSource = androidWeekly,
+                    pubDateMillis = referenceNowMillis - (ONE_DAY_MILLIS * 2),
+                ),
+                feedItem(
+                    id = WIDGET_FRESHNESS_SEVEN_DAY_ARTICLE_ID,
+                    title = "E2E Widget Freshness Seven Day Article",
+                    subtitle = "Published five days before the supplied widget reference time",
+                    feedSource = androidWeekly,
+                    pubDateMillis = referenceNowMillis - (ONE_DAY_MILLIS * 5),
+                ),
+                feedItem(
+                    id = WIDGET_FRESHNESS_EXPIRED_ARTICLE_ID,
+                    title = "E2E Widget Freshness Expired Article",
+                    subtitle = "Published eight days before the supplied widget reference time",
+                    feedSource = androidWeekly,
+                    pubDateMillis = referenceNowMillis - (ONE_DAY_MILLIS * 8),
+                ),
+                feedItem(
+                    id = WIDGET_FRESHNESS_UNDATED_ARTICLE_ID,
+                    title = "E2E Widget Freshness Undated Article",
+                    subtitle = "Has no publication timestamp and must be excluded",
+                    feedSource = androidWeekly,
+                    pubDateMillis = null,
+                ),
+            ),
+            lastSyncTimestamp = referenceNowMillis,
+        )
+    }
+
     private fun applyBaseSettings() {
         settingsRepository.clearFavouriteBrowserId()
         settingsRepository.setMarkFeedAsReadWhenScrolling(true)
@@ -623,6 +666,11 @@ class E2eSeedRunner internal constructor(
         private const val BLOCKED_ARTICLE_ID = "e2e-article-blocked"
         private const val HIDDEN_ARTICLE_ID = "e2e-article-hidden"
         private const val PINNED_ARTICLE_ID = "e2e-article-pinned"
+        private const val WIDGET_FRESHNESS_RECENT_ARTICLE_ID = "e2e-widget-freshness-recent"
+        private const val WIDGET_FRESHNESS_THREE_DAY_ARTICLE_ID = "e2e-widget-freshness-three-day"
+        private const val WIDGET_FRESHNESS_SEVEN_DAY_ARTICLE_ID = "e2e-widget-freshness-seven-day"
+        private const val WIDGET_FRESHNESS_EXPIRED_ARTICLE_ID = "e2e-widget-freshness-expired"
+        private const val WIDGET_FRESHNESS_UNDATED_ARTICLE_ID = "e2e-widget-freshness-undated"
         private const val DROPBOX_MOCK_CREDENTIALS = """{"access_token":"e2e-dropbox-token"}"""
 
         private const val SEED_NOW_MILLIS = 1_765_152_000_000L
@@ -957,7 +1005,7 @@ class E2eSeedRunner internal constructor(
             title: String,
             subtitle: String,
             feedSource: FeedSource,
-            pubDateMillis: Long,
+            pubDateMillis: Long?,
             url: String = "https://e2e.feedflow.local/articles/$id",
             imageUrl: String? = null,
             commentsUrl: String? = null,

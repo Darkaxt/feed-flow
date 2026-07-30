@@ -41,30 +41,20 @@ import com.prof18.feedflow.core.model.WidgetFeedLayout
 import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
 import com.prof18.feedflow.shared.domain.model.WidgetTextColorMode
-import com.prof18.feedflow.shared.domain.model.normalizeWidgetMaximumArticles
 import com.prof18.feedflow.shared.domain.model.normalized
 import com.prof18.feedflow.shared.ui.style.Spacing
 import com.prof18.feedflow.shared.ui.utils.LocalFeedFlowStrings
 import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.toImmutableList
 import kotlin.math.roundToInt
 
 private const val FULL_OPACITY_PERCENT = 100
 private const val FULL_OPACITY_ALPHA = 255
-
-internal fun <T> limitWidgetFeedItems(
-    feedItems: List<T>,
-    maximumArticles: Int,
-): ImmutableList<T> = feedItems
-    .take(normalizeWidgetMaximumArticles(maximumArticles))
-    .toImmutableList()
 
 @SuppressLint("RestrictedApi")
 @Composable
 internal fun WidgetContent(
     feedItems: ImmutableList<FeedItem>,
     feedLayout: WidgetFeedLayout,
-    maximumArticles: Int,
     browserManager: BrowserManager,
     showHeader: Boolean,
     fontScale: Int,
@@ -79,7 +69,6 @@ internal fun WidgetContent(
     systemFontScale: Float,
 ) {
     val context = LocalContext.current
-    val renderedFeedItems = limitWidgetFeedItems(feedItems, maximumArticles)
     val openAppAction = createOpenAppAction(context)
     val fontSizes = widgetFontSizes(fontScale)
 
@@ -182,7 +171,7 @@ internal fun WidgetContent(
         horizontalPadding = WIDGET_SCAFFOLD_HORIZONTAL_PADDING_DP.dp,
         modifier = GlanceModifier.fillMaxSize(),
     ) {
-        if (renderedFeedItems.isEmpty()) {
+        if (feedItems.isEmpty()) {
             val emptyStateModifier = if (showHeader) {
                 GlanceModifier
             } else {
@@ -215,7 +204,7 @@ internal fun WidgetContent(
             }
         } else {
             WidgetFeedItems(
-                feedItems = renderedFeedItems,
+                feedItems = feedItems,
                 feedLayout = feedLayout,
                 browserManager = browserManager,
                 showHeader = showHeader,

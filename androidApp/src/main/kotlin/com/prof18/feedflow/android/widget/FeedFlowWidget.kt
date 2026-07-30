@@ -16,6 +16,7 @@ import androidx.glance.appwidget.provideContent
 import com.prof18.feedflow.android.BrowserManager
 import com.prof18.feedflow.shared.data.WidgetSettingsRepository
 import com.prof18.feedflow.shared.domain.feed.FeedWidgetRepository
+import com.prof18.feedflow.shared.domain.model.filterWidgetItemsByFreshness
 import com.prof18.feedflow.shared.ui.utils.ProvideFeedFlowStrings
 import com.prof18.feedflow.shared.ui.utils.rememberFeedFlowStrings
 import kotlinx.coroutines.flow.first
@@ -32,6 +33,7 @@ internal class FeedFlowWidget(
         // Glance rebuilds can briefly render the collectAsState initial value before the DB flow emits.
         // Preloading the current items avoids flashing the widget empty state during refreshes.
         val initialFeedItems = feedItemsFlow.first()
+        val nowMillis = System.currentTimeMillis()
 
         provideContent {
             val lyricist = rememberFeedFlowStrings()
@@ -39,7 +41,7 @@ internal class FeedFlowWidget(
             ProvideFeedFlowStrings(lyricist) {
                 val feedItems by feedItemsFlow.collectAsState(initialFeedItems)
                 val feedLayout by widgetSettingsRepository.feedWidgetLayout.collectAsState()
-                val maximumArticles by widgetSettingsRepository.widgetMaximumArticles.collectAsState()
+                val freshness by widgetSettingsRepository.widgetFreshness.collectAsState()
                 val showHeader by widgetSettingsRepository.widgetShowHeader.collectAsState()
                 val fontScale by widgetSettingsRepository.widgetFontScale.collectAsState()
                 val backgroundColor by widgetSettingsRepository.widgetBackgroundColor.collectAsState()
@@ -47,6 +49,12 @@ internal class FeedFlowWidget(
                 val textColorMode by widgetSettingsRepository.widgetTextColorMode.collectAsState()
                 val hideImages by widgetSettingsRepository.widgetHideImages.collectAsState()
                 val cardAppearance by widgetSettingsRepository.widgetCardAppearance.collectAsState()
+                val filteredFeedItems = filterWidgetItemsByFreshness(
+                    items = feedItems,
+                    freshness = freshness,
+                    nowMillis = nowMillis,
+                    pubDateMillis = { it.pubDateMillis },
+                )
 
                 val glanceContext = LocalContext.current
                 val currentSize = LocalSize.current
@@ -61,6 +69,7 @@ internal class FeedFlowWidget(
                     screenWidthPx = displayMetrics.widthPixels,
                     screenHeightPx = displayMetrics.heightPixels,
                     exactSizes = exactSizes,
+                    feedItemCount = filteredFeedItems.size,
                 )
                 val displayDensity = displayMetrics.density.takeIf { it.isFinite() && it > 0f } ?: 1f
                 val systemFontScale = glanceContext.resources.configuration.fontScale
@@ -69,9 +78,8 @@ internal class FeedFlowWidget(
 
                 GlanceTheme {
                     WidgetContent(
-                        feedItems = feedItems,
+                        feedItems = filteredFeedItems,
                         feedLayout = feedLayout,
-                        maximumArticles = maximumArticles,
                         browserManager = browserManager,
                         showHeader = showHeader,
                         fontScale = fontScale,

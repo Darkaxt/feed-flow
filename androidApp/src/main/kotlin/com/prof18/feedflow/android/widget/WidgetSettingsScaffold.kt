@@ -21,6 +21,7 @@ import com.prof18.feedflow.shared.domain.model.SyncPeriod
 import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
+import com.prof18.feedflow.shared.domain.model.WidgetFreshness
 import com.prof18.feedflow.shared.domain.model.WidgetTextColorMode
 import com.prof18.feedflow.shared.ui.style.Spacing
 import com.prof18.feedflow.shared.ui.theme.FeedFlowTheme
@@ -31,8 +32,7 @@ fun WidgetSettingsScaffold(
     title: String,
     settingsState: WidgetSettingsState,
     onFeedLayoutSelected: (WidgetFeedLayout) -> Unit,
-    onMaximumArticlesSelected: (Int) -> Unit,
-    onMaximumArticlesChangeFinished: () -> Unit,
+    onWidgetFreshnessSelected: (WidgetFreshness) -> Unit,
     onShowHeaderSelected: (Boolean) -> Unit,
     onFontScaleSelected: (Int) -> Unit,
     onBackgroundColorSelected: (Int?) -> Unit,
@@ -97,8 +97,7 @@ fun WidgetSettingsScaffold(
                 WidgetSettingsContent(
                     settingsState = settingsState,
                     onFeedLayoutSelected = onFeedLayoutSelected,
-                    onMaximumArticlesSelected = onMaximumArticlesSelected,
-                    onMaximumArticlesChangeFinished = onMaximumArticlesChangeFinished,
+                    onWidgetFreshnessSelected = onWidgetFreshnessSelected,
                     onShowHeaderSelected = onShowHeaderSelected,
                     onFontScaleSelected = onFontScaleSelected,
                     onBackgroundColorSelected = onBackgroundColorSelected,
@@ -167,8 +166,7 @@ private fun WidgetSettingsScaffoldToolingPreview(settingsState: WidgetSettingsSt
             title = strings.widgetConfigurationTitle,
             settingsState = settingsState,
             onFeedLayoutSelected = {},
-            onMaximumArticlesSelected = {},
-            onMaximumArticlesChangeFinished = {},
+            onWidgetFreshnessSelected = {},
             onShowHeaderSelected = {},
             onFontScaleSelected = {},
             onBackgroundColorSelected = {},

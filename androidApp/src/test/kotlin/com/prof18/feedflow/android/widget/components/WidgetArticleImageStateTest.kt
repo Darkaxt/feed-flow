@@ -104,6 +104,8 @@ class WidgetArticleImageStateTest {
         imageUrl = "https://example.com/article.png",
         edgePx = 50,
         exactSizeKey = "same-exact-sizes",
+        feedItemCount = 1,
+        payloadCount = 1,
         payloadBudgetBytes = payloadBudgetBytes,
     )
 }
