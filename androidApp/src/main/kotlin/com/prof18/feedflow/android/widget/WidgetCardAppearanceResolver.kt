@@ -84,6 +84,7 @@ internal fun resolveWidgetCardColorProviderPolicy(
         surface = surfaceSource,
         primaryText = textSource,
         secondaryText = textSource,
+        divider = textSource,
     )
 }
 
@@ -91,6 +92,7 @@ internal data class WidgetCardColorProviderPolicy(
     val surface: WidgetColorProviderSource,
     val primaryText: WidgetColorProviderSource,
     val secondaryText: WidgetColorProviderSource,
+    val divider: WidgetColorProviderSource,
 )
 
 internal enum class WidgetColorProviderSource {

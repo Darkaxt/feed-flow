@@ -29,6 +29,17 @@ class WidgetCardAppearanceResolverTest {
         assertEquals(WidgetColorProviderSource.THEMED, result.surface)
         assertEquals(WidgetColorProviderSource.THEMED, result.primaryText)
         assertEquals(WidgetColorProviderSource.THEMED, result.secondaryText)
+        assertEquals(WidgetColorProviderSource.THEMED, result.divider)
+    }
+
+    @Test
+    fun `custom divider opacity keeps theme aware provider for compatible card colors`() {
+        val result = resolveWidgetCardColorProviderPolicy(
+            appearance = WidgetCardAppearance(dividerOpacityPercent = 35),
+            textColorMode = WidgetTextColorMode.AUTOMATIC,
+        )
+
+        assertEquals(WidgetColorProviderSource.THEMED, result.divider)
     }
 
     @Test
@@ -45,9 +56,11 @@ class WidgetCardAppearanceResolverTest {
         assertEquals(WidgetColorProviderSource.RESOLVED, customColorResult.surface)
         assertEquals(WidgetColorProviderSource.RESOLVED, customColorResult.primaryText)
         assertEquals(WidgetColorProviderSource.RESOLVED, customColorResult.secondaryText)
+        assertEquals(WidgetColorProviderSource.RESOLVED, customColorResult.divider)
         assertEquals(WidgetColorProviderSource.RESOLVED, customOpacityResult.surface)
         assertEquals(WidgetColorProviderSource.RESOLVED, customOpacityResult.primaryText)
         assertEquals(WidgetColorProviderSource.RESOLVED, customOpacityResult.secondaryText)
+        assertEquals(WidgetColorProviderSource.RESOLVED, customOpacityResult.divider)
     }
 
     @Test
@@ -60,6 +73,7 @@ class WidgetCardAppearanceResolverTest {
         assertEquals(WidgetColorProviderSource.THEMED, result.surface)
         assertEquals(WidgetColorProviderSource.RESOLVED, result.primaryText)
         assertEquals(WidgetColorProviderSource.RESOLVED, result.secondaryText)
+        assertEquals(WidgetColorProviderSource.RESOLVED, result.divider)
     }
 
     @Test

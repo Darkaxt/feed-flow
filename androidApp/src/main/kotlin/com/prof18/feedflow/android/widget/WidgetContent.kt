@@ -3,7 +3,9 @@ package com.prof18.feedflow.android.widget
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.widget.RemoteViews
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceModifier
@@ -11,6 +13,7 @@ import androidx.glance.GlanceTheme
 import androidx.glance.LocalContext
 import androidx.glance.action.Action
 import androidx.glance.action.clickable
+import androidx.glance.appwidget.AndroidRemoteViews
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.components.Scaffold
 import androidx.glance.appwidget.lazy.LazyColumn
@@ -30,6 +33,7 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.prof18.feedflow.android.BrowserManager
 import com.prof18.feedflow.android.MainActivity
+import com.prof18.feedflow.android.R
 import com.prof18.feedflow.android.widget.components.WidgetFeedItemCard
 import com.prof18.feedflow.android.widget.components.WidgetFeedItemList
 import com.prof18.feedflow.core.model.FeedItem
@@ -42,6 +46,9 @@ import com.prof18.feedflow.shared.ui.style.Spacing
 import com.prof18.feedflow.shared.ui.utils.LocalFeedFlowStrings
 import kotlinx.collections.immutable.ImmutableList
 import kotlin.math.roundToInt
+
+private const val FULL_OPACITY_PERCENT = 100
+private const val FULL_OPACITY_ALPHA = 255
 
 @SuppressLint("RestrictedApi")
 @Composable
@@ -210,6 +217,7 @@ internal fun WidgetContent(
                 cardSlabFillColor = cardSlabFillColor,
                 cardPrimaryTextColor = cardPrimaryTextColor,
                 cardSecondaryTextColor = cardSecondaryTextColor,
+                cardDividerColorSource = cardColorProviderPolicy.divider,
                 cardLayout = cardLayout,
                 imageBudgetPolicy = imageBudgetPolicy,
                 listImageLayout = listImageLayout,
@@ -234,6 +242,7 @@ private fun WidgetFeedItems(
     cardSlabFillColor: ColorProvider?,
     cardPrimaryTextColor: ColorProvider,
     cardSecondaryTextColor: ColorProvider,
+    cardDividerColorSource: WidgetColorProviderSource,
     cardLayout: ResolvedWidgetCardLayout,
     imageBudgetPolicy: WidgetImageBudgetPolicy,
     listImageLayout: ResolvedWidgetListImageLayout,
@@ -282,11 +291,13 @@ private fun WidgetFeedItems(
                                     .fillMaxWidth()
                                     .padding(horizontal = dividerLayout.horizontalInsetDp.dp),
                             ) {
-                                Spacer(
+                                WidgetCardDivider(
+                                    colorSource = cardDividerColorSource,
+                                    resolvedColor = resolvedCardAppearance.dividerColor,
+                                    opacityPercent = cardAppearance.dividerOpacityPercent,
                                     modifier = GlanceModifier
                                         .fillMaxWidth()
-                                        .height(dividerLayout.thicknessDp.dp)
-                                        .background(ColorProvider(resolvedCardAppearance.dividerColor)),
+                                        .height(dividerLayout.thicknessDp.dp),
                                 )
                             }
                         }
@@ -298,6 +309,42 @@ private fun WidgetFeedItems(
         item { Spacer(modifier = GlanceModifier.height(Spacing.small)) }
     }
 }
+
+@Composable
+private fun WidgetCardDivider(
+    colorSource: WidgetColorProviderSource,
+    resolvedColor: Color,
+    opacityPercent: Int,
+    modifier: GlanceModifier = GlanceModifier,
+) {
+    when (colorSource) {
+        WidgetColorProviderSource.THEMED -> AndroidRemoteViews(
+            remoteViews = createThemedWidgetCardDividerRemoteViews(
+                context = LocalContext.current,
+                opacityPercent = opacityPercent,
+            ),
+            modifier = modifier,
+        )
+        WidgetColorProviderSource.RESOLVED -> Spacer(
+            modifier = modifier.background(ColorProvider(resolvedColor)),
+        )
+    }
+}
+
+internal fun createThemedWidgetCardDividerRemoteViews(
+    context: Context,
+    opacityPercent: Int,
+): RemoteViews = RemoteViews(context.packageName, R.layout.widget_card_divider).apply {
+    setInt(
+        R.id.widget_card_divider,
+        "setImageAlpha",
+        widgetCardDividerImageAlpha(opacityPercent),
+    )
+}
+
+internal fun widgetCardDividerImageAlpha(opacityPercent: Int): Int =
+    (opacityPercent.coerceIn(0, FULL_OPACITY_PERCENT) * FULL_OPACITY_ALPHA.toFloat() / FULL_OPACITY_PERCENT)
+        .roundToInt()
 
 internal fun resolveWidgetCardDividerLayout(
     itemSeparation: WidgetCardItemSeparation,
