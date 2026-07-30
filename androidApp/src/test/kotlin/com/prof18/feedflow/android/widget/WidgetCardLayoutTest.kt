@@ -50,7 +50,7 @@ class WidgetCardLayoutTest {
     }
 
     @Test
-    fun `scaffold inset makes a previously fitting fill row fall back`() {
+    fun `per-side scaffold padding makes a 240dp widget fall back`() {
         val widgetWidthDp = 240f
         val unadjustedLayout = resolveWidgetCardLayout(
             requestedImageSizing = WidgetCardImageSizing.FILL_ROW_HEIGHT,
@@ -67,6 +67,11 @@ class WidgetCardLayoutTest {
         )
 
         assertEquals(WidgetCardImageSizing.FILL_ROW_HEIGHT, unadjustedLayout.imageSizing)
+        assertEquals(
+            widgetWidthDp - WIDGET_SCAFFOLD_HORIZONTAL_PADDING_DP * 2,
+            availableSlabWidthDp,
+            0f,
+        )
         assertEquals(216f, availableSlabWidthDp, 0f)
         assertEquals(
             84f,
@@ -80,8 +85,8 @@ class WidgetCardLayoutTest {
     }
 
     @Test
-    fun `fill row keeps at least 96dp readable width after scaffold inset`() {
-        val availableSlabWidthDp = calculateWidgetAvailableSlabWidthDp(widgetWidthDp = 252f)
+    fun `per-side scaffold padding preserves fill row at 256dp`() {
+        val availableSlabWidthDp = calculateWidgetAvailableSlabWidthDp(widgetWidthDp = 256f)
         val layout = resolveWidgetCardLayout(
             requestedImageSizing = WidgetCardImageSizing.FILL_ROW_HEIGHT,
             availableSlabWidthDp = availableSlabWidthDp,
@@ -89,6 +94,7 @@ class WidgetCardLayoutTest {
             systemFontScale = 1f,
         )
 
+        assertEquals(232f, availableSlabWidthDp, 0f)
         assertEquals(WidgetCardImageSizing.FILL_ROW_HEIGHT, layout.imageSizing)
         assertTrue(
             calculateWidgetCardReadableTextWidthDp(
@@ -99,12 +105,26 @@ class WidgetCardLayoutTest {
     }
 
     @Test
-    fun `scaffold inset clamps available slab width to nonnegative`() {
+    fun `scaffold padding clamps available slab width to nonnegative`() {
+        val totalHorizontalPaddingDp = WIDGET_SCAFFOLD_HORIZONTAL_PADDING_DP * 2f
+
         assertEquals(0f, calculateWidgetAvailableSlabWidthDp(widgetWidthDp = -1f), 0f)
         assertEquals(0f, calculateWidgetAvailableSlabWidthDp(widgetWidthDp = 0f), 0f)
-        assertEquals(0f, calculateWidgetAvailableSlabWidthDp(widgetWidthDp = 23f), 0f)
-        assertEquals(0f, calculateWidgetAvailableSlabWidthDp(widgetWidthDp = 24f), 0f)
-        assertEquals(1f, calculateWidgetAvailableSlabWidthDp(widgetWidthDp = 25f), 0f)
+        assertEquals(
+            0f,
+            calculateWidgetAvailableSlabWidthDp(widgetWidthDp = totalHorizontalPaddingDp - 1f),
+            0f,
+        )
+        assertEquals(
+            0f,
+            calculateWidgetAvailableSlabWidthDp(widgetWidthDp = totalHorizontalPaddingDp),
+            0f,
+        )
+        assertEquals(
+            1f,
+            calculateWidgetAvailableSlabWidthDp(widgetWidthDp = totalHorizontalPaddingDp + 1f),
+            0f,
+        )
     }
 
     @Test

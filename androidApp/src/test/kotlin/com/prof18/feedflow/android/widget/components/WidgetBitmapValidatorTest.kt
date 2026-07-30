@@ -2,13 +2,18 @@ package com.prof18.feedflow.android.widget.components
 
 import android.content.Context
 import android.graphics.Bitmap
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import coil3.request.allowHardware
 import coil3.request.bitmapConfig
 import coil3.size.Precision
 import coil3.size.Scale
 import coil3.size.Size
+import com.prof18.feedflow.android.widget.WidgetExactSizeResolution
 import com.prof18.feedflow.android.widget.WidgetImageRequestIdentity
+import com.prof18.feedflow.android.widget.resolveWidgetImageBudget
+import com.prof18.feedflow.shared.domain.feed.MAX_WIDGET_FEED_ITEMS
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -24,6 +29,55 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class WidgetBitmapValidatorTest {
+
+    @Test
+    fun `validated allocations for every fixed slot stay within aggregate image budget`() {
+        listOf(1, 2, 3, 5).forEach { variantCount ->
+            val budget = resolveWidgetImageBudget(
+                screenWidthPx = 480,
+                screenHeightPx = 800,
+                exactSizes = WidgetExactSizeResolution(
+                    stableKey = "sizes-$variantCount",
+                    sizes = List(variantCount) { index ->
+                        DpSize((100 + index).dp, (200 + index).dp)
+                    },
+                ),
+            )
+            val slotCount = MAX_WIDGET_FEED_ITEMS * variantCount
+            val allocationByteCounts = List(slotCount) { slotIndex ->
+                val request = requireNotNull(
+                    budget.resolveRequest(
+                        imageUrl = "https://example.com/image-$slotIndex",
+                        displayTargetPx = 1_000,
+                    ),
+                )
+                assertEquals(budget.budgetEdgePx, request.edgePx)
+
+                val decodedBitmap = Bitmap.createBitmap(
+                    request.edgePx,
+                    request.edgePx,
+                    Bitmap.Config.ARGB_8888,
+                )
+                val validatedBitmap = requireNotNull(
+                    WidgetBitmapValidator.validate(
+                        bitmap = decodedBitmap,
+                        requestEdgePx = request.edgePx,
+                        payloadBudgetBytes = request.identity.payloadBudgetBytes,
+                    ),
+                )
+                val allocationByteCount = validatedBitmap.allocationByteCount.toLong()
+
+                assertTrue(validatedBitmap.width <= request.edgePx)
+                assertTrue(validatedBitmap.height <= request.edgePx)
+                assertTrue(allocationByteCount <= request.identity.payloadBudgetBytes)
+                validatedBitmap.recycle()
+                allocationByteCount
+            }
+
+            assertEquals(budget.payloadCount, allocationByteCounts.size.toLong())
+            assertTrue(allocationByteCounts.sum() <= budget.effectiveArticleBudgetBytes)
+        }
+    }
 
     @Test
     fun `software ARGB 8888 within dimensions and budget is accepted`() {

@@ -43,19 +43,6 @@ class WidgetImageBudgetTest {
     }
 
     @Test
-    fun `aggregate payload allocations stay within effective budget for multiple variant counts`() {
-        listOf(1, 2, 3, 5).forEach { variantCount ->
-            val budget = resolveBudget(variantCount = variantCount)
-            val payloadAllocations = List(MAX_WIDGET_FEED_ITEMS * variantCount) {
-                budget.payloadBudgetBytes
-            }
-
-            assertEquals(budget.payloadCount, payloadAllocations.size.toLong())
-            assertTrue(payloadAllocations.sum() <= budget.effectiveArticleBudgetBytes)
-        }
-    }
-
-    @Test
     fun `480 by 800 display uses Android ceiling with 25 percent reserve`() {
         val budget = resolveBudget(
             screenWidthPx = 480,

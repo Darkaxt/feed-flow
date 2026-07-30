@@ -10,14 +10,14 @@ internal const val WIDGET_TEXT_LINE_HEIGHT_MULTIPLIER = 1.2f
 private const val LEADING_TEXT_INSET_DP = 16
 private const val MIN_READABLE_TEXT_WIDTH_DP = 96
 private const val IMAGE_GAP_DP = 16
-internal const val WIDGET_SCAFFOLD_HORIZONTAL_INSET_DP = 24
+internal const val WIDGET_SCAFFOLD_HORIZONTAL_PADDING_DP = 12
 internal const val WIDGET_THUMBNAIL_VIEWPORT_DP = 50
 private const val FALLBACK_SLAB_WIDTH_DP = 96
 
 internal fun calculateWidgetAvailableSlabWidthDp(widgetWidthDp: Float): Float =
     widgetWidthDp
         .takeIf(Float::isFinite)
-        ?.minus(WIDGET_SCAFFOLD_HORIZONTAL_INSET_DP)
+        ?.minus(WIDGET_SCAFFOLD_HORIZONTAL_PADDING_DP * 2)
         ?.coerceAtLeast(0f)
         ?: 0f
 

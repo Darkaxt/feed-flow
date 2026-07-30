@@ -136,6 +136,7 @@ internal fun WidgetContent(
             null
         },
         backgroundColor = widgetBackground,
+        horizontalPadding = WIDGET_SCAFFOLD_HORIZONTAL_PADDING_DP.dp,
         modifier = GlanceModifier.fillMaxSize(),
     ) {
         if (feedItems.isEmpty()) {
