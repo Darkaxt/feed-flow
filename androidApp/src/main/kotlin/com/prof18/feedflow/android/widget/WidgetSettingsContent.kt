@@ -30,6 +30,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -60,6 +62,7 @@ fun WidgetSettingsContent(
     settingsState: WidgetSettingsState,
     onFeedLayoutSelected: (WidgetFeedLayout) -> Unit,
     onMaximumArticlesSelected: (Int) -> Unit,
+    onMaximumArticlesChangeFinished: () -> Unit,
     onShowHeaderSelected: (Boolean) -> Unit,
     onFontScaleSelected: (Int) -> Unit,
     onBackgroundColorSelected: (Int?) -> Unit,
@@ -122,9 +125,13 @@ fun WidgetSettingsContent(
         Slider(
             modifier = Modifier
                 .padding(horizontal = Spacing.regular)
-                .testTag(SettingsE2eIds.WIDGET_MAXIMUM_ARTICLES),
+                .testTag(SettingsE2eIds.WIDGET_MAXIMUM_ARTICLES)
+                .semantics {
+                    contentDescription = strings.widgetMaximumArticlesAccessibilityLabel
+                },
             value = maximumArticles.toFloat(),
             onValueChange = { onMaximumArticlesSelected(it.roundToInt()) },
+            onValueChangeFinished = onMaximumArticlesChangeFinished,
             valueRange = MIN_WIDGET_MAXIMUM_ARTICLES.toFloat()..MAX_WIDGET_FEED_ITEMS.toFloat(),
             steps = MAX_WIDGET_FEED_ITEMS - MIN_WIDGET_MAXIMUM_ARTICLES - 1,
         )
@@ -603,6 +610,7 @@ private fun WidgetSettingsContentPreview() {
                 ),
                 onFeedLayoutSelected = {},
                 onMaximumArticlesSelected = {},
+                onMaximumArticlesChangeFinished = {},
                 onShowHeaderSelected = {},
                 onFontScaleSelected = {},
                 onBackgroundColorSelected = {},

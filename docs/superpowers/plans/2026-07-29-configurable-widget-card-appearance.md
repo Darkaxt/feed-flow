@@ -688,8 +688,8 @@ git commit -m "Validate widget card customization"
 - Modify: both widget ViewModels, `WidgetSettingsState.kt`, `WidgetSettingsContent.kt`, `WidgetSettingsScaffold.kt`, both settings entry points, `SettingsE2eIds.kt`, English strings, and `E2eSeedActivity.kt`
 - Test: `androidApp/src/test/kotlin/com/prof18/feedflow/android/widget/WidgetSettingsViewModelTest.kt`
 
-- [ ] Add failing tests proving an effective normalized in-app change persists once and invokes `WidgetUpdater` once, while a normalized no-op invokes neither; configuration persists without updater behavior.
-- [ ] Add a discrete 1..15 slider immediately after Feed Layout with `Maximum articles: %s`, stable E2E ID, default/reset value 15, and callback plumbing.
+- [ ] Add failing tests proving each effective in-app slider value persists immediately, rapid values such as 14→15 retain the final repository value without a dispatch advance, one interaction completion invokes `WidgetUpdater` once, and a normalized no-op invokes neither persistence nor updater; configuration persists without updater behavior.
+- [ ] Add a discrete 1..15 slider immediately after Feed Layout with `Maximum articles: %s`, a localized accessible name that preserves progress/range semantics, stable E2E ID, default/reset value 15, and separate value-change/value-change-finished callback plumbing.
 - [ ] Run `.scripts/refresh-translations.sh` and the focused ViewModel tests.
 
 ### Task 23: Cap renderer and preview without changing capacity or budget
@@ -698,7 +698,7 @@ git commit -m "Validate widget card customization"
 - Modify: `FeedFlowWidget.kt`, `WidgetContent.kt`, `WidgetPreviewSection.kt`, and `WidgetImageBudgetTest.kt`
 - Create: `androidApp/src/test/kotlin/com/prof18/feedflow/android/widget/WidgetArticleLimitTest.kt`
 
-- [ ] Add failing tests for caps 1, midrange, 15, invalid low/high values, order, empty input, one-row preview selection, and fixed `MAX_WIDGET_FEED_ITEMS * payloadVariantCount` budgeting.
+- [ ] Add failing renderer tests for caps 1, midrange, 15, invalid low/high values, order, empty input, and one-row preview selection; retain the existing production-budget test that asserts `MAX_WIDGET_FEED_ITEMS * payloadVariantCount` without introducing a selected-limit seam.
 - [ ] Collect the limit reactively and apply it before the shared List/Card `LazyColumn` branch; do not change `FeedWidgetRepository`'s 15-item query.
 - [ ] Keep the preview's first sample only at limit 1 and both deterministic samples at limits 2..15.
 - [ ] Do not pass the selected limit into `WidgetImageBudget`; a lower visible cap must never increase per-image budget.

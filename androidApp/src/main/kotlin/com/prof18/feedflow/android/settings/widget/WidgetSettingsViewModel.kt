@@ -31,6 +31,8 @@ class WidgetSettingsViewModel(
     )
     val settingsState: StateFlow<WidgetSettingsState> = _settingsState.asStateFlow()
 
+    private var maximumArticlesUpdatePending = false
+
     init {
         viewModelScope.launch {
             val globalSyncSettingsFlow = settingsRepository.syncPeriodFlow
@@ -97,11 +99,19 @@ class WidgetSettingsViewModel(
 
     fun updateMaximumArticles(maximumArticles: Int) {
         val normalizedValue = normalizeWidgetMaximumArticles(maximumArticles)
-        if (_settingsState.value.maximumArticles == normalizedValue) {
+        if (widgetSettingsRepository.widgetMaximumArticles.value == normalizedValue) {
             return
         }
         _settingsState.update { it.copy(maximumArticles = normalizedValue) }
         widgetSettingsRepository.setWidgetMaximumArticles(normalizedValue)
+        maximumArticlesUpdatePending = true
+    }
+
+    fun finishMaximumArticlesUpdate() {
+        if (!maximumArticlesUpdatePending) {
+            return
+        }
+        maximumArticlesUpdatePending = false
         viewModelScope.launch {
             widgetUpdater.update()
         }

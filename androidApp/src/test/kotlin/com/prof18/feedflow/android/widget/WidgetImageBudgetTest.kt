@@ -12,18 +12,6 @@ import org.junit.Test
 class WidgetImageBudgetTest {
 
     @Test
-    fun `selected maximum articles never increases the fixed capacity image budget`() {
-        val feedItems = (1..MAX_WIDGET_FEED_ITEMS).toList()
-        val budgetAtOne = resolveBudget(variantCount = 2)
-        val budgetAtFifteen = resolveBudget(variantCount = 2)
-
-        assertEquals(1, limitWidgetFeedItems(feedItems, maximumArticles = 1).size)
-        assertEquals(MAX_WIDGET_FEED_ITEMS, limitWidgetFeedItems(feedItems, maximumArticles = 15).size)
-        assertEquals(MAX_WIDGET_FEED_ITEMS.toLong() * 2L, budgetAtOne.payloadCount)
-        assertEquals(budgetAtFifteen, budgetAtOne)
-    }
-
-    @Test
     fun `payload count always reserves maximum feed items for every exact-size variant`() {
         val oneVariant = resolveBudget(variantCount = 1)
         val threeVariants = resolveBudget(variantCount = 3)

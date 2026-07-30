@@ -55,6 +55,8 @@ class WidgetSettingsViewModelTest {
         assertEquals(1, settings.maximumArticlesWriteCount)
         assertEquals(0, widgetUpdater.updateCount)
 
+        viewModel.finishMaximumArticlesUpdate()
+        assertEquals(0, widgetUpdater.updateCount)
         advanceUntilIdle()
 
         assertEquals(1, widgetUpdater.updateCount)
@@ -73,11 +75,65 @@ class WidgetSettingsViewModelTest {
         advanceUntilIdle()
 
         viewModel.updateMaximumArticles(Int.MAX_VALUE)
+        viewModel.finishMaximumArticlesUpdate()
         advanceUntilIdle()
 
         assertEquals(15, viewModel.settingsState.value.maximumArticles)
         assertEquals(0, settings.maximumArticlesWriteCount)
         assertEquals(0, widgetUpdater.updateCount)
+    }
+
+    @Test
+    fun `maximum articles guard uses synchronous repository value when presentation state lags`() = runTest(
+        dispatcher,
+    ) {
+        val settings = CountingWidgetSettings()
+        val repository = WidgetSettingsRepository(settings)
+        val widgetUpdater = FakeWidgetUpdater()
+        val viewModel = WidgetSettingsViewModel(
+            settingsRepository = SettingsRepository(MapSettings()),
+            widgetSettingsRepository = repository,
+            widgetUpdater = widgetUpdater,
+        )
+        advanceUntilIdle()
+
+        repository.setWidgetMaximumArticles(14)
+        viewModel.updateMaximumArticles(15)
+
+        assertEquals(15, repository.widgetMaximumArticles.value)
+        assertEquals(15, viewModel.settingsState.value.maximumArticles)
+        assertEquals(2, settings.maximumArticlesWriteCount)
+
+        viewModel.finishMaximumArticlesUpdate()
+        advanceUntilIdle()
+        assertEquals(1, widgetUpdater.updateCount)
+    }
+
+    @Test
+    fun `rapid maximum articles return persists final value and refreshes once on completion`() = runTest(dispatcher) {
+        val settings = CountingWidgetSettings()
+        val repository = WidgetSettingsRepository(settings)
+        val widgetUpdater = FakeWidgetUpdater()
+        val viewModel = WidgetSettingsViewModel(
+            settingsRepository = SettingsRepository(MapSettings()),
+            widgetSettingsRepository = repository,
+            widgetUpdater = widgetUpdater,
+        )
+        advanceUntilIdle()
+
+        viewModel.updateMaximumArticles(14)
+        viewModel.updateMaximumArticles(15)
+
+        assertEquals(15, repository.widgetMaximumArticles.value)
+        assertEquals(15, repository.getWidgetMaximumArticles())
+        assertEquals(15, viewModel.settingsState.value.maximumArticles)
+        assertEquals(2, settings.maximumArticlesWriteCount)
+        assertEquals(0, widgetUpdater.updateCount)
+
+        viewModel.finishMaximumArticlesUpdate()
+        advanceUntilIdle()
+
+        assertEquals(1, widgetUpdater.updateCount)
     }
 
     @Test
@@ -202,6 +258,29 @@ class WidgetConfigurationViewModelTest {
         assertEquals(7, repository.getWidgetMaximumArticles())
         assertEquals(7, viewModel.settingsState.value.maximumArticles)
         assertEquals(1, settings.maximumArticlesWriteCount)
+    }
+
+    @Test
+    fun `configuration rapid maximum articles return persists final value without dispatch advance`() = runTest(
+        dispatcher,
+    ) {
+        val settings = CountingWidgetSettings()
+        val repository = WidgetSettingsRepository(settings)
+        val viewModel = WidgetConfigurationViewModel(
+            settingsRepository = SettingsRepository(MapSettings()),
+            widgetSettingsRepository = repository,
+        )
+        advanceUntilIdle()
+
+        viewModel.updateMaximumArticles(14)
+        viewModel.updateMaximumArticles(15)
+
+        assertEquals(15, repository.widgetMaximumArticles.value)
+        assertEquals(15, repository.getWidgetMaximumArticles())
+        assertEquals(2, settings.maximumArticlesWriteCount)
+
+        advanceUntilIdle()
+        assertEquals(15, viewModel.settingsState.value.maximumArticles)
     }
 
     @Test

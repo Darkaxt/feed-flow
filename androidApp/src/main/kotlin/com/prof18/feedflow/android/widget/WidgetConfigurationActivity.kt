@@ -47,6 +47,7 @@ class WidgetConfigurationActivity : BaseThemeActivity() {
             settingsState = settingsState,
             onFeedLayoutSelected = viewModel::updateFeedLayout,
             onMaximumArticlesSelected = viewModel::updateMaximumArticles,
+            onMaximumArticlesChangeFinished = {},
             onShowHeaderSelected = viewModel::updateShowHeader,
             onFontScaleSelected = viewModel::updateFontScale,
             onBackgroundColorSelected = viewModel::updateBackgroundColor,

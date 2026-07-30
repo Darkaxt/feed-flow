@@ -19,6 +19,7 @@ fun WidgetSettingsScreen(
         settingsState = settingsState,
         onFeedLayoutSelected = viewModel::updateFeedLayout,
         onMaximumArticlesSelected = viewModel::updateMaximumArticles,
+        onMaximumArticlesChangeFinished = viewModel::finishMaximumArticlesUpdate,
         onShowHeaderSelected = viewModel::updateShowHeader,
         onFontScaleSelected = viewModel::updateFontScale,
         onBackgroundColorSelected = viewModel::updateBackgroundColor,

@@ -82,7 +82,7 @@ class WidgetConfigurationViewModel(
 
     fun updateMaximumArticles(maximumArticles: Int) {
         val normalizedValue = normalizeWidgetMaximumArticles(maximumArticles)
-        if (_settingsState.value.maximumArticles == normalizedValue) return
+        if (widgetSettingsRepository.widgetMaximumArticles.value == normalizedValue) return
         widgetSettingsRepository.setWidgetMaximumArticles(normalizedValue)
     }
 
