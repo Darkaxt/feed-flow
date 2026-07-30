@@ -51,6 +51,53 @@ class WidgetArticleImageStateTest {
         assertEquals("current bitmap", result.valueFor(currentKey))
     }
 
+    @Test
+    fun `pre S radius key change clears old bitmap rejects stale completion and accepts current`() {
+        val requestIdentity = requestKey(payloadBudgetBytes = 4_096L)
+        val oldKey = requireNotNull(
+            resolveWidgetArticleImageIdentity(
+                requestIdentity = requestIdentity,
+                sdkInt = 30,
+                cornerRadiusDp = 8,
+                displayViewportDp = 50,
+            ),
+        )
+        val currentKey = requireNotNull(
+            resolveWidgetArticleImageIdentity(
+                requestIdentity = requestIdentity,
+                sdkInt = 30,
+                cornerRadiusDp = 32,
+                displayViewportDp = 100,
+            ),
+        )
+        val oldState = WidgetArticleImageState(
+            requestKey = oldKey,
+            value = "old-radius bitmap",
+        )
+
+        val currentState = oldState.forKey(currentKey)
+        val afterStaleCompletion = currentState.accept(
+            completedKey = oldKey,
+            currentKey = currentKey,
+            value = "stale-radius bitmap",
+        )
+        val afterCurrentCompletion = afterStaleCompletion.accept(
+            completedKey = currentKey,
+            currentKey = currentKey,
+            value = "current-radius bitmap",
+        )
+
+        assertEquals(oldKey.imageUrl, currentKey.imageUrl)
+        assertEquals(oldKey.edgePx, currentKey.edgePx)
+        assertEquals(oldKey.exactSizeKey, currentKey.exactSizeKey)
+        assertEquals(oldKey.payloadBudgetBytes, currentKey.payloadBudgetBytes)
+        assertEquals(8, oldKey.softwareCornerRadiusDp)
+        assertEquals(32, currentKey.softwareCornerRadiusDp)
+        assertNull(currentState.valueFor(currentKey))
+        assertNull(afterStaleCompletion.valueFor(currentKey))
+        assertEquals("current-radius bitmap", afterCurrentCompletion.valueFor(currentKey))
+    }
+
     private fun requestKey(payloadBudgetBytes: Long) = WidgetImageRequestIdentity(
         imageUrl = "https://example.com/article.png",
         edgePx = 50,

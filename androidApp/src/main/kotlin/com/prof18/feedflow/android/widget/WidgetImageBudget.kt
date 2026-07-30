@@ -120,4 +120,6 @@ internal data class WidgetImageRequestIdentity(
     val edgePx: Int,
     val exactSizeKey: String,
     val payloadBudgetBytes: Long,
+    val softwareCornerRadiusDp: Int = 0,
+    val softwareDisplayViewportDp: Int = 0,
 )

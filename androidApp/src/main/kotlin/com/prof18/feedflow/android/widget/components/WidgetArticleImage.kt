@@ -3,6 +3,12 @@ package com.prof18.feedflow.android.widget.components
 import android.content.Context
 import android.content.res.Resources
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Rect
+import android.graphics.RectF
+import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,7 +39,24 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
+
+private const val ANDROID_S_API = 31
+private const val ARGB_8888_BYTES_PER_PIXEL = 4.0
+
+internal fun resolveWidgetArticleImageIdentity(
+    requestIdentity: WidgetImageRequestIdentity?,
+    sdkInt: Int,
+    cornerRadiusDp: Int,
+    displayViewportDp: Int,
+): WidgetImageRequestIdentity? {
+    val usesSoftwareRounding = sdkInt < ANDROID_S_API && cornerRadiusDp > 0 && displayViewportDp > 0
+    return requestIdentity?.copy(
+        softwareCornerRadiusDp = if (usesSoftwareRounding) cornerRadiusDp else 0,
+        softwareDisplayViewportDp = if (usesSoftwareRounding) displayViewportDp else 0,
+    )
+}
 
 @Composable
 internal fun WidgetArticleImage(
@@ -43,7 +66,12 @@ internal fun WidgetArticleImage(
     modifier: GlanceModifier = GlanceModifier,
 ) {
     val context = LocalContext.current
-    val fullKey = requestPolicy?.identity
+    val fullKey = resolveWidgetArticleImageIdentity(
+        requestIdentity = requestPolicy?.identity,
+        sdkInt = Build.VERSION.SDK_INT,
+        cornerRadiusDp = cornerRadiusDp.value.roundToInt(),
+        displayViewportDp = displayViewportDp.value.roundToInt(),
+    )
     val currentFullKey by rememberUpdatedState(fullKey)
     var imageState by remember { mutableStateOf(WidgetArticleImageState<Bitmap>()) }
 
@@ -119,15 +147,87 @@ private suspend fun loadWidgetArticleBitmap(
         ?.asDrawable(resources)
         ?.toBitmapOrNull()
         ?: return null
-    WidgetBitmapValidator.validate(
+    validateAndRenderWidgetArticleBitmap(
         bitmap = deliveredBitmap,
-        requestEdgePx = key.edgePx,
-        payloadBudgetBytes = key.payloadBudgetBytes,
+        key = key,
     )
 } catch (exception: CancellationException) {
     throw exception
 } catch (_: Exception) {
     null
+}
+
+internal fun validateAndRenderWidgetArticleBitmap(
+    bitmap: Bitmap,
+    key: WidgetImageRequestIdentity,
+): Bitmap? = try {
+    val validatedBitmap = WidgetBitmapValidator.validate(
+        bitmap = bitmap,
+        requestEdgePx = key.edgePx,
+        payloadBudgetBytes = key.payloadBudgetBytes,
+    ) ?: return null
+    val renderedBitmap = softwareRoundWidgetArticleBitmap(
+        bitmap = validatedBitmap,
+        key = key,
+    ) ?: return null
+    WidgetBitmapValidator.validate(
+        bitmap = renderedBitmap,
+        requestEdgePx = key.edgePx,
+        payloadBudgetBytes = key.payloadBudgetBytes,
+    )
+} catch (_: Exception) {
+    null
+}
+
+private fun softwareRoundWidgetArticleBitmap(
+    bitmap: Bitmap,
+    key: WidgetImageRequestIdentity,
+): Bitmap? {
+    if (key.softwareCornerRadiusDp <= 0) {
+        return bitmap
+    }
+    if (key.softwareDisplayViewportDp < 1) {
+        return null
+    }
+    val budgetEdgePx = sqrt(key.payloadBudgetBytes / ARGB_8888_BYTES_PER_PIXEL).toInt()
+    val outputEdgePx = minOf(
+        max(bitmap.width, bitmap.height),
+        key.edgePx,
+        budgetEdgePx,
+    )
+    if (outputEdgePx < 1) {
+        return null
+    }
+    val radiusPx = (
+        key.softwareCornerRadiusDp.toFloat() /
+            key.softwareDisplayViewportDp *
+            outputEdgePx
+        ).coerceAtMost(outputEdgePx / 2f)
+    val sourceEdgePx = minOf(bitmap.width, bitmap.height)
+    val sourceLeft = (bitmap.width - sourceEdgePx) / 2
+    val sourceTop = (bitmap.height - sourceEdgePx) / 2
+    val sourceRect = Rect(
+        sourceLeft,
+        sourceTop,
+        sourceLeft + sourceEdgePx,
+        sourceTop + sourceEdgePx,
+    )
+    val outputRect = Rect(0, 0, outputEdgePx, outputEdgePx)
+    val outputRoundRect = RectF(outputRect)
+    return Bitmap.createBitmap(outputEdgePx, outputEdgePx, Bitmap.Config.ARGB_8888).also { output ->
+        val canvas = Canvas(output)
+        canvas.clipPath(
+            Path().apply {
+                addRoundRect(outputRoundRect, radiusPx, radiusPx, Path.Direction.CW)
+            },
+        )
+        canvas.drawBitmap(
+            bitmap,
+            sourceRect,
+            outputRect,
+            Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG),
+        )
+    }
 }
 
 internal object WidgetBitmapValidator {
