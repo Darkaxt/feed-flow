@@ -20,6 +20,49 @@ class WidgetCardAppearanceResolverTest {
     }
 
     @Test
+    fun `default card selects theme aware Glance providers`() {
+        val result = resolveWidgetCardColorProviderPolicy(
+            appearance = WidgetCardAppearance(),
+            textColorMode = WidgetTextColorMode.AUTOMATIC,
+        )
+
+        assertEquals(WidgetColorProviderSource.THEMED, result.surface)
+        assertEquals(WidgetColorProviderSource.THEMED, result.primaryText)
+        assertEquals(WidgetColorProviderSource.THEMED, result.secondaryText)
+    }
+
+    @Test
+    fun `custom card appearance selects fixed resolved providers`() {
+        val customColorResult = resolveWidgetCardColorProviderPolicy(
+            appearance = WidgetCardAppearance(surfaceColor = 0xFF123456.toInt()),
+            textColorMode = WidgetTextColorMode.AUTOMATIC,
+        )
+        val customOpacityResult = resolveWidgetCardColorProviderPolicy(
+            appearance = WidgetCardAppearance(surfaceOpacityPercent = 50),
+            textColorMode = WidgetTextColorMode.AUTOMATIC,
+        )
+
+        assertEquals(WidgetColorProviderSource.RESOLVED, customColorResult.surface)
+        assertEquals(WidgetColorProviderSource.RESOLVED, customColorResult.primaryText)
+        assertEquals(WidgetColorProviderSource.RESOLVED, customColorResult.secondaryText)
+        assertEquals(WidgetColorProviderSource.RESOLVED, customOpacityResult.surface)
+        assertEquals(WidgetColorProviderSource.RESOLVED, customOpacityResult.primaryText)
+        assertEquals(WidgetColorProviderSource.RESOLVED, customOpacityResult.secondaryText)
+    }
+
+    @Test
+    fun `explicit text mode keeps themed surface and selects resolved text providers`() {
+        val result = resolveWidgetCardColorProviderPolicy(
+            appearance = WidgetCardAppearance(),
+            textColorMode = WidgetTextColorMode.DARK,
+        )
+
+        assertEquals(WidgetColorProviderSource.THEMED, result.surface)
+        assertEquals(WidgetColorProviderSource.RESOLVED, result.primaryText)
+        assertEquals(WidgetColorProviderSource.RESOLVED, result.secondaryText)
+    }
+
+    @Test
     fun `zero opacity emits no slab fill and uses effective outer color`() {
         val result = resolveAppearance(
             appearance = WidgetCardAppearance(surfaceOpacityPercent = 0),

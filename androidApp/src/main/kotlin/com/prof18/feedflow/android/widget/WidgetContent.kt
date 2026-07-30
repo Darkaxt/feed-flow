@@ -83,6 +83,31 @@ internal fun WidgetContent(
         themedCardSurfaceColor = GlanceTheme.colors.secondaryContainer.getColor(context),
         themedOnSurfaceColor = GlanceTheme.colors.onSurface.getColor(context),
     )
+    val cardColorProviderPolicy = resolveWidgetCardColorProviderPolicy(
+        appearance = normalizedCardAppearance,
+        textColorMode = textColorMode,
+    )
+    val cardSlabFillColor = resolvedCardAppearance.slabFillColor?.let { resolvedColor ->
+        if (cardColorProviderPolicy.surface == WidgetColorProviderSource.THEMED) {
+            GlanceTheme.colors.secondaryContainer
+        } else {
+            ColorProvider(resolvedColor)
+        }
+    }
+    val cardPrimaryTextColor = if (
+        cardColorProviderPolicy.primaryText == WidgetColorProviderSource.THEMED
+    ) {
+        GlanceTheme.colors.onSurface
+    } else {
+        ColorProvider(resolvedCardAppearance.textColors.primary)
+    }
+    val cardSecondaryTextColor = if (
+        cardColorProviderPolicy.secondaryText == WidgetColorProviderSource.THEMED
+    ) {
+        GlanceTheme.colors.onSurface
+    } else {
+        ColorProvider(resolvedCardAppearance.textColors.secondary)
+    }
     val textColors = when {
         backgroundColor != null -> {
             val effectiveBackgroundColor = widgetEffectiveBackgroundColor(
@@ -182,6 +207,9 @@ internal fun WidgetContent(
                 secondaryTextColor = secondaryTextColor,
                 cardAppearance = normalizedCardAppearance,
                 resolvedCardAppearance = resolvedCardAppearance,
+                cardSlabFillColor = cardSlabFillColor,
+                cardPrimaryTextColor = cardPrimaryTextColor,
+                cardSecondaryTextColor = cardSecondaryTextColor,
                 cardLayout = cardLayout,
                 imageBudgetPolicy = imageBudgetPolicy,
                 listImageLayout = listImageLayout,
@@ -203,6 +231,9 @@ private fun WidgetFeedItems(
     secondaryTextColor: ColorProvider,
     cardAppearance: WidgetCardAppearance,
     resolvedCardAppearance: ResolvedWidgetCardAppearance,
+    cardSlabFillColor: ColorProvider?,
+    cardPrimaryTextColor: ColorProvider,
+    cardSecondaryTextColor: ColorProvider,
     cardLayout: ResolvedWidgetCardLayout,
     imageBudgetPolicy: WidgetImageBudgetPolicy,
     listImageLayout: ResolvedWidgetListImageLayout,
@@ -234,7 +265,9 @@ private fun WidgetFeedItems(
                             fontSizes = fontSizes,
                             hideImages = hideImages,
                             appearance = cardAppearance,
-                            resolvedAppearance = resolvedCardAppearance,
+                            slabFillColor = cardSlabFillColor,
+                            primaryTextColor = cardPrimaryTextColor,
+                            secondaryTextColor = cardSecondaryTextColor,
                             cardLayout = cardLayout,
                             imageBudgetPolicy = imageBudgetPolicy,
                             imageDisplayTargetPx = cardImageTargetPx,

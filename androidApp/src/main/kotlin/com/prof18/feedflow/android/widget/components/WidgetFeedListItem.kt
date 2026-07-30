@@ -27,7 +27,6 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.prof18.feedflow.android.BrowserManager
 import com.prof18.feedflow.android.MainActivity
-import com.prof18.feedflow.android.widget.ResolvedWidgetCardAppearance
 import com.prof18.feedflow.android.widget.ResolvedWidgetCardLayout
 import com.prof18.feedflow.android.widget.ResolvedWidgetListImageLayout
 import com.prof18.feedflow.android.widget.WIDGET_THUMBNAIL_VIEWPORT_DP
@@ -86,7 +85,9 @@ internal fun WidgetFeedItemCard(
     fontSizes: WidgetFontSizes,
     hideImages: Boolean,
     appearance: WidgetCardAppearance,
-    resolvedAppearance: ResolvedWidgetCardAppearance,
+    slabFillColor: ColorProvider?,
+    primaryTextColor: ColorProvider,
+    secondaryTextColor: ColorProvider,
     cardLayout: ResolvedWidgetCardLayout,
     imageBudgetPolicy: WidgetImageBudgetPolicy,
     imageDisplayTargetPx: Int,
@@ -105,7 +106,9 @@ internal fun WidgetFeedItemCard(
                 fontSizes = fontSizes,
                 hideImages = hideImages,
                 appearance = appearance,
-                resolvedAppearance = resolvedAppearance,
+                slabFillColor = slabFillColor,
+                primaryTextColor = primaryTextColor,
+                secondaryTextColor = secondaryTextColor,
                 cardLayout = cardLayout,
                 imageBudgetPolicy = imageBudgetPolicy,
                 imageDisplayTargetPx = imageDisplayTargetPx,
@@ -118,7 +121,9 @@ internal fun WidgetFeedItemCard(
             fontSizes = fontSizes,
             hideImages = hideImages,
             appearance = appearance,
-            resolvedAppearance = resolvedAppearance,
+            slabFillColor = slabFillColor,
+            primaryTextColor = primaryTextColor,
+            secondaryTextColor = secondaryTextColor,
             cardLayout = cardLayout,
             imageBudgetPolicy = imageBudgetPolicy,
             imageDisplayTargetPx = imageDisplayTargetPx,
@@ -134,7 +139,9 @@ private fun WidgetFeedItemCardSlab(
     fontSizes: WidgetFontSizes,
     hideImages: Boolean,
     appearance: WidgetCardAppearance,
-    resolvedAppearance: ResolvedWidgetCardAppearance,
+    slabFillColor: ColorProvider?,
+    primaryTextColor: ColorProvider,
+    secondaryTextColor: ColorProvider,
     cardLayout: ResolvedWidgetCardLayout,
     imageBudgetPolicy: WidgetImageBudgetPolicy,
     imageDisplayTargetPx: Int,
@@ -148,8 +155,8 @@ private fun WidgetFeedItemCardSlab(
                 .fillMaxWidth()
                 .padding(16.dp)
                 .cornerRadius(cornerRadius)
-            resolvedAppearance.slabFillColor?.let { slabColor ->
-                slabModifier = slabModifier.background(ColorProvider(slabColor))
+            slabFillColor?.let { colorProvider ->
+                slabModifier = slabModifier.background(colorProvider)
             }
             slabModifier = slabModifier.clickable(clickAction)
 
@@ -161,8 +168,8 @@ private fun WidgetFeedItemCardSlab(
                     feedItem = feedItem,
                     fontSizes = fontSizes,
                     hideImages = hideImages,
-                    primaryTextColor = ColorProvider(resolvedAppearance.textColors.primary),
-                    secondaryTextColor = ColorProvider(resolvedAppearance.textColors.secondary),
+                    primaryTextColor = primaryTextColor,
+                    secondaryTextColor = secondaryTextColor,
                     imageBudgetPolicy = imageBudgetPolicy,
                     imageDisplayTargetPx = imageDisplayTargetPx,
                 )
@@ -174,8 +181,8 @@ private fun WidgetFeedItemCardSlab(
                 .fillMaxWidth()
                 .height(rowHeight)
                 .cornerRadius(cornerRadius)
-            resolvedAppearance.slabFillColor?.let { slabColor ->
-                slabModifier = slabModifier.background(ColorProvider(slabColor))
+            slabFillColor?.let { colorProvider ->
+                slabModifier = slabModifier.background(colorProvider)
             }
             slabModifier = slabModifier.clickable(clickAction)
 
@@ -187,8 +194,8 @@ private fun WidgetFeedItemCardSlab(
                     feedItem = feedItem,
                     fontSizes = fontSizes,
                     hideImages = hideImages,
-                    primaryTextColor = ColorProvider(resolvedAppearance.textColors.primary),
-                    secondaryTextColor = ColorProvider(resolvedAppearance.textColors.secondary),
+                    primaryTextColor = primaryTextColor,
+                    secondaryTextColor = secondaryTextColor,
                     imageBudgetPolicy = imageBudgetPolicy,
                     imageDisplayTargetPx = imageDisplayTargetPx,
                     rowHeightDp = cardLayout.imageViewportDp,

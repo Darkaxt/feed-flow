@@ -160,7 +160,7 @@ fun `card appearance normalizes before storing and emitting`() = runTest {
 - [ ] **Step 2: Run tests and verify failure**
 
 ```bash
-./gradlew --quiet --console=plain :shared:androidHostTest --tests "com.prof18.feedflow.shared.data.WidgetSettingsRepositoryTest"
+./gradlew --quiet --console=plain :shared:testAndroidHostTest --tests "com.prof18.feedflow.shared.data.WidgetSettingsRepositoryTest"
 ```
 
 Expected: compilation failure for missing Card appearance types/API.
@@ -206,7 +206,7 @@ fun setWidgetCardAppearance(value: WidgetCardAppearance) {
 - [ ] **Step 5: Re-run repository and feed tests**
 
 ```bash
-./gradlew --quiet --console=plain :shared:androidHostTest --tests "com.prof18.feedflow.shared.data.WidgetSettingsRepositoryTest"
+./gradlew --quiet --console=plain :shared:testAndroidHostTest --tests "com.prof18.feedflow.shared.data.WidgetSettingsRepositoryTest"
 ./gradlew --quiet --console=plain :shared:jvmTest --tests "com.prof18.feedflow.shared.domain.feed.FeedWidgetRepositoryTest"
 ```
 
@@ -218,7 +218,7 @@ Expected: PASS.
 - [ ] Reads and writes normalize every new Card field.
 - [ ] Unknown enums fall back without throwing.
 - [ ] Fixed feed capacity is shared and remains 15.
-- [ ] Run `./gradlew --quiet --console=plain :shared:compileKotlinJvm :shared:androidHostTest`.
+- [ ] Run `./gradlew --quiet --console=plain :shared:compileKotlinJvm :shared:testAndroidHostTest`.
 - [ ] Commit:
 
 ```bash
@@ -620,7 +620,7 @@ git commit -m "Align widget card preview and coverage"
 
 ```bash
 ./gradlew --quiet --console=plain :shared:jvmTest --tests "com.prof18.feedflow.shared.domain.feed.FeedWidgetRepositoryTest"
-./gradlew --quiet --console=plain :shared:androidHostTest --tests "com.prof18.feedflow.shared.data.WidgetSettingsRepositoryTest"
+./gradlew --quiet --console=plain :shared:testAndroidHostTest --tests "com.prof18.feedflow.shared.data.WidgetSettingsRepositoryTest"
 ./gradlew --quiet --console=plain :androidApp:testGooglePlayDebugUnitTest
 ```
 

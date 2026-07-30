@@ -31,10 +31,11 @@ internal fun resolveWidgetCardAppearance(
         .copy(alpha = cardOpacity)
         .takeUnless { cardOpacity == 0f }
     val effectiveCardColor = slabFillColor?.compositeOver(effectiveOuterColor) ?: effectiveOuterColor
-    val isCompatibilityAppearance = normalizedAppearance.surfaceColor == null &&
-        normalizedAppearance.surfaceOpacityPercent == MAX_PERCENT &&
-        textColorMode == WidgetTextColorMode.AUTOMATIC
-    val textColors = if (isCompatibilityAppearance) {
+    val providerPolicy = resolveWidgetCardColorProviderPolicy(
+        appearance = normalizedAppearance,
+        textColorMode = textColorMode,
+    )
+    val textColors = if (providerPolicy.primaryText == WidgetColorProviderSource.THEMED) {
         WidgetTextColors(
             primary = themedOnSurfaceColor,
             secondary = themedOnSurfaceColor,
@@ -56,4 +57,43 @@ internal fun resolveWidgetCardAppearance(
         textColors = textColors,
         dividerColor = dividerColor,
     )
+}
+
+internal fun resolveWidgetCardColorProviderPolicy(
+    appearance: WidgetCardAppearance,
+    textColorMode: WidgetTextColorMode,
+): WidgetCardColorProviderPolicy {
+    val normalizedAppearance = appearance.normalized()
+    val surfaceSource = if (
+        normalizedAppearance.surfaceColor == null &&
+        normalizedAppearance.surfaceOpacityPercent == MAX_PERCENT
+    ) {
+        WidgetColorProviderSource.THEMED
+    } else {
+        WidgetColorProviderSource.RESOLVED
+    }
+    val textSource = if (
+        surfaceSource == WidgetColorProviderSource.THEMED &&
+        textColorMode == WidgetTextColorMode.AUTOMATIC
+    ) {
+        WidgetColorProviderSource.THEMED
+    } else {
+        WidgetColorProviderSource.RESOLVED
+    }
+    return WidgetCardColorProviderPolicy(
+        surface = surfaceSource,
+        primaryText = textSource,
+        secondaryText = textSource,
+    )
+}
+
+internal data class WidgetCardColorProviderPolicy(
+    val surface: WidgetColorProviderSource,
+    val primaryText: WidgetColorProviderSource,
+    val secondaryText: WidgetColorProviderSource,
+)
+
+internal enum class WidgetColorProviderSource {
+    THEMED,
+    RESOLVED,
 }

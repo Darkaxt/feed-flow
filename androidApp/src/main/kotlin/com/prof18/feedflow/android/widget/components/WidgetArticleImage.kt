@@ -45,9 +45,10 @@ internal fun WidgetArticleImage(
     val context = LocalContext.current
     val fullKey = requestPolicy?.identity
     val currentFullKey by rememberUpdatedState(fullKey)
-    var loadedBitmap by remember(fullKey) { mutableStateOf<Bitmap?>(null) }
+    var imageState by remember { mutableStateOf(WidgetArticleImageState<Bitmap>()) }
 
     LaunchedEffect(fullKey) {
+        imageState = imageState.forKey(fullKey)
         val requestedKey = fullKey ?: return@LaunchedEffect
         val result = withContext(Dispatchers.IO) {
             loadWidgetArticleBitmap(
@@ -56,12 +57,14 @@ internal fun WidgetArticleImage(
                 key = requestedKey,
             )
         }
-        if (currentFullKey == requestedKey) {
-            loadedBitmap = result
-        }
+        imageState = imageState.accept(
+            completedKey = requestedKey,
+            currentKey = currentFullKey,
+            value = result,
+        )
     }
 
-    loadedBitmap?.let { bitmap ->
+    imageState.valueFor(fullKey)?.let { bitmap ->
         Image(
             provider = ImageProvider(bitmap),
             contentDescription = null,
@@ -71,6 +74,26 @@ internal fun WidgetArticleImage(
                 .cornerRadius(cornerRadiusDp),
         )
     }
+}
+
+internal data class WidgetArticleImageState<T>(
+    val requestKey: WidgetImageRequestIdentity? = null,
+    val value: T? = null,
+) {
+    fun forKey(currentKey: WidgetImageRequestIdentity?): WidgetArticleImageState<T> =
+        if (requestKey == currentKey) this else WidgetArticleImageState(requestKey = currentKey)
+
+    fun accept(
+        completedKey: WidgetImageRequestIdentity,
+        currentKey: WidgetImageRequestIdentity?,
+        value: T?,
+    ): WidgetArticleImageState<T> {
+        val currentState = forKey(currentKey)
+        return if (completedKey == currentKey) currentState.copy(value = value) else currentState
+    }
+
+    fun valueFor(currentKey: WidgetImageRequestIdentity?): T? =
+        value.takeIf { requestKey == currentKey }
 }
 
 internal fun buildWidgetArticleImageRequest(
