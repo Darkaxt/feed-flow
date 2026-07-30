@@ -9,6 +9,7 @@ import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
 import com.prof18.feedflow.shared.domain.model.WidgetTextColorMode
+import com.prof18.feedflow.shared.domain.model.normalizeWidgetMaximumArticles
 import com.prof18.feedflow.shared.domain.model.normalized
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,23 +38,36 @@ class WidgetConfigurationViewModel(
                 WidgetAppearanceSettings(feedLayout, showHeader, fontScale, backgroundColor, backgroundOpacity)
             }
 
+            val widgetContentSettingsFlow = combine(
+                widgetSettingsRepository.widgetTextColorMode,
+                widgetSettingsRepository.widgetHideImages,
+                widgetSettingsRepository.widgetMaximumArticles,
+                widgetSettingsRepository.widgetCardAppearance,
+            ) { textColorMode, hideImages, maximumArticles, cardAppearance ->
+                WidgetContentSettings(
+                    textColorMode = textColorMode,
+                    hideImages = hideImages,
+                    maximumArticles = maximumArticles,
+                    cardAppearance = cardAppearance,
+                )
+            }
+
             combine(
                 appearanceFlow,
                 settingsRepository.syncPeriodFlow,
-                widgetSettingsRepository.widgetTextColorMode,
-                widgetSettingsRepository.widgetHideImages,
-                widgetSettingsRepository.widgetCardAppearance,
-            ) { appearance, syncPeriod, textColorMode, hideImages, cardAppearance ->
+                widgetContentSettingsFlow,
+            ) { appearance, syncPeriod, contentSettings ->
                 WidgetSettingsState(
                     syncPeriod = syncPeriod,
                     feedLayout = appearance.feedLayout,
+                    maximumArticles = contentSettings.maximumArticles,
                     showHeader = appearance.showHeader,
                     fontScale = appearance.fontScale,
                     backgroundColor = appearance.backgroundColor,
                     backgroundOpacityPercent = appearance.backgroundOpacity,
-                    textColorMode = textColorMode,
-                    hideImages = hideImages,
-                    cardAppearance = cardAppearance,
+                    textColorMode = contentSettings.textColorMode,
+                    hideImages = contentSettings.hideImages,
+                    cardAppearance = contentSettings.cardAppearance,
                 )
             }.collect { state ->
                 _settingsState.update { state }
@@ -64,6 +78,12 @@ class WidgetConfigurationViewModel(
     fun updateFeedLayout(feedLayout: WidgetFeedLayout) {
         if (_settingsState.value.feedLayout == feedLayout) return
         widgetSettingsRepository.setFeedWidgetLayout(feedLayout)
+    }
+
+    fun updateMaximumArticles(maximumArticles: Int) {
+        val normalizedValue = normalizeWidgetMaximumArticles(maximumArticles)
+        if (_settingsState.value.maximumArticles == normalizedValue) return
+        widgetSettingsRepository.setWidgetMaximumArticles(normalizedValue)
     }
 
     fun updateShowHeader(showHeader: Boolean) {
@@ -134,6 +154,13 @@ class WidgetConfigurationViewModel(
         }
         widgetSettingsRepository.setWidgetCardAppearance(updatedAppearance)
     }
+
+    private data class WidgetContentSettings(
+        val textColorMode: WidgetTextColorMode,
+        val hideImages: Boolean,
+        val maximumArticles: Int,
+        val cardAppearance: WidgetCardAppearance,
+    )
 
     private data class WidgetAppearanceSettings(
         val feedLayout: WidgetFeedLayout,

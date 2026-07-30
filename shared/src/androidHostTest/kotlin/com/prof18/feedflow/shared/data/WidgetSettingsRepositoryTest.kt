@@ -20,6 +20,59 @@ import kotlin.test.assertTrue
 class WidgetSettingsRepositoryTest {
 
     @Test
+    fun `absent maximum articles setting uses compatibility default`() {
+        val repository = WidgetSettingsRepository(MapSettings())
+
+        assertEquals(15, repository.getWidgetMaximumArticles())
+        assertEquals(15, repository.widgetMaximumArticles.value)
+    }
+
+    @Test
+    fun `maximum articles round trips and emits the update`() = runTest {
+        val repository = WidgetSettingsRepository(MapSettings())
+
+        repository.widgetMaximumArticles.test {
+            assertEquals(15, awaitItem())
+
+            repository.setWidgetMaximumArticles(7)
+
+            assertEquals(7, awaitItem())
+            assertEquals(7, repository.getWidgetMaximumArticles())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `maximum articles clamps set values to lower and upper bounds`() {
+        val repository = WidgetSettingsRepository(MapSettings())
+
+        repository.setWidgetMaximumArticles(Int.MIN_VALUE)
+        assertEquals(1, repository.getWidgetMaximumArticles())
+        assertEquals(1, repository.widgetMaximumArticles.value)
+
+        repository.setWidgetMaximumArticles(Int.MAX_VALUE)
+        assertEquals(15, repository.getWidgetMaximumArticles())
+        assertEquals(15, repository.widgetMaximumArticles.value)
+    }
+
+    @Test
+    fun `maximum articles normalizes malformed stored values safely`() {
+        val belowRange = WidgetSettingsRepository(
+            MapSettings().apply { this[WIDGET_MAXIMUM_ARTICLES_KEY] = -4 },
+        )
+        val aboveRange = WidgetSettingsRepository(
+            MapSettings().apply { this[WIDGET_MAXIMUM_ARTICLES_KEY] = 40 },
+        )
+        val wrongType = WidgetSettingsRepository(
+            MapSettings().apply { this[WIDGET_MAXIMUM_ARTICLES_KEY] = "not-an-integer" },
+        )
+
+        assertEquals(1, belowRange.getWidgetMaximumArticles())
+        assertEquals(15, aboveRange.getWidgetMaximumArticles())
+        assertEquals(15, wrongType.getWidgetMaximumArticles())
+    }
+
+    @Test
     fun `absent card appearance settings use defaults`() {
         val repository = WidgetSettingsRepository(MapSettings())
 
@@ -260,6 +313,7 @@ class WidgetSettingsRepositoryTest {
     }
 
     private companion object {
+        const val WIDGET_MAXIMUM_ARTICLES_KEY = "WIDGET_MAXIMUM_ARTICLES"
         const val WIDGET_CARD_SURFACE_COLOR_KEY = "WIDGET_CARD_SURFACE_COLOR"
         const val WIDGET_CARD_SURFACE_OPACITY_PERCENT_KEY = "WIDGET_CARD_SURFACE_OPACITY_PERCENT"
         const val WIDGET_CARD_CORNER_RADIUS_DP_KEY = "WIDGET_CARD_CORNER_RADIUS_DP"

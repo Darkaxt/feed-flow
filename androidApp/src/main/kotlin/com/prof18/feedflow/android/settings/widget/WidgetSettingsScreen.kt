@@ -18,6 +18,7 @@ fun WidgetSettingsScreen(
         title = LocalFeedFlowStrings.current.widgetConfigurationTitle,
         settingsState = settingsState,
         onFeedLayoutSelected = viewModel::updateFeedLayout,
+        onMaximumArticlesSelected = viewModel::updateMaximumArticles,
         onShowHeaderSelected = viewModel::updateShowHeader,
         onFontScaleSelected = viewModel::updateFontScale,
         onBackgroundColorSelected = viewModel::updateBackgroundColor,

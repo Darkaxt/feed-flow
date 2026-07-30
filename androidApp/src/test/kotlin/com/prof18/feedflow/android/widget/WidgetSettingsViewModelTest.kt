@@ -8,6 +8,7 @@ import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
 import com.prof18.feedflow.shared.presentation.WidgetUpdater
 import com.russhwolf.settings.MapSettings
+import com.russhwolf.settings.Settings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -33,6 +34,50 @@ class WidgetSettingsViewModelTest {
     @After
     fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun `effective maximum articles change persists normalized value and updates widget once`() = runTest(dispatcher) {
+        val settings = CountingWidgetSettings()
+        val repository = WidgetSettingsRepository(settings)
+        val widgetUpdater = FakeWidgetUpdater()
+        val viewModel = WidgetSettingsViewModel(
+            settingsRepository = SettingsRepository(MapSettings()),
+            widgetSettingsRepository = repository,
+            widgetUpdater = widgetUpdater,
+        )
+        advanceUntilIdle()
+
+        viewModel.updateMaximumArticles(Int.MIN_VALUE)
+
+        assertEquals(1, viewModel.settingsState.value.maximumArticles)
+        assertEquals(1, repository.getWidgetMaximumArticles())
+        assertEquals(1, settings.maximumArticlesWriteCount)
+        assertEquals(0, widgetUpdater.updateCount)
+
+        advanceUntilIdle()
+
+        assertEquals(1, widgetUpdater.updateCount)
+    }
+
+    @Test
+    fun `unchanged normalized maximum articles input does not persist or update widget`() = runTest(dispatcher) {
+        val settings = CountingWidgetSettings()
+        val repository = WidgetSettingsRepository(settings)
+        val widgetUpdater = FakeWidgetUpdater()
+        val viewModel = WidgetSettingsViewModel(
+            settingsRepository = SettingsRepository(MapSettings()),
+            widgetSettingsRepository = repository,
+            widgetUpdater = widgetUpdater,
+        )
+        advanceUntilIdle()
+
+        viewModel.updateMaximumArticles(Int.MAX_VALUE)
+        advanceUntilIdle()
+
+        assertEquals(15, viewModel.settingsState.value.maximumArticles)
+        assertEquals(0, settings.maximumArticlesWriteCount)
+        assertEquals(0, widgetUpdater.updateCount)
     }
 
     @Test
@@ -142,6 +187,41 @@ class WidgetConfigurationViewModelTest {
     }
 
     @Test
+    fun `configuration maximum articles change persists without widget updater behavior`() = runTest(dispatcher) {
+        val settings = CountingWidgetSettings()
+        val repository = WidgetSettingsRepository(settings)
+        val viewModel = WidgetConfigurationViewModel(
+            settingsRepository = SettingsRepository(MapSettings()),
+            widgetSettingsRepository = repository,
+        )
+        advanceUntilIdle()
+
+        viewModel.updateMaximumArticles(7)
+        advanceUntilIdle()
+
+        assertEquals(7, repository.getWidgetMaximumArticles())
+        assertEquals(7, viewModel.settingsState.value.maximumArticles)
+        assertEquals(1, settings.maximumArticlesWriteCount)
+    }
+
+    @Test
+    fun `configuration ignores unchanged normalized maximum articles input`() = runTest(dispatcher) {
+        val settings = CountingWidgetSettings()
+        val repository = WidgetSettingsRepository(settings)
+        val viewModel = WidgetConfigurationViewModel(
+            settingsRepository = SettingsRepository(MapSettings()),
+            widgetSettingsRepository = repository,
+        )
+        advanceUntilIdle()
+
+        viewModel.updateMaximumArticles(Int.MAX_VALUE)
+        advanceUntilIdle()
+
+        assertEquals(15, viewModel.settingsState.value.maximumArticles)
+        assertEquals(0, settings.maximumArticlesWriteCount)
+    }
+
+    @Test
     fun `card appearance callbacks persist all six settings without an updater`() = runTest(dispatcher) {
         val repository = WidgetSettingsRepository(MapSettings())
         val viewModel = WidgetConfigurationViewModel(
@@ -199,6 +279,21 @@ class WidgetConfigurationViewModelTest {
     }
 }
 
+private class CountingWidgetSettings(
+    private val delegate: Settings = MapSettings(),
+) : Settings by delegate {
+    var maximumArticlesWriteCount = 0
+        private set
+
+    override fun putInt(key: String, value: Int) {
+        delegate.putInt(key, value)
+        if (key == WIDGET_MAXIMUM_ARTICLES_KEY) {
+            maximumArticlesWriteCount += 1
+        }
+    }
+}
+
+private const val WIDGET_MAXIMUM_ARTICLES_KEY = "WIDGET_MAXIMUM_ARTICLES"
 private const val CUSTOM_COLOR_WITHOUT_ALPHA = 0x00123456
 private const val CUSTOM_COLOR = 0xFF123456.toInt()
 private const val CUSTOM_OPACITY_PERCENT = 72

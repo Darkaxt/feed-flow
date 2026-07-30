@@ -666,3 +666,45 @@ git commit -m "Validate widget card customization"
 ```
 
 - [ ] Push the branch if a writable remote exists; otherwise report the existing permission/fork blocker.
+
+---
+
+## Stage 8 Addendum: Configurable Total-item Cap
+
+### Task 21: Persist and expose the normalized global limit
+
+**Files:**
+- Create: `shared/src/androidMain/kotlin/com/prof18/feedflow/shared/domain/model/WidgetArticleLimit.kt`
+- Modify: `shared/src/androidMain/kotlin/com/prof18/feedflow/shared/data/WidgetSettingsRepository.kt`
+- Modify: `shared/src/androidHostTest/kotlin/com/prof18/feedflow/shared/data/WidgetSettingsRepositoryTest.kt`
+
+- [ ] Add failing Android-host tests for default 15, round-trip/flow emission, lower clamp to 1, upper clamp to 15, and malformed stored values.
+- [ ] Add `WIDGET_MAXIMUM_ARTICLES`, normalized getter/setter, and `StateFlow<Int>` separate from `WidgetCardAppearance`.
+- [ ] Run `./gradlew --quiet --console=plain :shared:testAndroidHostTest --tests "com.prof18.feedflow.shared.data.WidgetSettingsRepositoryTest"`.
+
+### Task 22: Wire settings state, ViewModels, and the app-owned slider
+
+**Files:**
+- Modify: both widget ViewModels, `WidgetSettingsState.kt`, `WidgetSettingsContent.kt`, `WidgetSettingsScaffold.kt`, both settings entry points, `SettingsE2eIds.kt`, English strings, and `E2eSeedActivity.kt`
+- Test: `androidApp/src/test/kotlin/com/prof18/feedflow/android/widget/WidgetSettingsViewModelTest.kt`
+
+- [ ] Add failing tests proving an effective normalized in-app change persists once and invokes `WidgetUpdater` once, while a normalized no-op invokes neither; configuration persists without updater behavior.
+- [ ] Add a discrete 1..15 slider immediately after Feed Layout with `Maximum articles: %s`, stable E2E ID, default/reset value 15, and callback plumbing.
+- [ ] Run `.scripts/refresh-translations.sh` and the focused ViewModel tests.
+
+### Task 23: Cap renderer and preview without changing capacity or budget
+
+**Files:**
+- Modify: `FeedFlowWidget.kt`, `WidgetContent.kt`, `WidgetPreviewSection.kt`, and `WidgetImageBudgetTest.kt`
+- Create: `androidApp/src/test/kotlin/com/prof18/feedflow/android/widget/WidgetArticleLimitTest.kt`
+
+- [ ] Add failing tests for caps 1, midrange, 15, invalid low/high values, order, empty input, one-row preview selection, and fixed `MAX_WIDGET_FEED_ITEMS * payloadVariantCount` budgeting.
+- [ ] Collect the limit reactively and apply it before the shared List/Card `LazyColumn` branch; do not change `FeedWidgetRepository`'s 15-item query.
+- [ ] Keep the preview's first sample only at limit 1 and both deterministic samples at limits 2..15.
+- [ ] Do not pass the selected limit into `WidgetImageBudget`; a lower visible cap must never increase per-image budget.
+
+### Task 24: E2E, documentation, and runtime validation
+
+- [ ] Extend REG-164 only to verify the app-owned slider/value plumbing and explicitly retain launcher row count and visual parity as manual coverage.
+- [ ] Run shared Android-host tests, Android unit tests, compile/assemble, `detekt allTests`, and `git diff --check` with the project Gradle flags.
+- [ ] On an available Android widget host, verify limits 1, midrange, and 15 in both layouts, reactive placed-widget updates, preserved ordering/empty state, preview one-row behavior at 1, and that launcher size—not this setting—determines simultaneous visibility. Record unavailable host validation without claiming it passed.

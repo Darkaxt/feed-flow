@@ -31,6 +31,7 @@ fun WidgetSettingsScaffold(
     title: String,
     settingsState: WidgetSettingsState,
     onFeedLayoutSelected: (WidgetFeedLayout) -> Unit,
+    onMaximumArticlesSelected: (Int) -> Unit,
     onShowHeaderSelected: (Boolean) -> Unit,
     onFontScaleSelected: (Int) -> Unit,
     onBackgroundColorSelected: (Int?) -> Unit,
@@ -95,6 +96,7 @@ fun WidgetSettingsScaffold(
                 WidgetSettingsContent(
                     settingsState = settingsState,
                     onFeedLayoutSelected = onFeedLayoutSelected,
+                    onMaximumArticlesSelected = onMaximumArticlesSelected,
                     onShowHeaderSelected = onShowHeaderSelected,
                     onFontScaleSelected = onFontScaleSelected,
                     onBackgroundColorSelected = onBackgroundColorSelected,
@@ -163,6 +165,7 @@ private fun WidgetSettingsScaffoldToolingPreview(settingsState: WidgetSettingsSt
             title = strings.widgetConfigurationTitle,
             settingsState = settingsState,
             onFeedLayoutSelected = {},
+            onMaximumArticlesSelected = {},
             onShowHeaderSelected = {},
             onFontScaleSelected = {},
             onBackgroundColorSelected = {},

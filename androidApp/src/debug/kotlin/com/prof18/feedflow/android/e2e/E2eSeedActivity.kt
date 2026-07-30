@@ -30,6 +30,7 @@ import com.prof18.feedflow.android.MainActivity
 import com.prof18.feedflow.android.base.BaseThemeActivity
 import com.prof18.feedflow.core.model.WidgetFeedLayout
 import com.prof18.feedflow.shared.data.WidgetSettingsRepository
+import com.prof18.feedflow.shared.domain.model.DEFAULT_WIDGET_MAXIMUM_ARTICLES
 import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
@@ -161,6 +162,7 @@ class E2eSeedActivity : BaseThemeActivity() {
         widgetSettingsRepository.setWidgetBackgroundOpacityPercent(100)
         widgetSettingsRepository.setWidgetTextColorMode(WidgetTextColorMode.AUTOMATIC)
         widgetSettingsRepository.setWidgetHideImages(false)
+        widgetSettingsRepository.setWidgetMaximumArticles(DEFAULT_WIDGET_MAXIMUM_ARTICLES)
         widgetSettingsRepository.setWidgetCardAppearance(WidgetCardAppearance())
     }
 

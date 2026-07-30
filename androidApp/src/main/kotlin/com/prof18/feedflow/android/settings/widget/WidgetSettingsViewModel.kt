@@ -10,6 +10,7 @@ import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
 import com.prof18.feedflow.shared.domain.model.WidgetTextColorMode
+import com.prof18.feedflow.shared.domain.model.normalizeWidgetMaximumArticles
 import com.prof18.feedflow.shared.domain.model.normalized
 import com.prof18.feedflow.shared.presentation.WidgetUpdater
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -60,11 +61,13 @@ class WidgetSettingsViewModel(
                 globalSyncSettingsFlow,
                 widgetAppearanceSettingsWithTextColorFlow,
                 widgetSettingsRepository.widgetHideImages,
+                widgetSettingsRepository.widgetMaximumArticles,
                 widgetSettingsRepository.widgetCardAppearance,
-            ) { syncPeriod, widgetAppearanceSettings, hideImages, cardAppearance ->
+            ) { syncPeriod, widgetAppearanceSettings, hideImages, maximumArticles, cardAppearance ->
                 WidgetSettingsState(
                     syncPeriod = syncPeriod,
                     feedLayout = widgetAppearanceSettings.feedLayout,
+                    maximumArticles = maximumArticles,
                     showHeader = widgetAppearanceSettings.showHeader,
                     fontScale = widgetAppearanceSettings.fontScale,
                     backgroundColor = widgetAppearanceSettings.backgroundColor,
@@ -87,6 +90,18 @@ class WidgetSettingsViewModel(
         }
         _settingsState.update { it.copy(feedLayout = feedLayout) }
         widgetSettingsRepository.setFeedWidgetLayout(feedLayout)
+        viewModelScope.launch {
+            widgetUpdater.update()
+        }
+    }
+
+    fun updateMaximumArticles(maximumArticles: Int) {
+        val normalizedValue = normalizeWidgetMaximumArticles(maximumArticles)
+        if (_settingsState.value.maximumArticles == normalizedValue) {
+            return
+        }
+        _settingsState.update { it.copy(maximumArticles = normalizedValue) }
+        widgetSettingsRepository.setWidgetMaximumArticles(normalizedValue)
         viewModelScope.launch {
             widgetUpdater.update()
         }

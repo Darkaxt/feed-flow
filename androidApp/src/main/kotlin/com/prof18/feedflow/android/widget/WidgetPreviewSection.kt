@@ -85,6 +85,7 @@ private fun WidgetPreviewSectionContent(
 
     WidgetPreviewWallpaper(
         feedLayout = settingsState.feedLayout,
+        maximumArticles = settingsState.maximumArticles,
         showWidgetHeader = settingsState.showHeader,
         hideImages = settingsState.hideImages,
         fontSizes = widgetFontSizes(settingsState.fontScale),
@@ -103,6 +104,7 @@ private fun WidgetPreviewSectionContent(
 @Composable
 private fun WidgetPreviewWallpaper(
     feedLayout: WidgetFeedLayout,
+    maximumArticles: Int,
     showWidgetHeader: Boolean,
     hideImages: Boolean,
     fontSizes: WidgetFontSizes,
@@ -129,6 +131,7 @@ private fun WidgetPreviewWallpaper(
     ) {
         WidgetPreview(
             feedLayout = feedLayout,
+            maximumArticles = maximumArticles,
             showWidgetHeader = showWidgetHeader,
             hideImages = hideImages,
             fontSizes = fontSizes,
@@ -188,6 +191,7 @@ private fun PreviewBackdropToggleButton(
 @Composable
 private fun WidgetPreview(
     feedLayout: WidgetFeedLayout,
+    maximumArticles: Int,
     showWidgetHeader: Boolean,
     hideImages: Boolean,
     fontSizes: WidgetFontSizes,
@@ -224,17 +228,20 @@ private fun WidgetPreview(
                 Spacer(modifier = Modifier.height(Spacing.small))
             }
 
-            val items = listOf(
-                WidgetPreviewItem(
-                    feedSource = strings.settingsFontScaleFeedSourceExample,
-                    title = strings.settingsFontScaleTitleExample,
-                    date = "25/12 - 14:30",
+            val items = limitWidgetFeedItems(
+                feedItems = listOf(
+                    WidgetPreviewItem(
+                        feedSource = strings.settingsFontScaleFeedSourceExample,
+                        title = strings.settingsFontScaleTitleExample,
+                        date = "25/12 - 14:30",
+                    ),
+                    WidgetPreviewItem(
+                        feedSource = strings.settingsFontScaleFeedSourceExample,
+                        title = strings.settingsFontScaleSubtitleExample,
+                        date = "24/12 - 09:15",
+                    ),
                 ),
-                WidgetPreviewItem(
-                    feedSource = strings.settingsFontScaleFeedSourceExample,
-                    title = strings.settingsFontScaleSubtitleExample,
-                    date = "24/12 - 09:15",
-                ),
+                maximumArticles = maximumArticles,
             )
 
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {

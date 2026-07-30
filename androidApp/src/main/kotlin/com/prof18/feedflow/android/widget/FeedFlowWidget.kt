@@ -39,6 +39,7 @@ internal class FeedFlowWidget(
             ProvideFeedFlowStrings(lyricist) {
                 val feedItems by feedItemsFlow.collectAsState(initialFeedItems)
                 val feedLayout by widgetSettingsRepository.feedWidgetLayout.collectAsState()
+                val maximumArticles by widgetSettingsRepository.widgetMaximumArticles.collectAsState()
                 val showHeader by widgetSettingsRepository.widgetShowHeader.collectAsState()
                 val fontScale by widgetSettingsRepository.widgetFontScale.collectAsState()
                 val backgroundColor by widgetSettingsRepository.widgetBackgroundColor.collectAsState()
@@ -70,6 +71,7 @@ internal class FeedFlowWidget(
                     WidgetContent(
                         feedItems = feedItems,
                         feedLayout = feedLayout,
+                        maximumArticles = maximumArticles,
                         browserManager = browserManager,
                         showHeader = showHeader,
                         fontScale = fontScale,

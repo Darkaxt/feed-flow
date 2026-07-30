@@ -38,10 +38,13 @@ import com.github.skydoves.colorpicker.compose.HsvColorPicker
 import com.github.skydoves.colorpicker.compose.rememberColorPickerController
 import com.prof18.feedflow.android.settings.SettingsE2eIds
 import com.prof18.feedflow.core.model.WidgetFeedLayout
+import com.prof18.feedflow.shared.domain.feed.MAX_WIDGET_FEED_ITEMS
+import com.prof18.feedflow.shared.domain.model.MIN_WIDGET_MAXIMUM_ARTICLES
 import com.prof18.feedflow.shared.domain.model.SyncPeriod
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
 import com.prof18.feedflow.shared.domain.model.WidgetTextColorMode
+import com.prof18.feedflow.shared.domain.model.normalizeWidgetMaximumArticles
 import com.prof18.feedflow.shared.ui.readermode.SliderWithPlusMinus
 import com.prof18.feedflow.shared.ui.settings.CompactSettingDropdownRow
 import com.prof18.feedflow.shared.ui.settings.SettingDropdownOption
@@ -56,6 +59,7 @@ import kotlin.math.roundToInt
 fun WidgetSettingsContent(
     settingsState: WidgetSettingsState,
     onFeedLayoutSelected: (WidgetFeedLayout) -> Unit,
+    onMaximumArticlesSelected: (Int) -> Unit,
     onShowHeaderSelected: (Boolean) -> Unit,
     onFontScaleSelected: (Int) -> Unit,
     onBackgroundColorSelected: (Int?) -> Unit,
@@ -73,6 +77,7 @@ fun WidgetSettingsContent(
     modifier: Modifier = Modifier,
 ) {
     val strings = LocalFeedFlowStrings.current
+    val maximumArticles = normalizeWidgetMaximumArticles(settingsState.maximumArticles)
     val backgroundOpacity = settingsState.backgroundOpacityPercent.coerceIn(minimumValue = 0, maximumValue = 100)
     val defaultBackgroundColor = MaterialTheme.colorScheme.surface
     val resolvedBackgroundColor = settingsState.backgroundColor?.let(::widgetColorFromArgb) ?: defaultBackgroundColor
@@ -107,6 +112,21 @@ fun WidgetSettingsContent(
         WidgetFeedLayoutSelector(
             feedLayout = settingsState.feedLayout,
             onFeedLayoutSelected = onFeedLayoutSelected,
+        )
+
+        Text(
+            text = strings.widgetMaximumArticlesTitle(maximumArticles.toString()),
+            modifier = Modifier.padding(horizontal = Spacing.regular, vertical = Spacing.small),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Slider(
+            modifier = Modifier
+                .padding(horizontal = Spacing.regular)
+                .testTag(SettingsE2eIds.WIDGET_MAXIMUM_ARTICLES),
+            value = maximumArticles.toFloat(),
+            onValueChange = { onMaximumArticlesSelected(it.roundToInt()) },
+            valueRange = MIN_WIDGET_MAXIMUM_ARTICLES.toFloat()..MAX_WIDGET_FEED_ITEMS.toFloat(),
+            steps = MAX_WIDGET_FEED_ITEMS - MIN_WIDGET_MAXIMUM_ARTICLES - 1,
         )
 
         SettingSwitchItem(
@@ -582,6 +602,7 @@ private fun WidgetSettingsContentPreview() {
                     backgroundOpacityPercent = 80,
                 ),
                 onFeedLayoutSelected = {},
+                onMaximumArticlesSelected = {},
                 onShowHeaderSelected = {},
                 onFontScaleSelected = {},
                 onBackgroundColorSelected = {},

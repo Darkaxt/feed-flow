@@ -16,6 +16,7 @@ internal object SettingsE2eIds {
     const val WIDGET_FEED_LAYOUT = "widget_settings_feed_layout"
     const val WIDGET_FEED_LAYOUT_LIST = "widget_settings_feed_layout_list"
     const val WIDGET_FEED_LAYOUT_CARD = "widget_settings_feed_layout_card"
+    const val WIDGET_MAXIMUM_ARTICLES = "widget_settings_maximum_articles"
     const val WIDGET_CARD_APPEARANCE = "widget_settings_card_appearance"
     const val WIDGET_CARD_SURFACE_COLOR = "widget_settings_card_surface_color"
     const val WIDGET_CARD_SURFACE_OPACITY = "widget_settings_card_surface_opacity"

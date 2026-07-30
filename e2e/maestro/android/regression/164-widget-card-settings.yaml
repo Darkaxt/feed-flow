@@ -20,6 +20,15 @@ appId: com.prof18.feedflow.debug
     id: widget_settings_preview
 - scrollUntilVisible:
     element:
+      id: widget_settings_maximum_articles
+    direction: DOWN
+    timeout: 10000
+- assertVisible: "Maximum articles: 15"
+- tapOn:
+    id: widget_settings_maximum_articles
+- assertVisible: "Maximum articles: 8"
+- scrollUntilVisible:
+    element:
       id: widget_settings_feed_layout
     direction: DOWN
     timeout: 10000
