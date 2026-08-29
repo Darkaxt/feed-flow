@@ -25,7 +25,20 @@ appId: com.prof18.feedflow.debug
     text: "Android Central RSS Feed"
 - tapOn:
     id: home_more_menu_button
-- assertVisible: "Edit feed"
-- tapOn: "Edit feed"
-- assertVisible: "Edit feed"
+- assertVisible: "Feed settings"
+- tapOn: "Feed settings"
+- assertVisible: "Feed settings"
 - assertVisible: "Open articles in"
+- tapOn: "Open articles in"
+- tapOn:
+    id: article_open_mode_full_article
+- assertVisible: "Reader \\(website\\)"
+- tapOn:
+    id: edit_feed_save
+- extendedWaitUntil:
+    visible: "Android Central RSS Feed"
+    timeout: 10000
+- tapOn:
+    id: home_more_menu_button
+- tapOn: "Edit feed"
+- assertVisible: "Reader \\(website\\)"

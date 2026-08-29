@@ -28,6 +28,16 @@ val dropboxAppKey: String = local.getProperty("dropbox_key").orEmpty()
 if (dropboxAppKey.isEmpty()) {
     println("Dropbox key not set in keystore.properties. Please add it to the file with the key 'dropbox_key'")
 }
+val revenueCatAndroidApiKey = local.getProperty("revenuecat_android_api_key")
+    ?: System.getenv("REVENUECAT_ANDROID_API_KEY").orEmpty()
+val revenueCatTestStoreApiKey = local.getProperty("revenuecat_test_store_api_key")
+    ?: System.getenv("REVENUECAT_TEST_STORE_API_KEY").orEmpty()
+val escapedRevenueCatAndroidApiKey = revenueCatAndroidApiKey
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
+val escapedRevenueCatTestStoreApiKey = revenueCatTestStoreApiKey
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
 
 android {
     namespace = "com.prof18.feedflow.android"
@@ -38,6 +48,7 @@ android {
         targetSdk = libs.versions.android.target.sdk.get().toInt()
         versionCode = appVersionCode()
         versionName = appVersionName()
+        buildConfigField("String", "REVENUECAT_API_KEY", "\"\"")
 
         addManifestPlaceholders(
             mapOf(
@@ -74,6 +85,7 @@ android {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
             buildConfigField("String", "DROPBOX_APP_KEY", "\"$dropboxAppKey\"")
+            buildConfigField("String", "REVENUECAT_API_KEY", "\"$escapedRevenueCatTestStoreApiKey\"")
         }
 
         getByName("release") {
@@ -97,6 +109,7 @@ android {
         create("googlePlay") {
             dimension = "version"
             isDefault = true
+            buildConfigField("String", "REVENUECAT_API_KEY", "\"$escapedRevenueCatAndroidApiKey\"")
         }
     }
 
@@ -194,6 +207,8 @@ dependencies {
     "googlePlayImplementation"(libs.kotlinx.coroutines.play.services)
     "googlePlayImplementation"(libs.google.api.client.android)
     "googlePlayImplementation"(libs.google.api.services.drive)
+    "googlePlayImplementation"(libs.revenuecat.purchases)
+    "googlePlayImplementation"(libs.revenuecat.purchases.ui)
 
     debugImplementation(libs.compose.multiplatform.ui.tooling)
 

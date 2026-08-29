@@ -53,7 +53,6 @@ internal class DesktopFeedItemParserWorker(
 
     override suspend fun parse(feedItemId: String, url: String, imageUrl: String?): ParsingResult {
         logger.d { "Triggering immediate parsing for: $url (feedItemId: $feedItemId)" }
-
         return withContext(dispatcherProvider.io) {
             try {
                 val html = htmlRetriever.retrieveHtml(url)

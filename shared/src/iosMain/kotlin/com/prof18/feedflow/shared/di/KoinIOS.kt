@@ -41,7 +41,12 @@ import com.prof18.feedflow.shared.domain.model.CurrentOS
 import com.prof18.feedflow.shared.domain.notification.Notifier
 import com.prof18.feedflow.shared.domain.opml.OpmlFeedHandler
 import com.prof18.feedflow.shared.domain.opml.OpmlFeedHandlerIos
+import com.prof18.feedflow.shared.domain.opml.OpmlInput
+import com.prof18.feedflow.shared.domain.parser.CachingFeedItemParserWorker
 import com.prof18.feedflow.shared.domain.parser.FeedItemContentFileHandlerIos
+import com.prof18.feedflow.shared.domain.parser.KleadContentFormat
+import com.prof18.feedflow.shared.domain.parser.KleadFeedItemParserWorker
+import com.prof18.feedflow.shared.domain.parser.ParserSelectingFeedItemParserWorker
 import com.prof18.feedflow.shared.e2e.E2eSeedRunner
 import com.prof18.feedflow.shared.presentation.AboutAndSupportSettingsViewModel
 import com.prof18.feedflow.shared.presentation.AccountsViewModel
@@ -80,8 +85,13 @@ import org.koin.core.module.dsl.viewModel
 import org.koin.core.parameter.parametersOf
 import org.koin.dsl.bind
 import org.koin.dsl.module
+import platform.Foundation.NSData
+import platform.Foundation.NSString
 import platform.Foundation.NSURLSession
 import platform.Foundation.NSURLSessionConfiguration
+import platform.Foundation.NSUTF8StringEncoding
+import platform.Foundation.create
+import platform.Foundation.dataUsingEncoding
 import platform.UIKit.UIDevice
 
 fun initKoinIos(
@@ -114,7 +124,25 @@ fun initKoinIos(
             single { dropboxDataSource }
             single { googleDrivePlatformClient }
             single { telemetry }
-            single { feedItemParserWorker }
+            single<FeedItemParserWorker> {
+                val kleadParser = KleadFeedItemParserWorker(
+                    contentFormat = KleadContentFormat.HTML,
+                    htmlRetriever = get(),
+                    logger = getWith("KleadFeedItemParserWorker"),
+                    feedItemContentFileHandler = get(),
+                    settingsRepository = get(),
+                    cacheResultWhenEnabled = false,
+                )
+                ParserSelectingFeedItemParserWorker(
+                    settingsRepository = get(),
+                    legacyParser = feedItemParserWorker,
+                    kleadParser = CachingFeedItemParserWorker(
+                        parser = kleadParser,
+                        settingsRepository = get(),
+                        feedItemContentFileHandler = get(),
+                    ),
+                )
+            }
             single<FeedContentPreparer> { HtmlFeedContentPreparer() }
             single<Notifier> { notifier }
             single {
@@ -331,12 +359,22 @@ object Deps : KoinComponent {
         action: String,
         profileName: String?,
         accountName: String?,
+        developmentOpml: String?,
     ): String? =
         runCatching {
-            getKoin().get<E2eSeedRunner>().run(
-                action = action,
-                profileName = profileName,
-                accountName = accountName,
-            )
+            if (action == ACTION_RESTORE_DEVELOPMENT) {
+                val opmlData = requireNotNull(developmentOpml) { "Missing development OPML payload" }
+                    .let { NSString.create(string = it).dataUsingEncoding(NSUTF8StringEncoding) ?: NSData() }
+                val feedSources = getKoin().get<OpmlFeedHandler>().generateFeedSources(OpmlInput(opmlData))
+                getKoin().get<E2eSeedRunner>().resetAndSeedDevelopmentFeeds(feedSources)
+            } else {
+                getKoin().get<E2eSeedRunner>().run(
+                    action = action,
+                    profileName = profileName,
+                    accountName = accountName,
+                )
+            }
         }.exceptionOrNull()?.message
 }
+
+private const val ACTION_RESTORE_DEVELOPMENT = "restore-development"

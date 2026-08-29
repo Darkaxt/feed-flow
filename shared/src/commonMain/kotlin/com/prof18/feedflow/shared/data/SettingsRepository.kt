@@ -22,6 +22,7 @@ class SettingsRepository(
     private var articleOpenMode: ArticleOpenMode? = null
     private var saveItemContentOnOpenEnabled: Boolean? = null
     private var prefetchArticleContentEnabled: Boolean? = null
+    private var kleadParserEnabled: Boolean? = null
 
     private val isSyncUploadRequiredMutableFlow = MutableStateFlow(getIsSyncUploadRequired())
     val isSyncUploadRequired: StateFlow<Boolean> = isSyncUploadRequiredMutableFlow.asStateFlow()
@@ -122,6 +123,18 @@ class SettingsRepository(
     fun setPrefetchArticleContent(value: Boolean) {
         prefetchArticleContentEnabled = value
         settings[SettingsFields.PREFETCH_ARTICLE_CONTENT.name] = value
+    }
+
+    fun isKleadParserEnabled(): Boolean {
+        kleadParserEnabled?.let { return it }
+        val value = settings.getBoolean(SettingsFields.USE_KLEAD_READER_PARSER.name, false)
+        kleadParserEnabled = value
+        return value
+    }
+
+    fun setKleadParserEnabled(value: Boolean) {
+        kleadParserEnabled = value
+        settings.set(SettingsFields.USE_KLEAD_READER_PARSER.name, value)
     }
 
     internal fun getIsSyncUploadRequired(): Boolean =
@@ -273,6 +286,7 @@ private enum class SettingsFields {
     USE_READER_MODE,
     SAVE_ITEM_CONTENT_ON_OPEN,
     PREFETCH_ARTICLE_CONTENT,
+    USE_KLEAD_READER_PARSER,
     IS_SYNC_UPLOAD_REQUIRED,
     READER_MODE_FONT_SIZE,
     READER_MODE_LINE_HEIGHT,

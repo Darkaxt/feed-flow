@@ -57,6 +57,27 @@ fun getReaderModeStyledHtml(
         </div>
     </div>
     <script>
+        window.addEventListener("message", function(event) {
+            if (event.origin !== "https://platform.twitter.com") return;
+
+            var payload = event.data && event.data["twttr.embed"];
+            if (!payload || payload.method !== "twttr.private.resize") return;
+
+            var dimensions = payload.params && payload.params[0];
+            var height = Number(dimensions && dimensions.height);
+            if (!Number.isFinite(height) || height <= 0 || height > 10000) return;
+
+            var twitterFrames = document.querySelectorAll(
+                'iframe[src^="https://platform.twitter.com/embed/Tweet.html"]'
+            );
+            var sourceFrame = Array.prototype.find.call(twitterFrames, function(frame) {
+                return frame.contentWindow === event.source;
+            });
+            if (!sourceFrame) return;
+
+            sourceFrame.style.height = Math.ceil(height) + "px";
+        });
+
         document.addEventListener("DOMContentLoaded", function () {
             // Get the title from the first h1 (which we inject)
             var firstH1 = document.querySelector("h1");
@@ -153,16 +174,21 @@ private fun String.escapeHtml(): String =
         .replace("\"", "&quot;")
         .replace("'", "&#39;")
 
-private const val LEADING_IMAGE_SCAN_WINDOW = 1000
-
 private fun hasLeadingImage(content: String): Boolean {
-    val window = if (content.length > LEADING_IMAGE_SCAN_WINDOW) {
-        content.substring(0, LEADING_IMAGE_SCAN_WINDOW)
-    } else {
-        content
-    }
-    return window.indexOf("<img", ignoreCase = true) >= 0
+    val imageIndex = content.indexOf("<img", ignoreCase = true)
+    if (imageIndex < 0) return false
+
+    val visiblePrefix = content.substring(0, imageIndex)
+        .replace(HTML_ELEMENT_REGEX, " ")
+        .replace("&nbsp;", " ", ignoreCase = true)
+        .replace(HTML_WHITESPACE_REGEX, " ")
+        .trim()
+    return visiblePrefix.length <= MAX_LEADING_IMAGE_PREFIX_LENGTH
 }
+
+private const val MAX_LEADING_IMAGE_PREFIX_LENGTH = 200
+private val HTML_ELEMENT_REGEX = Regex("<[^>]*>")
+private val HTML_WHITESPACE_REGEX = Regex("\\s+")
 
 internal fun readerModeCss(colors: ReaderColors?, fontSize: Int, lineHeight: Int): String {
     val fontSizeCss = "${fontSize}px"
@@ -226,10 +252,21 @@ body > h1 {
     max-width: 700px;
 }
 
-img, iframe, object, video {
+img, object, video {
     max-width: 100%;
     height: auto;
     border-radius: 7px;
+}
+
+iframe {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 7px;
+}
+
+#__content img {
+    display: block;
+    margin: 4px auto;
 }
 
 img.__feedflow_image_load_failed {
@@ -304,6 +341,46 @@ figcaption, cite {
     font-size: small;
 }
 
+aside.callout[data-callout] {
+    margin: 1.75em 0;
+    padding: 1em;
+    border: 1px solid color-mix(in srgb, var(--reader-link) 22%, transparent);
+    border-left: 0.3em solid var(--reader-link);
+    border-radius: 10px;
+    background-color: color-mix(in srgb, var(--reader-link) 7%, transparent);
+}
+
+aside.callout[data-callout] .callout-content {
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: 1em;
+    align-items: center;
+}
+
+aside.callout[data-callout] .callout-media {
+    display: block;
+}
+
+aside.callout[data-callout] .callout-media img {
+    width: 96px;
+    height: 96px;
+    margin: 0;
+    object-fit: cover;
+}
+
+aside.callout[data-callout] .callout-title {
+    margin: 0.25em 0;
+    font-size: 1em;
+    line-height: 1.3;
+}
+
+aside.callout[data-callout] .callout-label {
+    font-size: 0.75em;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.7;
+}
+
 .__subtitle {
     font-weight: bold;
     vertical-align: baseline;
@@ -358,11 +435,16 @@ figcaption, cite {
     border-radius: 0.5em;
 }
 
-iframe {
-    width: 100%;
-    max-width: 100%;
-    height: 250px;
-    max-height: 250px;
+iframe[src^="https://www.youtube-nocookie.com/embed/"],
+iframe[src^="https://www.youtube.com/embed/"],
+iframe[src^="https://player.vimeo.com/video/"] {
+    aspect-ratio: 16 / 9;
+    height: auto;
+    border: 0;
+}
+
+iframe[src^="https://platform.twitter.com/embed/Tweet.html"] {
+    border: 0;
 }
 
 code {
@@ -382,12 +464,6 @@ pre code {
     background-color: transparent;
     border: none;
     padding: 0;
-}
-
-img, iframe, object, video {
-    max-width: 100%;
-    height: auto;
-    border-radius: 7px;
 }
 
     """.trimIndent()

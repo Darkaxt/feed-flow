@@ -1,0 +1,44 @@
+appId: com.prof18.feedflow.debug
+---
+- launchApp
+- openLink: feedflow://e2e/reset-and-seed?profile=swipe-disabled
+- assertVisible: "E2E seed complete"
+- tapOn:
+    id: e2e_open_app
+- assertVisible:
+    id: article_row_e2e_article_newest_unread
+- assertNotVisible:
+    id: drawer_bookmarks
+
+# A mostly vertical drag with some horizontal movement must stay with the feed
+# list rather than opening the drawer midway through a scroll.
+- swipe:
+    start: 45%,75%
+    end: 52%,25%
+    duration: 250
+- waitForAnimationToEnd
+- assertNotVisible:
+    id: drawer_bookmarks
+- assertVisible:
+    id: drawer_menu_button
+
+# A deliberate horizontal swipe over content opens the drawer. It does not need
+# to start at the system Back edge, so this works in every navigation mode.
+- swipe:
+    start: 25%,55%
+    end: 80%,55%
+    duration: 300
+- extendedWaitUntil:
+    visible:
+      id: drawer_bookmarks
+    timeout: 10000
+
+# Once open, a drag anywhere still closes it.
+- swipe:
+    start: 60%,55%
+    end: 5%,55%
+    duration: 400
+- extendedWaitUntil:
+    notVisible:
+      id: drawer_bookmarks
+    timeout: 10000

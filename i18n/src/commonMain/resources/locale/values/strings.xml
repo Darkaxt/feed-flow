@@ -105,6 +105,10 @@
     <string name="menu_mark_as_unread">Mark as unread</string>
     <string name="menu_mark_all_above_as_read">Mark all above as read</string>
     <string name="menu_mark_all_below_as_read">Mark all below as read</string>
+    <string name="mark_all_above_as_read_confirmation_title">Mark all above as read?</string>
+    <string name="mark_all_above_as_read_confirmation_message">All articles above this one will be marked as read.</string>
+    <string name="mark_all_below_as_read_confirmation_title">Mark all below as read?</string>
+    <string name="mark_all_below_as_read_confirmation_message">All articles below this one will be marked as read.</string>
     <string name="menu_open_comments">Open comments</string>
     <string name="menu_share">Share</string>
     <string name="menu_share_comments">Share comments</string>
@@ -121,6 +125,9 @@
     <string name="settings_save_reader_mode_content">Save article content on open for offline reading</string>
     <string name="settings_prefetch_article_content">Prefetch article content for offline reading</string>
     <string name="settings_prefetch_article_content_warning">Enabling this option will increase synchronization time and data usage, because full article content will be downloaded during feed updates. If you have a large number of articles, this may also affect performance. Turn this on only if you need offline access to article content.</string>
+    <string name="settings_use_new_article_parser">New reader mode engine</string>
+    <string name="settings_new_reader_mode_engine_confirmation_title">Try the new reader mode engine?</string>
+    <string name="settings_new_reader_mode_engine_confirmation_message">The new engine is designed to extract articles more accurately and load Reader Mode faster. It’s still experimental, so some pages may have missing content, incorrect formatting, or may not load at all. Please report any issues you find. Your feedback will help us improve Reader Mode for everyone before this engine becomes the default.</string>
     <string name="settings_reduce_motion">Reduce motion and animations</string>
     <string name="search_no_data">No matches for %s.</string>
     <string name="search_placeholder">Search…</string>
@@ -136,6 +143,10 @@
     <string name="settings_help_title">Help</string>
     <string name="settings_crash_reporting">Send anonymous crash reports</string>
     <string name="account_connect_button">Connect</string>
+    <string name="server_account_subscriptions_warning">This account uses the subscriptions stored on its server.</string>
+    <string name="server_account_replace_local_title">Replace local subscriptions?</string>
+    <string name="server_account_replace_local_message">Connecting replaces the feeds currently stored on this device with the subscriptions from the server. Disconnecting later won’t restore the local feeds. Export them to OPML first if you want to keep a copy.</string>
+    <string name="server_account_replace_and_connect_button">Replace and connect</string>
     <string name="account_disconnect_button">Disconnect</string>
     <string name="backup_button">Backup</string>
     <string name="dropbox_sync_common_description">Connect your Dropbox account to sync feed subscriptions, categories, read and bookmarked articles between your Android, iOS, iPadOS and desktop devices. The data will be saved in an app-specific folder; FeedFlow won\'t have any access to any of your files</string>
@@ -189,7 +200,7 @@
     <string name="deleting_feed_dialog_title">Deleting...</string>
     <string name="add_feed_generic_error">There was an error while adding the feed. Please retry</string>
     <string name="edit_feed_generic_error">Something went wrong while editing the feed. Please retry.</string>
-    <string name="open_feed_settings">Open feed settings</string>
+    <string name="open_feed_settings">Feed settings</string>
     <string name="feed_added_message_without_name">Feed added</string>
     <string name="sync_error_message">There was an error while syncing the feeds - error code: %s :(. Please retry.</string>
     <string name="greader_bad_token_sync_error_message">The server rejected the sync token. If your Google Reader-compatible service is behind a reverse proxy, make sure it forwards the Authorization header.</string>
@@ -397,6 +408,9 @@
     <string name="feed_fetch_failed_tooltip">Feed update failed. Please check if the site is working</string>
     <string name="feed_fetch_failed_tooltip_short">Feed update failed</string>
     <string name="support_the_project">Support the project</string>
+    <string name="support_paywall_title">Keep FeedFlow growing 💙</string>
+    <string name="support_purchase_thank_you_title">You’re amazing! 🎉</string>
+    <string name="support_purchase_thank_you_message">Your tip helps keep FeedFlow growing 💙 Thank you for supporting ongoing development, thoughtful improvements, and bug fixes. 🙏</string>
     <string name="settings_blocked_words">Blocked words</string>
     <string name="add_word_placeholder">Add word</string>
     <string name="blocked_words_empty_state">No blocked words yet</string>

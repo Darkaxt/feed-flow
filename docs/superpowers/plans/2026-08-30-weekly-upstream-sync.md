@@ -118,16 +118,16 @@ git show :2:e2e/maestro/maestro-e2e-tests.md
 git show :3:e2e/maestro/maestro-e2e-tests.md
 ```
 
-Resolve the file so it contains every current upstream flow and the fork flow `android/regression/164-widget-card-settings.yaml` exactly once. Preserve the fork's documented limitation that widget home-screen rendering is covered by unit/RemoteViews tests when Maestro cannot inspect launcher-hosted widgets.
+Resolve the file so it contains every current upstream flow and the fork flow, renumbered to the next free ID as `android/regression/166-widget-card-settings.yaml`, exactly once. Preserve the fork's documented limitation that widget home-screen rendering is covered by unit/RemoteViews tests when Maestro cannot inspect launcher-hosted widgets.
 
 Run:
 
 ```powershell
-rg -n "164-widget-card-settings|widget.*launcher|launcher.*widget" e2e/maestro/maestro-e2e-tests.md
+rg -n "166-widget-card-settings|widget.*launcher|launcher.*widget" e2e/maestro/maestro-e2e-tests.md
 git add -- e2e/maestro/maestro-e2e-tests.md
 ```
 
-Expected: one physical-flow entry for `164-widget-card-settings.yaml`, the limitation remains documented, and no conflict markers remain.
+Expected: one physical-flow entry for `166-widget-card-settings.yaml`, the limitation remains documented, and no conflict markers remain.
 
 - [ ] **Step 4: Combine the Maestro HTML inventory**
 
@@ -144,7 +144,7 @@ Resolve the HTML catalog to match the Markdown inventory, retaining upstream add
 Run:
 
 ```powershell
-rg -n "164-widget-card-settings" e2e/maestro/maestro-e2e-tests.html
+rg -n "166-widget-card-settings" e2e/maestro/maestro-e2e-tests.html
 git add -- e2e/maestro/maestro-e2e-tests.html
 ```
 

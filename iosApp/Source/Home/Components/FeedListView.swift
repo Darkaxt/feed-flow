@@ -62,6 +62,7 @@ struct FeedListView: View {
     private let layoutWidthSettleDelay: Duration = .milliseconds(220)
 
     @State private var stableLayoutWidth: CGFloat = 0
+    @State private var pendingMarkAllReadAction: MarkAllReadAction?
 
     var body: some View {
         if loadingState is NoFeedSourcesStatus {
@@ -90,6 +91,7 @@ struct FeedListView: View {
                 GeometryReader { listProxy in
                     let itemFeedLayout = normalizedLayout
                     let currentWidth = listProxy.size.width
+                    let centeringMargin = max((currentWidth - maxContentWidth) / 2, 0)
                     let layoutDecisionWidth = stableLayoutWidth > 0 ? stableLayoutWidth : currentWidth
                     let isGridArrangement = isGridLayoutEnabled &&
                         itemFeedLayout.supportsGridArrangement &&
@@ -132,10 +134,9 @@ struct FeedListView: View {
                             .refreshable {
                                 onReloadClick()
                             }
-                            .contentMargins(
-                                .horizontal,
-                                max((currentWidth - maxContentWidth) / 2, 0),
-                                for: .scrollContent
+                            .centeredScrollContent(
+                                margin: centeringMargin,
+                                safeAreaInsets: listProxy.safeAreaInsets
                             )
                         }
                     }
@@ -147,6 +148,11 @@ struct FeedListView: View {
                     }
                 }
             }
+            .modifier(MarkAllReadConfirmations(
+                pendingAction: $pendingMarkAllReadAction,
+                onMarkAllAboveAsRead: onMarkAllAboveAsRead,
+                onMarkAllBelowAsRead: onMarkAllBelowAsRead
+            ))
         }
     }
 
@@ -266,8 +272,8 @@ struct FeedListView: View {
                 feedItem: feedItem,
                 onBookmarkClick: onBookmarkClick,
                 onReadStatusClick: onReadStatusClick,
-                onMarkAllAboveAsRead: onMarkAllAboveAsRead,
-                onMarkAllBelowAsRead: onMarkAllBelowAsRead,
+                onMarkAllAboveAsRead: { pendingMarkAllReadAction = .above(feedItemId: $0) },
+                onMarkAllBelowAsRead: { pendingMarkAllReadAction = .below(feedItemId: $0) },
                 onOpenFeedSettings: onOpenFeedSettings
             )
             .environment(browserSelector)
@@ -324,6 +330,67 @@ struct FeedListView: View {
                 VisibleFeedItem(id: $0.id, index: Int32($0.index))
             }
         indexHolder.visibleItemsChanged(visibleItems)
+    }
+}
+
+private extension View {
+    /// Centers the scroll content within the available width.
+    ///
+    /// The scroll view extends under the split view sidebar, so the margin has to be offset by the
+    /// safe area on each edge. A symmetric `.horizontal` margin would be swallowed by the sidebar
+    /// inset on the leading edge only, leaving the list off-center while the sidebar is open.
+    func centeredScrollContent(margin: CGFloat, safeAreaInsets: EdgeInsets) -> some View {
+        contentMargins(.leading, safeAreaInsets.leading + margin, for: .scrollContent)
+            .contentMargins(.trailing, safeAreaInsets.trailing + margin, for: .scrollContent)
+    }
+}
+
+private enum MarkAllReadAction {
+    case above(feedItemId: String)
+    case below(feedItemId: String)
+}
+
+private struct MarkAllReadConfirmations: ViewModifier {
+    @Binding var pendingAction: MarkAllReadAction?
+    let onMarkAllAboveAsRead: (String) -> Void
+    let onMarkAllBelowAsRead: (String) -> Void
+
+    private var isAbovePresented: Binding<Bool> {
+        Binding(
+            get: { if case .above = pendingAction { return true } else { return false } },
+            set: { if !$0 { pendingAction = nil } }
+        )
+    }
+
+    private var isBelowPresented: Binding<Bool> {
+        Binding(
+            get: { if case .below = pendingAction { return true } else { return false } },
+            set: { if !$0 { pendingAction = nil } }
+        )
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .confirmationDialog(
+                title: feedFlowStrings.markAllAboveAsReadConfirmationTitle,
+                message: feedFlowStrings.markAllAboveAsReadConfirmationMessage,
+                isPresented: isAbovePresented,
+                onConfirm: {
+                    if case let .above(feedItemId) = pendingAction {
+                        onMarkAllAboveAsRead(feedItemId)
+                    }
+                }
+            )
+            .confirmationDialog(
+                title: feedFlowStrings.markAllBelowAsReadConfirmationTitle,
+                message: feedFlowStrings.markAllBelowAsReadConfirmationMessage,
+                isPresented: isBelowPresented,
+                onConfirm: {
+                    if case let .below(feedItemId) = pendingAction {
+                        onMarkAllBelowAsRead(feedItemId)
+                    }
+                }
+            )
     }
 }
 

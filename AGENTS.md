@@ -119,6 +119,9 @@ Full automated E2E checks before release:
 - `e2e/scripts/run-ios.sh`
 
 When the user asks for the full Maestro release gate or a failure summary, use the repo-local `run-maestro-release-tests` skill. Its runner builds/installs both platforms, runs smoke + regression flows, continues after failures, and writes `report.html`, `report.md`, and logs under `.tmp/maestro-release-tests/<timestamp>/`.
+Each Maestro flow has a three-minute limit and the runner retries only driver/transport failures (up to three attempts). Treat a timeout or device-server failure as infrastructure first; inspect the archived per-attempt logs before changing app code.
+
+After any local Maestro run, restore the development subscriptions before handoff with `feedflow-restore-dev-feeds --platform android` or `--platform ios`. The all-platform wrapper and release runner do this automatically when the command is installed; run it explicitly after a single flow or a failed run.
 
 Use the debug seeding deep links documented in that guide. Do not depend on live feeds, OAuth, or previous app state in smoke or regression flows.
 
@@ -250,6 +253,7 @@ When creating commits:
 - ALWAYS build with xcodebuild with -quiet flag when building for iOS. If the command returns errors you may run xcodebuild again without the -quiet flag.
 - Direct xcodebuild alternative: `xcodebuild -project iosApp/FeedFlow.xcodeproj -scheme FeedFlow -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build -quiet`
 - IMPORTANT: The project now supports iOS 26 SDK (June 2025) while maintaining iOS 18 as the minimum deployment target. Use #available checks when adopting iOS 26+ APIs.
+- Keep app-group database work that may outlive an iOS foreground interval inside `withSuspensionGuard`; it uses `NSProcessInfo` and also works in the widget and share extensions.
 - Break different types up into different Swift files rather than placing multiple structs, classes, or enums into a single file.
 - Keep accessibility identifier enums in separate `*AccessibilityIdentifiers.swift` files, not appended to view files.
 - Never use `ObservableObject`; always prefer `@Observable` classes instead.
@@ -261,6 +265,9 @@ When creating commits:
 ### Reader mode
 - Use `ReaderModeEligibility.canOpenReaderMode` / `FeedItemUrlInfo.canOpenWebReaderMode()` as the shared gate before opening reader mode on Android, Desktop, and iOS. Ineligible links such as blank, non-http(s), media/PDF/download URLs, YouTube, and Telegram should fall back to the configured browser or `HtmlNotAvailable` behavior instead of attempting reader parsing.
 - URL-less items are a separate case: they are never web-reader eligible, but they still open in the reader from their feed content. Check `FeedItemUrlInfo.hasNoUrl()` first (it must bypass the whole `linkOpeningPreference` branch, since there is no URL any browser could open).
+
+### HTTP clients
+- Every Ktor client that can reach the Darwin engine must install `rejectUnsafeHosts()` after its plugins are configured. Its `HttpSend` interceptor validates every request and redirect hop, preventing malformed percent escapes or bare colons in hosts from terminating iOS.
 
 ### Timeline pagination
 - The feed list pages with a keyset cursor on `(pub_date, url_hash)`, never `LIMIT`/`OFFSET`: the timeline filters on `is_read` while mark-as-read-on-scroll mutates it mid-scroll, so a positional offset skips articles (issue #1319). Read **`.ai/PAGINATION.md`** before changing `selectFeeds` in `FeedItem.sq` or the cursor handling in `FeedStateRepository`.
@@ -287,3 +294,41 @@ When creating commits:
 - CI runs `.scripts/refresh-translations.sh` before checks; do this locally before pushing if translations changed
 - Debugging CI failures: `gh run list --limit=10`, then `gh run view <run-id> --log`
 - Red CI recovery loop: `gh run rerun <run-id>` (or `gh run rerun <run-id> --failed`), then fix and push until green
+
+### Microsoft Store (`pcenter`)
+
+The Store is driven by [`pcenter`](https://github.com/prof18/pcenter-cli), which replaced the
+PowerShell scripts in `.github/scripts/`. Locally: `brew install prof18/tap/pcenter`. In CI it
+runs in `windows-release.yml`'s `publish-store` job — a separate Linux job that takes the MSIX
+from the Windows build artifact, so a publish that fails on its own terms is re-runnable in a
+minute instead of rebuilding the package for an hour. Bump `PCENTER_VERSION` in its "Install
+pcenter" step to move the pinned version.
+
+- Reading changes nothing and is the place to start: `pcenter listing show`,
+  `pcenter submission status`, `pcenter rollout status`, `pcenter locales list`.
+- Credentials: `~/.config/pcenter/credentials.env` locally (`pcenter auth login`), `MS_STORE_*`
+  from repository secrets in CI. Never commit them.
+- `assets/storecopy/<locale>/` is the source of truth for listing copy. `.pcenter/` is a
+  gitignored scratch snapshot — never commit it, never hand-edit it.
+- **Never `pcenter listing push --yes` or `submission commit` unless the user explicitly asks.**
+  `--dry-run` first, always.
+
+The MSIX itself is built by `.scripts/package-msix.ps1`, which packs the jpackage app image
+(`createReleaseDistributable`) with `makeappx` against `.github/msix-manifest-template.xml`.
+Do not reintroduce the MSIX Packaging Tool / MSI-conversion route: it needs the
+`Msix.PackagingTool.Driver` FOD, which stopped installing on the hosted Windows image in
+August 2026, and the tool's own DISM call times out after 10 minutes with no way to extend it.
+Package languages still come from `.github/msix-resources-template.xml`. `Identity/Name` and
+`Identity/Publisher` in the manifest must match Partner Center or the upload is rejected.
+
+To test that package locally, `.scripts/install-msix-dev.ps1` unpacks it, rewrites the identity
+to `MarcoGomiero.FeedFlowRSSReaderDev` and the display name to "FeedFlow (Dev)", and registers
+it. The rename matters: registering under the shipping identity makes Windows treat the build
+as an update to an installed Store FeedFlow and replace it. Needs Developer Mode, no signing.
+It registers loose files out of `desktopApp/build`, so re-run it after every rebuild; clean up
+with `-Uninstall`. Running the app image directly is the quicker check, but only the registered
+package exercises the manifest, the Start-menu entry and the tiles.
+
+For the actual workflows — syncing listing text, replacing screenshots, adding or removing a
+Store language, Store field limits, rescuing a stuck submission or rollout — use the repo-local
+`update-microsoft-store-listing` skill instead of expanding this section.

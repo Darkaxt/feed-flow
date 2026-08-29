@@ -4,6 +4,7 @@ package com.prof18.feedflow.android.e2e
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Base64
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -35,14 +36,18 @@ import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
 import com.prof18.feedflow.shared.domain.model.WidgetTextColorMode
+import com.prof18.feedflow.shared.domain.opml.OpmlFeedHandler
+import com.prof18.feedflow.shared.domain.opml.OpmlInput
 import com.prof18.feedflow.shared.e2e.E2eSeedProfile
 import com.prof18.feedflow.shared.e2e.E2eSeedRunner
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
+import java.io.ByteArrayInputStream
 
 class E2eSeedActivity : BaseThemeActivity() {
 
     private val seedRunner by inject<E2eSeedRunner>()
+    private val opmlFeedHandler by inject<OpmlFeedHandler>()
     private val widgetSettingsRepository by inject<WidgetSettingsRepository>()
 
     private var uiState by mutableStateOf<E2eSeedUiState>(E2eSeedUiState.Running)
@@ -123,6 +128,7 @@ class E2eSeedActivity : BaseThemeActivity() {
         val profileName = uri?.getQueryParameter("profile")
         val accountName = uri?.getQueryParameter("account")
         val deepLinkUrl = uri?.getQueryParameter("url")
+        val opmlPayload = uri?.getQueryParameter("opml")
 
         if (action == null) {
             uiState = E2eSeedUiState.Error("Missing E2E seed action")
@@ -142,7 +148,18 @@ class E2eSeedActivity : BaseThemeActivity() {
         lifecycleScope.launch {
             try {
                 resetWidgetSettings()
-                seedRunner.run(action = action, profileName = profileName, accountName = accountName)
+                if (action == ACTION_RESTORE_DEVELOPMENT) {
+                    val opmlBytes = Base64.decode(
+                        requireNotNull(opmlPayload) { "Missing development OPML payload" },
+                        Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP,
+                    )
+                    val feedSources = opmlFeedHandler.generateFeedSources(
+                        OpmlInput { ByteArrayInputStream(opmlBytes) },
+                    )
+                    seedRunner.resetAndSeedDevelopmentFeeds(feedSources)
+                } else {
+                    seedRunner.run(action = action, profileName = profileName, accountName = accountName)
+                }
                 if (action != E2eSeedRunner.ACTION_RESET && profile == E2eSeedProfile.ANDROID_WIDGET) {
                     seedRunner.seedAndroidWidgetFreshnessProfile(freshnessReferenceNowMillis)
                     applyAndroidWidgetProfile()
@@ -201,6 +218,7 @@ class E2eSeedActivity : BaseThemeActivity() {
 
     private companion object {
         const val ACTION_OPEN_DEEP_LINK = "open-deep-link"
+        const val ACTION_RESTORE_DEVELOPMENT = "restore-development"
     }
 }
 

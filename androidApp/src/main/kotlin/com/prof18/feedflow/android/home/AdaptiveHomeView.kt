@@ -1,5 +1,9 @@
 package com.prof18.feedflow.android.home
 
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -21,10 +25,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.prof18.feedflow.android.home.drawer.AndroidDrawer
 import com.prof18.feedflow.core.model.FeedFilter
 import com.prof18.feedflow.core.model.FeedOrder
+import com.prof18.feedflow.core.model.SwipeActionType.NONE
 import com.prof18.feedflow.shared.presentation.model.HomeViewMenuState
 import com.prof18.feedflow.shared.ui.home.FeedListActions
 import com.prof18.feedflow.shared.ui.home.FeedManagementActions
@@ -33,6 +44,7 @@ import com.prof18.feedflow.shared.ui.home.ShareBehavior
 import com.prof18.feedflow.shared.ui.utils.LocalReduceMotion
 import com.prof18.feedflow.shared.ui.utils.scrollToItemConditionally
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 @Suppress("MultipleEmitters")
 @Composable
@@ -152,9 +164,14 @@ fun AdaptiveHomeView(
         }
     } else {
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+        val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
         ModalNavigationDrawer(
             modifier = modifier,
             drawerState = drawerState,
+            // Material3 puts its drag handle on the whole content, so any horizontal drag over the
+            // feed list pulled the drawer open mid-scroll. Those drags are handled by
+            // claimHorizontalDragsForDrawer below; this keeps drag-to-close once it is open.
+            gesturesEnabled = drawerState.isOpen,
             drawerContent = {
                 ModalDrawerSheet(
                     drawerContainerColor = MaterialTheme.colorScheme.background,
@@ -194,6 +211,13 @@ fun AdaptiveHomeView(
             },
         ) {
             HomeContentInternal(
+                modifier = Modifier.claimHorizontalDragsForDrawer(
+                    isRtl = isRtl,
+                    // SwipeableActionsBox mirrors startActions in RTL, so rightSwipeAction is the
+                    // drawer-opening row action in both layout directions.
+                    drawerOpeningSwipeHasPriority = displayState.swipeActions.rightSwipeAction == NONE,
+                    onOpen = { scope.launch { drawerState.open() } },
+                ),
                 showDrawerMenu = true,
                 onDrawerMenuClick = {
                     scope.launch {
@@ -206,5 +230,115 @@ fun AdaptiveHomeView(
                 },
             )
         }
+    }
+}
+
+/**
+ * Claims horizontal drags over the home content on behalf of the drawer.
+ *
+ * Consuming them is the part that carries weight, including the drags that open nothing: a feed
+ * item cancels its click only once something consumes the gesture, so leaving them unconsumed
+ * turns every horizontal drag into an article tap when swipe actions are off. Material3 used to
+ * consume them as a side effect of its own drag handle, which `gesturesEnabled` now switches off
+ * while the drawer is closed. Dropping this modifier therefore reintroduces that tap.
+ *
+ * An unclaimed horizontal drag toward the drawer opens it. Because this modifier runs inside
+ * [ModalNavigationDrawer], descendants handle the gesture first: the feed list keeps vertical
+ * drags and a configured feed-item swipe action keeps horizontal drags over its row.
+ *
+ * SwipeableActionsBox consumes both directions whenever either row action exists. When the action
+ * in the drawer-opening direction is disabled, [drawerOpeningSwipeHasPriority] claims only that
+ * direction during the initial pointer pass so the row cannot consume an action it does not have.
+ * If that action is configured, the initial detector stays inactive and the row keeps priority.
+ *
+ * This deliberately does not require a drag from the screen edge. Gesture navigation reserves that
+ * edge for Back, while a content swipe remains available in every navigation mode.
+ */
+private fun Modifier.claimHorizontalDragsForDrawer(
+    isRtl: Boolean,
+    drawerOpeningSwipeHasPriority: Boolean,
+    onOpen: () -> Unit,
+): Modifier = this
+    .claimDisabledDrawerDirection(
+        isRtl = isRtl,
+        enabled = drawerOpeningSwipeHasPriority,
+        onOpen = onOpen,
+    )
+    .claimUnhandledHorizontalDrags(isRtl = isRtl, onOpen = onOpen)
+
+private fun Modifier.claimDisabledDrawerDirection(
+    isRtl: Boolean,
+    enabled: Boolean,
+    onOpen: () -> Unit,
+): Modifier = pointerInput(isRtl, enabled) {
+    if (!enabled) return@pointerInput
+
+    awaitEachGesture {
+        val down = awaitFirstDown(
+            requireUnconsumed = false,
+            pass = PointerEventPass.Initial,
+        )
+        while (true) {
+            val change = awaitPointerEvent(PointerEventPass.Initial)
+                .changes
+                .firstOrNull { it.id == down.id }
+                ?: return@awaitEachGesture
+            if (!change.pressed) {
+                return@awaitEachGesture
+            }
+
+            val dragOffset = change.position - down.position
+            val horizontalDistance = abs(dragOffset.x)
+            val verticalDistance = abs(dragOffset.y)
+            val crossedTouchSlop = horizontalDistance > viewConfiguration.touchSlop ||
+                verticalDistance > viewConfiguration.touchSlop
+            if (!crossedTouchSlop) {
+                continue
+            }
+
+            val isHorizontalSwipe = horizontalDistance > verticalDistance * 2f
+            val opensDrawer = if (isRtl) dragOffset.x < 0f else dragOffset.x > 0f
+            if (isHorizontalSwipe && opensDrawer) {
+                change.consume()
+                onOpen()
+                consumeUntilRelease(down.id)
+            }
+            return@awaitEachGesture
+        }
+    }
+}
+
+private suspend fun AwaitPointerEventScope.consumeUntilRelease(pointerId: PointerId) {
+    while (true) {
+        val change = awaitPointerEvent(PointerEventPass.Initial)
+            .changes
+            .firstOrNull { it.id == pointerId }
+            ?: return
+        change.consume()
+        if (!change.pressed) {
+            return
+        }
+    }
+}
+
+private fun Modifier.claimUnhandledHorizontalDrags(
+    isRtl: Boolean,
+    onOpen: () -> Unit,
+): Modifier = pointerInput(isRtl) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+
+        var overSlop = 0f
+        val drag = awaitHorizontalTouchSlopOrCancellation(down.id) { change, slop ->
+            change.consume()
+            overSlop = slop
+        } ?: return@awaitEachGesture
+
+        val opensDrawer = if (isRtl) overSlop < 0f else overSlop > 0f
+        if (opensDrawer) {
+            onOpen()
+        }
+
+        horizontalDrag(drag.id) { change -> change.consume() }
     }
 }

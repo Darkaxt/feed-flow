@@ -17,7 +17,8 @@ class FeedItemParserWorkerIos: FeedItemParserWorker {
     ) {
         DispatchQueue.main.async { [weak self] in
             guard let this = self else { return }
-            let shouldSaveContent = Deps.shared.getSettingsRepository().isSaveItemContentOnOpenEnabled()
+            let settingsRepository = Deps.shared.getSettingsRepository()
+            let shouldSaveContent = settingsRepository.isSaveItemContentOnOpenEnabled()
             this.handleParsing(
                 feedItemId: feedItemId,
                 url: url,
@@ -91,7 +92,11 @@ class FeedItemParserWorkerIos: FeedItemParserWorker {
         }
     }
 
-    private func saveContent(_ data: Data, feedItemId: String, completionHandler: @escaping () -> Void) {
+    private func saveContent(
+        _ data: Data,
+        feedItemId: String,
+        completionHandler: @escaping () -> Void
+    ) {
         DispatchQueue.global(qos: .utility).async {
             let fileURL = self.getContentPath(feedItemId: feedItemId)
             do {

@@ -27,6 +27,7 @@ class ReadingBehaviorSettingsViewModel internal constructor(
     private fun loadSettings() {
         val isSaveReaderModeContentEnabled = settingsRepository.isSaveItemContentOnOpenEnabled()
         val isPrefetchArticleContentEnabled = settingsRepository.isPrefetchArticleContentEnabled()
+        val isKleadParserEnabled = settingsRepository.isKleadParserEnabled()
         val isMarkReadWhenScrollingEnabled = settingsRepository.getMarkFeedAsReadWhenScrolling()
         val isShowReadItemsEnabled = settingsRepository.getShowReadArticlesTimeline()
         val isHideReadItemsEnabled = settingsRepository.getHideReadItems()
@@ -36,6 +37,7 @@ class ReadingBehaviorSettingsViewModel internal constructor(
             ReadingBehaviorState(
                 isSaveReaderModeContentEnabled = isSaveReaderModeContentEnabled,
                 isPrefetchArticleContentEnabled = isPrefetchArticleContentEnabled,
+                isKleadParserEnabled = isKleadParserEnabled,
                 isMarkReadWhenScrollingEnabled = isMarkReadWhenScrollingEnabled,
                 isShowReadItemsEnabled = isShowReadItemsEnabled,
                 isHideReadItemsEnabled = isHideReadItemsEnabled,
@@ -62,6 +64,13 @@ class ReadingBehaviorSettingsViewModel internal constructor(
         settingsRepository.setPrefetchArticleContent(value)
         stateMutableFlow.update {
             it.copy(isPrefetchArticleContentEnabled = value)
+        }
+    }
+
+    fun updateKleadParserEnabled(value: Boolean) {
+        settingsRepository.setKleadParserEnabled(value)
+        stateMutableFlow.update {
+            it.copy(isKleadParserEnabled = value)
         }
     }
 

@@ -36,7 +36,6 @@ internal class AndroidFeedItemParserWorker(
 
     override suspend fun parse(feedItemId: String, url: String, imageUrl: String?): ParsingResult {
         logger.d { "Triggering immediate parsing for: $url (feedItemId: $feedItemId)" }
-
         val result = foregroundParser.parseFeedItem(url)
         if (result is ParsingResult.Success) {
             val content = result.htmlContent
