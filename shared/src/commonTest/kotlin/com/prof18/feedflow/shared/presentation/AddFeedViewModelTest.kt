@@ -15,6 +15,7 @@ import com.prof18.feedflow.shared.test.TestDispatcherProvider.testDispatcher
 import com.prof18.feedflow.shared.test.generators.FeedSourceGenerator
 import com.prof18.feedflow.shared.test.generators.RssChannelGenerator
 import com.prof18.feedflow.shared.test.toParsedFeedSource
+import com.prof18.feedflow.shared.test.unexpectedRequestHttpClient
 import com.prof18.rssparser.model.RssChannel
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -73,6 +74,7 @@ class AddFeedViewModelTest : KoinTestBase() {
                         }
                     }
                 },
+                forbiddenFallbackClient = unexpectedRequestHttpClient(),
             )
         }
     }
@@ -130,6 +132,26 @@ class AddFeedViewModelTest : KoinTestBase() {
         val feedSources = databaseHelper.getFeedSources()
         assertEquals(1, feedSources.size)
         assertEquals(rssUrl, feedSources.first().url)
+    }
+
+    @Test
+    fun `addFeed emits already exists and resets notification status`() = runTest(testDispatcher) {
+        val viewModel = getViewModel()
+        viewModel.feedAddedState.test {
+            viewModel.updateFeedUrlTextFieldValue(rssUrl)
+            assertEquals(FeedAddedState.FeedNotAdded, awaitItem())
+            viewModel.addFeed()
+            assertEquals(FeedAddedState.Loading, awaitItem())
+            assertIs<FeedAddedState.FeedAdded>(awaitItem())
+
+            viewModel.updateNotificationStatus(true)
+            viewModel.addFeed()
+            assertEquals(FeedAddedState.Loading, awaitItem())
+            assertEquals(FeedAddedState.FeedAlreadyExists("Example Feed"), awaitItem())
+        }
+        advanceUntilIdle()
+        assertEquals(false, viewModel.isNotificationEnabledState.value)
+        assertEquals(1, databaseHelper.getFeedSources().size)
     }
 
     @Test

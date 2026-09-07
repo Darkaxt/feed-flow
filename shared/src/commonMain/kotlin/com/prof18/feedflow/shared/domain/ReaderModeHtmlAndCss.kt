@@ -57,6 +57,32 @@ fun getReaderModeStyledHtml(
         </div>
     </div>
     <script>
+        // Instagram sends JSON MEASURE messages as its media and caption finish loading.
+        window.addEventListener("message", function(event) {
+            if (event.origin !== "https://www.instagram.com") return;
+
+            var payload;
+            try {
+                payload = JSON.parse(event.data);
+            } catch (error) {
+                return;
+            }
+            if (!payload || payload.type !== "MEASURE") return;
+
+            var height = Number(payload.details && payload.details.height);
+            if (!Number.isFinite(height) || height <= 0 || height > 10000) return;
+
+            var instagramFrames = document.querySelectorAll(
+                'iframe[src^="https://www.instagram.com/"]'
+            );
+            var sourceFrame = Array.prototype.find.call(instagramFrames, function(frame) {
+                return frame.contentWindow === event.source;
+            });
+            if (!sourceFrame) return;
+
+            sourceFrame.style.height = Math.ceil(height) + "px";
+        });
+
         window.addEventListener("message", function(event) {
             if (event.origin !== "https://platform.twitter.com") return;
 
@@ -179,6 +205,7 @@ private fun hasLeadingImage(content: String): Boolean {
     if (imageIndex < 0) return false
 
     val visiblePrefix = content.substring(0, imageIndex)
+        .replace(HTML_HEADING_REGEX, " ")
         .replace(HTML_ELEMENT_REGEX, " ")
         .replace("&nbsp;", " ", ignoreCase = true)
         .replace(HTML_WHITESPACE_REGEX, " ")
@@ -187,6 +214,10 @@ private fun hasLeadingImage(content: String): Boolean {
 }
 
 private const val MAX_LEADING_IMAGE_PREFIX_LENGTH = 200
+private val HTML_HEADING_REGEX = Regex(
+    """<h[1-6]\b[^>]*>.*?</h[1-6]\s*>""",
+    setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+)
 private val HTML_ELEMENT_REGEX = Regex("<[^>]*>")
 private val HTML_WHITESPACE_REGEX = Regex("\\s+")
 
