@@ -4,9 +4,13 @@ import co.touchlab.kermit.Logger
 import com.dropbox.core.DbxException
 import com.dropbox.core.DbxRequestConfig
 import com.dropbox.core.NetworkIOException
+import com.dropbox.core.http.HttpRequestor
 import com.dropbox.core.oauth.DbxCredential
 import com.dropbox.core.v2.DbxClientV2
+import com.dropbox.core.v2.files.DownloadErrorException
+import com.dropbox.core.v2.files.UploadErrorException
 import com.dropbox.core.v2.files.WriteMode
+import com.prof18.feedflow.core.model.CloudBackupNotFoundException
 import com.prof18.feedflow.core.model.DropboxClientStatus
 import com.prof18.feedflow.core.utils.DispatcherProvider
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -21,6 +25,7 @@ import kotlin.coroutines.resumeWithException
 internal class DropboxDataSourceJvm(
     private val logger: Logger,
     private val dispatcherProvider: DispatcherProvider,
+    private val httpRequestor: HttpRequestor? = null,
 ) : DropboxDataSource {
 
     private var dropboxClient: DbxClientV2? = null
@@ -59,6 +64,9 @@ internal class DropboxDataSourceJvm(
         val requestConfig = DbxRequestConfig
             .newBuilder(DropboxConstants.DROPBOX_CLIENT_IDENTIFIER)
             .withUserLocale(userLocale)
+            .apply {
+                httpRequestor?.let { withHttpRequestor(it) }
+            }
             .build()
         return DbxClientV2(requestConfig, credentials)
     }
@@ -103,9 +111,14 @@ internal class DropboxDataSourceJvm(
         suspendCancellableCoroutine { continuation ->
             try {
                 val client = requireNotNull(dropboxClient)
+                val writeMode = uploadParam.expectedRevision
+                    ?.let(WriteMode::update)
+                    ?: WriteMode.ADD
                 val metadata = client.files()
                     ?.uploadBuilder(uploadParam.path)
-                    ?.withMode(WriteMode.OVERWRITE)
+                    ?.withMode(writeMode)
+                    ?.withAutorename(false)
+                    ?.withStrictConflict(true)
                     ?.uploadAndFinish(FileInputStream(uploadParam.file))
 
                 val id = metadata?.id
@@ -120,11 +133,19 @@ internal class DropboxDataSourceJvm(
                         editDateMillis = editTime.time,
                         sizeInByte = size,
                         contentHash = hash,
+                        revision = metadata.rev,
                     )
                     continuation.resume(uploadResult)
                 } else {
                     logger.d { "Metadata from Dropbox are null" }
                     continuation.resumeWithException(DropboxUploadException("Metadata from Dropbox are null"))
+                }
+            } catch (e: UploadErrorException) {
+                if (e.errorValue.isPath && e.errorValue.pathValue.reason.isConflict) {
+                    continuation.resumeWithException(DropboxUploadConflictException(e))
+                } else {
+                    logger.e(e) { "Error while uploading data on Dropbox" }
+                    continuation.resumeWithException(DropboxUploadException(exceptionCause = e))
                 }
             } catch (e: Exception) {
                 if (!isTemporaryNetworkError(e)) {
@@ -145,18 +166,27 @@ internal class DropboxDataSourceJvm(
                 val id = metadata?.id
                 val contentHash = metadata?.contentHash
                 val sizeInBytes = metadata?.size ?: 0
+                val revision = metadata?.rev
                 logger.d { "Dropbox content hash on download is: $contentHash" }
                 if (id != null) {
                     val downloadResult = DropboxDownloadResult(
                         id = id,
                         sizeInByte = sizeInBytes,
                         contentHash = contentHash,
+                        revision = revision,
                     )
                     continuation.resume(downloadResult)
                 } else {
                     logger.d { "Metadata from Dropbox are null" }
                     continuation.resumeWithException(DropboxDownloadException("Metadata from Dropbox are null"))
                 }
+            } catch (e: DownloadErrorException) {
+                val error = if (e.errorValue.isPath && e.errorValue.pathValue.isNotFound) {
+                    CloudBackupNotFoundException()
+                } else {
+                    DropboxDownloadException(exceptionCause = e)
+                }
+                continuation.resumeWithException(error)
             } catch (e: Exception) {
                 if (!isTemporaryNetworkError(e)) {
                     logger.e(e) { "Error while downloading data from Dropbox" }

@@ -87,8 +87,14 @@ internal class FeedActionsRepository(
             SyncAccounts.GOOGLE_DRIVE,
             SyncAccounts.ICLOUD,
             -> {
-                databaseHelper.updateReadStatus(feedItemIds, isRead)
-                feedSyncRepository.setIsSyncUploadRequired()
+                val cloudSessionId = feedSyncRepository.cloudSessionForEdit()
+                databaseHelper.updateReadStatus(
+                    feedItemIds,
+                    isRead,
+                    cloudSessionId = cloudSessionId,
+                    withCurrentSession = feedSyncRepository.cloudEditGuard(cloudSessionId),
+                )
+                feedSyncRepository.localEditCommitted(cloudSessionId)
             }
         }
     }
@@ -169,11 +175,22 @@ internal class FeedActionsRepository(
             SyncAccounts.GOOGLE_DRIVE,
             SyncAccounts.ICLOUD,
             -> {
+                val cloudSessionId = feedSyncRepository.cloudSessionForEdit()
                 when (feedOrder) {
-                    FeedOrder.NEWEST_FIRST -> databaseHelper.markAllNewerAsRead(targetItemId, currentFilter)
-                    FeedOrder.OLDEST_FIRST -> databaseHelper.markAllOlderAsRead(targetItemId, currentFilter)
+                    FeedOrder.NEWEST_FIRST -> databaseHelper.markAllNewerAsRead(
+                        targetItemId,
+                        currentFilter,
+                        cloudSessionId = cloudSessionId,
+                        withCurrentSession = feedSyncRepository.cloudEditGuard(cloudSessionId),
+                    )
+                    FeedOrder.OLDEST_FIRST -> databaseHelper.markAllOlderAsRead(
+                        targetItemId,
+                        currentFilter,
+                        cloudSessionId = cloudSessionId,
+                        withCurrentSession = feedSyncRepository.cloudEditGuard(cloudSessionId),
+                    )
                 }
-                feedSyncRepository.setIsSyncUploadRequired()
+                feedSyncRepository.localEditCommitted(cloudSessionId)
             }
         }
         // Update the in-memory state without reloading everything
@@ -212,11 +229,22 @@ internal class FeedActionsRepository(
             SyncAccounts.GOOGLE_DRIVE,
             SyncAccounts.ICLOUD,
             -> {
+                val cloudSessionId = feedSyncRepository.cloudSessionForEdit()
                 when (feedOrder) {
-                    FeedOrder.NEWEST_FIRST -> databaseHelper.markAllOlderAsRead(targetItemId, currentFilter)
-                    FeedOrder.OLDEST_FIRST -> databaseHelper.markAllNewerAsRead(targetItemId, currentFilter)
+                    FeedOrder.NEWEST_FIRST -> databaseHelper.markAllOlderAsRead(
+                        targetItemId,
+                        currentFilter,
+                        cloudSessionId = cloudSessionId,
+                        withCurrentSession = feedSyncRepository.cloudEditGuard(cloudSessionId),
+                    )
+                    FeedOrder.OLDEST_FIRST -> databaseHelper.markAllNewerAsRead(
+                        targetItemId,
+                        currentFilter,
+                        cloudSessionId = cloudSessionId,
+                        withCurrentSession = feedSyncRepository.cloudEditGuard(cloudSessionId),
+                    )
                 }
-                feedSyncRepository.setIsSyncUploadRequired()
+                feedSyncRepository.localEditCommitted(cloudSessionId)
             }
         }
         // Update the in-memory state without reloading everything
@@ -248,8 +276,13 @@ internal class FeedActionsRepository(
             SyncAccounts.GOOGLE_DRIVE,
             SyncAccounts.ICLOUD,
             -> {
-                databaseHelper.markAllFeedAsRead(feedFilter)
-                feedSyncRepository.setIsSyncUploadRequired()
+                val cloudSessionId = feedSyncRepository.cloudSessionForEdit()
+                databaseHelper.markAllFeedAsRead(
+                    feedFilter,
+                    cloudSessionId = cloudSessionId,
+                    withCurrentSession = feedSyncRepository.cloudEditGuard(cloudSessionId),
+                )
+                feedSyncRepository.localEditCommitted(cloudSessionId)
             }
         }
         feedStateRepository.getFeeds()
@@ -288,8 +321,14 @@ internal class FeedActionsRepository(
             SyncAccounts.GOOGLE_DRIVE,
             SyncAccounts.ICLOUD,
             -> {
-                databaseHelper.updateBookmarkStatus(feedItemId, isBookmarked)
-                feedSyncRepository.setIsSyncUploadRequired()
+                val cloudSessionId = feedSyncRepository.cloudSessionForEdit()
+                databaseHelper.updateBookmarkStatus(
+                    feedItemId,
+                    isBookmarked,
+                    cloudSessionId = cloudSessionId,
+                    withCurrentSession = feedSyncRepository.cloudEditGuard(cloudSessionId),
+                )
+                feedSyncRepository.localEditCommitted(cloudSessionId)
             }
         }
 

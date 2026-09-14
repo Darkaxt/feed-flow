@@ -1,7 +1,7 @@
 package com.prof18.feedflow.shared.domain.feedsync
 
 import co.touchlab.kermit.Logger
-import co.touchlab.sqliter.interop.SQLiteException
+import com.prof18.feedflow.core.model.CloudBackupNotFoundException
 import com.prof18.feedflow.core.model.SyncAccounts
 import com.prof18.feedflow.core.model.SyncDownloadError
 import com.prof18.feedflow.core.model.SyncFeedError
@@ -15,10 +15,12 @@ import com.prof18.feedflow.core.utils.getAppGroupDatabasePath
 import com.prof18.feedflow.core.utils.withSuspensionGuard
 import com.prof18.feedflow.feedsync.database.data.SyncedDatabaseHelper.Companion.SYNC_DATABASE_NAME_DEBUG
 import com.prof18.feedflow.feedsync.database.data.SyncedDatabaseHelper.Companion.SYNC_DATABASE_NAME_PROD
+import com.prof18.feedflow.feedsync.database.data.prepareSyncDatabaseFile
 import com.prof18.feedflow.feedsync.dropbox.DropboxDataSource
 import com.prof18.feedflow.feedsync.dropbox.DropboxDownloadParam
 import com.prof18.feedflow.feedsync.dropbox.DropboxSettings
 import com.prof18.feedflow.feedsync.dropbox.DropboxStringCredentials
+import com.prof18.feedflow.feedsync.dropbox.DropboxUploadConflictException
 import com.prof18.feedflow.feedsync.dropbox.DropboxUploadParam
 import com.prof18.feedflow.feedsync.googledrive.GoogleDriveDataSourceIos
 import com.prof18.feedflow.feedsync.googledrive.GoogleDriveDownloadParam
@@ -34,6 +36,7 @@ import kotlinx.cinterop.alloc
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.value
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -47,6 +50,7 @@ import platform.Foundation.NSError
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSFileManagerItemReplacementUsingNewMetadataOnly
 import platform.Foundation.NSURL
+import platform.Foundation.NSUUID
 import kotlin.coroutines.resume
 import kotlin.time.Clock
 
@@ -58,15 +62,19 @@ internal class FeedSyncIosWorker(
     private val iCloudDataSource: ICloudDataSource,
     private val logger: Logger,
     private val feedSyncer: FeedSyncer,
+    private val pendingCloudChanges: PendingCloudChangesManager,
     private val appEnvironment: AppEnvironment,
     private val dropboxSettings: DropboxSettings,
     private val googleDriveSettings: GoogleDriveSettings,
     private val settingsRepository: SettingsRepository,
     private val accountsRepository: AccountsRepository,
     private val iCloudSettings: ICloudSettings,
+    private val databaseDirectory: String? = null,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : FeedSyncWorker {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
+    private var downloadSession: String? = null
+    private var dropboxRevision: String? = null
 
     override fun upload() {
         scope.launch {
@@ -88,36 +96,58 @@ internal class FeedSyncIosWorker(
 
     private suspend fun performUploadInternal() {
         mutex.withLock {
+            var snapshot: NSURL? = null
             try {
-                logger.w { "Starting upload" }
-                feedSyncer.populateSyncDbIfEmpty()
-                feedSyncer.updateFeedItemsToSyncDatabase()
-                feedSyncer.closeDB()
-                logger.w { "Sync database populated and closed" }
-
-                val databasePath = getDatabaseUrl()
-                if (databasePath == null) {
-                    logger.e { "Database URL is null, cannot perform upload" }
-                    emitErrorMessage()
-                    return@withLock
-                }
-                accountSpecificUpload(databasePath)
-                settingsRepository.setIsSyncUploadRequired(false)
-                emitSuccessMessage()
-            } catch (e: SQLiteException) {
-                logger.e(e) { "SQLiteException during upload" }
-                try {
-                    feedSyncer.closeDB()
-                    logger.d { "Sync database closed after error" }
-                    getDatabaseUrl()?.let { path ->
-                        NSFileManager.defaultManager.removeItemAtURL(path, null)
-                        feedSyncer.populateSyncDbIfEmpty()
-                        logger.d { "Sync database recreated after error" }
+                val uploadSession = requireNotNull(pendingCloudChanges.sessionForEdit())
+                retryDropboxConflicts {
+                    snapshot?.let { NSFileManager.defaultManager.removeItemAtURL(it, null) }
+                    snapshot = null
+                    val uploadAccount = accountsRepository.getCurrentSyncAccount()
+                    val result = downloadLocked(
+                        isFirstSync = false,
+                        expectedSession = uploadSession,
+                    )
+                    pendingCloudChanges.checkAccountSession(uploadSession)
+                    when {
+                        result is SyncResult.BackupNotFound -> feedSyncer.prepareInitialUpload()
+                        result.isError() -> {
+                            feedSyncMessageQueue.emitResult(result)
+                            return@withLock
+                        }
                     }
-                } catch (_: Exception) {
-                    // best effort
-                    logger.e { "Database recreation after error failed" }
+                    if (uploadAccount == SyncAccounts.DROPBOX && result !is SyncResult.BackupNotFound) {
+                        requireNotNull(dropboxRevision) { "Dropbox download did not return a revision" }
+                    }
+                    val pendingBatch = pendingCloudChanges.capturePendingChanges()
+                    val uploadGeneration = settingsRepository.captureSyncUploadGeneration()
+                    pendingCloudChanges.applyChangesToSyncDatabase(pendingBatch)
+
+                    val databasePath = getDatabaseUrl()
+                    if (databasePath == null) {
+                        logger.e { "Database URL is null, cannot perform upload" }
+                        emitErrorMessage()
+                        return@withLock
+                    }
+                    snapshot = requireNotNull(databasePath.URLByDeletingLastPathComponent)
+                        .URLByAppendingPathComponent("cloud-upload-${NSUUID().UUIDString}.db")
+                    feedSyncer.withClosedDatabase {
+                        val copied = NSFileManager.defaultManager.copyItemAtURL(
+                            databasePath,
+                            requireNotNull(snapshot),
+                            null,
+                        )
+                        check(copied) {
+                            "Failed to export sync database"
+                        }
+                    }
+                    pendingCloudChanges.checkAccountSession(uploadSession)
+                    accountSpecificUpload(requireNotNull(snapshot), uploadAccount)
+                    pendingCloudChanges.markChangesAsUploaded(pendingBatch)
+                    settingsRepository.acknowledgeSyncUpload(uploadGeneration)
+                    emitSuccessMessage()
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.e("Upload failed", e)
                 if (e.message?.contains("FeedFlow.DropboxErrors") == true) {
@@ -125,34 +155,49 @@ internal class FeedSyncIosWorker(
                 } else {
                     emitErrorMessage()
                 }
+            } finally {
+                snapshot?.let { NSFileManager.defaultManager.removeItemAtURL(it, null) }
             }
         }
     }
 
     override suspend fun download(isFirstSync: Boolean): SyncResult = withContext(dispatcherProvider.io) {
         return@withContext withSuspensionGuard("FeedFlow sync download") {
-            mutex.withLock {
-                try {
-                    feedSyncer.closeDB()
-                    accountSpecificDownload(isFirstSync)
-                } catch (e: Exception) {
-                    if (!isFirstSync) {
-                        logger.e("Download failed", e)
-                    }
-                    SyncResult.General(SyncDownloadError.DropboxDownloadFailed)
-                }
-            }
+            mutex.withLock { downloadLocked(isFirstSync) }
         }
     }
+
+    private suspend fun downloadLocked(
+        isFirstSync: Boolean,
+        expectedSession: String? = null,
+    ): SyncResult =
+        try {
+            dropboxRevision = null
+            downloadSession = pendingCloudChanges.sessionForEdit()
+            if (expectedSession != null) pendingCloudChanges.checkAccountSession(expectedSession)
+            feedSyncer.resetDownloadedSnapshotState()
+            accountSpecificDownload(isFirstSync)
+        } catch (_: CloudBackupNotFoundException) {
+            SyncResult.BackupNotFound(syncDownloadErrorForAccount(accountsRepository.getCurrentSyncAccount()))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (!isFirstSync) {
+                logger.e("Download failed", e)
+            }
+            SyncResult.General(syncDownloadErrorForAccount(accountsRepository.getCurrentSyncAccount()))
+        }
 
     override suspend fun syncFeedSources(): SyncResult = withContext(dispatcherProvider.io) {
         mutex.withLock {
             try {
                 logger.w { "Start syncing feed sources" }
-                feedSyncer.syncFeedSourceCategory()
+                feedSyncer.syncFeedSourceCategory(downloadSession)
                 feedSyncer.syncFeedSource()
                 logger.w { "Syncing feed sources finished" }
                 SyncResult.Success
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.e("Sync feed sources failed", e)
                 SyncResult.General(SyncFeedError.FeedSourcesSyncFailed)
@@ -164,9 +209,11 @@ internal class FeedSyncIosWorker(
         mutex.withLock {
             try {
                 logger.w { "Start syncing feed items" }
-                feedSyncer.syncFeedItem()
+                feedSyncer.syncFeedItem(downloadSession)
                 logger.w { "Syncing feed items finished" }
                 SyncResult.Success
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 logger.e("Sync feed items failed", e)
                 SyncResult.General(SyncFeedError.FeedItemsSyncFailed)
@@ -215,16 +262,26 @@ internal class FeedSyncIosWorker(
     }
 
     private fun getDatabaseUrl(): NSURL? =
-        NSURL.fileURLWithPath(getAppGroupDatabasePath())
+        NSURL.fileURLWithPath(databaseDirectory ?: getAppGroupDatabasePath())
             .URLByAppendingPathComponent(getDatabaseName())
 
-    private fun replaceDatabase(url: NSURL): Boolean {
+    private suspend fun replaceDatabase(url: NSURL): Boolean {
+        prepareSyncDatabaseFile(url)
+        return feedSyncer.withClosedDatabase {
+            pendingCloudChanges.withAccountSession(downloadSession) { replaceClosedDatabase(url) }
+        }
+    }
+
+    private fun replaceClosedDatabase(url: NSURL): Boolean {
         val dbUrl = getDatabaseUrl()
         if (dbUrl != null) {
+            if (!NSFileManager.defaultManager.fileExistsAtPath(requireNotNull(dbUrl.path))) {
+                return NSFileManager.defaultManager.moveItemAtURL(url, dbUrl, null)
+            }
             // Replace the database
             memScoped {
                 val errorPtr: ObjCObjectVar<NSError?> = alloc()
-                NSFileManager.defaultManager.replaceItemAtURL(
+                val replaced = NSFileManager.defaultManager.replaceItemAtURL(
                     originalItemURL = dbUrl,
                     withItemAtURL = url,
                     backupItemName = "${getDatabaseName()}.old",
@@ -233,7 +290,7 @@ internal class FeedSyncIosWorker(
                     resultingItemURL = null,
                 )
 
-                if (errorPtr.value != null) {
+                if (!replaced || errorPtr.value != null) {
                     logger.e { "Error replacing database: ${errorPtr.value}" }
                     return false
                 }
@@ -244,15 +301,17 @@ internal class FeedSyncIosWorker(
         return false
     }
 
-    private suspend fun accountSpecificUpload(databasePath: NSURL) =
-        when (accountsRepository.getCurrentSyncAccount()) {
+    private suspend fun accountSpecificUpload(databasePath: NSURL, account: SyncAccounts) =
+        when (account) {
             SyncAccounts.DROPBOX -> {
                 restoreDropboxClient()
                 val dropboxUploadParam = DropboxUploadParam(
                     path = "/${getDatabaseName()}.db",
                     url = databasePath,
+                    expectedRevision = dropboxRevision,
                 )
-                dropboxDataSource.performUpload(dropboxUploadParam)
+                val result = dropboxDataSource.performUpload(dropboxUploadParam)
+                if (result.isConflict) throw DropboxUploadConflictException()
                 dropboxSettings.setLastUploadTimestamp(Clock.System.now().toEpochMilliseconds())
                 logger.w { "Upload to dropbox successfully" }
             }
@@ -286,12 +345,16 @@ internal class FeedSyncIosWorker(
 
                 restoreDropboxClient()
                 val result = dropboxDataSource.performDownload(dropboxDownloadParam)
+                if (result.isBackupNotFound) {
+                    return SyncResult.BackupNotFound(SyncDownloadError.DropboxDownloadFailed)
+                }
                 val destinationUrl = result.destinationUrl
                 if (destinationUrl == null) {
                     logger.e { "Error downloading database" }
                     return SyncResult.General(SyncICloudError.DestinationUrlNull)
                 }
-                replaceDatabase(destinationUrl.url)
+                dropboxRevision = result.revision
+                check(replaceDatabase(destinationUrl.url)) { "Failed to install Dropbox database" }
                 dropboxSettings.setLastDownloadTimestamp(Clock.System.now().toEpochMilliseconds())
                 logger.w { "Download from Dropbox successfully" }
                 SyncResult.Success
@@ -321,23 +384,18 @@ internal class FeedSyncIosWorker(
     private suspend fun iCloudDownload(isFirstSync: Boolean): SyncResult {
         return when (val result = iCloudDataSource.performDownload(getDatabaseName())) {
             is ICloudDownloadResult.Success -> {
-                replaceDatabase(result.destinationUrl)
+                check(replaceDatabase(result.destinationUrl)) { "Failed to install iCloud database" }
                 iCloudSettings.setLastDownloadTimestamp(Clock.System.now().toEpochMilliseconds())
                 logger.w { "Download from iCloud successfully" }
                 SyncResult.Success
             }
 
+            is ICloudDownloadResult.Error.RemoteFileNotFound ->
+                SyncResult.BackupNotFound(SyncDownloadError.ICloudDownloadFailed)
+
             is ICloudDownloadResult.Error -> {
-                val errorMessage = when (result) {
-                    is ICloudDownloadResult.Error.ICloudUrlNotAvailable -> "iCloud URL is not available"
-                    is ICloudDownloadResult.Error.TemporaryUrlNotAvailable -> "Temporary URL is not available"
-                    is ICloudDownloadResult.Error.FileNotFound -> "File not found in iCloud"
-                    is ICloudDownloadResult.Error.CopyOperationFailed -> "Copy operation failed"
-                    is ICloudDownloadResult.Error.FileAlreadyExists -> "File already exists"
-                    is ICloudDownloadResult.Error.DownloadFailed -> result.errorMessage
-                }
                 if (!isFirstSync) {
-                    logger.e { "Error downloading from iCloud: $errorMessage" }
+                    logger.e { "Error downloading from iCloud: $result" }
                 }
                 when (result) {
                     is ICloudDownloadResult.Error.ICloudUrlNotAvailable ->
@@ -346,6 +404,8 @@ internal class FeedSyncIosWorker(
                         SyncResult.General(SyncDownloadError.ICloudDownloadFailed)
                     is ICloudDownloadResult.Error.FileNotFound ->
                         SyncResult.General(SyncICloudError.FileNotFound)
+                    is ICloudDownloadResult.Error.RemoteFileNotFound ->
+                        SyncResult.BackupNotFound(SyncDownloadError.ICloudDownloadFailed)
                     is ICloudDownloadResult.Error.CopyOperationFailed ->
                         SyncResult.General(SyncICloudError.CopyOperationFailed)
                     is ICloudDownloadResult.Error.FileAlreadyExists ->
@@ -369,7 +429,7 @@ internal class FeedSyncIosWorker(
                     is ICloudUploadResult.Error.ICloudUrlNotAvailable -> "iCloud URL is not available"
                     is ICloudUploadResult.Error.UploadFailed -> result.errorMessage
                 }
-                logger.e { "Error uploading to iCloud: $errorMessage" }
+                error("Error uploading to iCloud: $errorMessage")
             }
         }
     }
@@ -395,7 +455,7 @@ internal class FeedSyncIosWorker(
             logger.e { "Google Drive download: destination URL is null" }
             SyncResult.General(SyncDownloadError.GoogleDriveDownloadFailed)
         } else {
-            replaceDatabase(destinationUrl.url)
+            check(replaceDatabase(destinationUrl.url)) { "Failed to install Google Drive database" }
             googleDriveSettings.setLastDownloadTimestamp(Clock.System.now().toEpochMilliseconds())
             logger.d { "Download from Google Drive successfully" }
             SyncResult.Success

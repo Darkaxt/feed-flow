@@ -6,6 +6,8 @@ import app.cash.sqldelight.driver.native.NativeSqliteDriver
 import com.prof18.feedflow.core.utils.AppEnvironment
 import com.prof18.feedflow.core.utils.getAppGroupDatabasePath
 import com.prof18.feedflow.database.DatabaseHelper
+import com.prof18.feedflow.db.Cloud_pending_article_flag
+import com.prof18.feedflow.db.Cloud_pending_feed_or_category_change
 import com.prof18.feedflow.db.FeedFlowDB
 import com.prof18.feedflow.db.Feed_item_status
 import com.prof18.feedflow.db.Feed_source
@@ -33,6 +35,13 @@ fun getFeedItems(appEnvironment: AppEnvironment): List<FeedItemWidget> {
 
     val dbRef = FeedFlowDB(
         sqlDriver,
+        cloud_pending_article_flagAdapter = Cloud_pending_article_flag.Adapter(
+            field_Adapter = EnumColumnAdapter(),
+        ),
+        cloud_pending_feed_or_category_changeAdapter = Cloud_pending_feed_or_category_change.Adapter(
+            entityAdapter = EnumColumnAdapter(),
+            field_Adapter = EnumColumnAdapter(),
+        ),
         feed_sourceAdapter = Feed_source.Adapter(
             positionAdapter = IntColumnAdapter,
         ),

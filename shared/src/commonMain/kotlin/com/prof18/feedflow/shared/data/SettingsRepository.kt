@@ -1,5 +1,7 @@
 package com.prof18.feedflow.shared.data
 
+import co.touchlab.stately.concurrency.Lock
+import co.touchlab.stately.concurrency.withLock
 import com.prof18.feedflow.core.model.ArticleOpenMode
 import com.prof18.feedflow.core.model.AutoDeletePeriod
 import com.prof18.feedflow.core.model.BackgroundSyncRestrictions
@@ -16,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlin.uuid.Uuid
 
 class SettingsRepository(
     private val settings: Settings,
@@ -25,6 +28,23 @@ class SettingsRepository(
     private var saveItemContentOnOpenEnabled: Boolean? = null
     private var prefetchArticleContentEnabled: Boolean? = null
     private var kleadParserEnabled: Boolean? = null
+
+    internal fun cloudSyncSession(): String = syncUploadLock.withLock {
+        settings.getStringOrNull(SettingsFields.CLOUD_SYNC_SESSION.name) ?: Uuid.random().toString().also {
+            settings[SettingsFields.CLOUD_SYNC_SESSION.name] = it
+        }
+    }
+
+    internal fun rotateCloudSyncSession() = syncUploadLock.withLock {
+        val session = Uuid.random().toString()
+        settings[SettingsFields.CLOUD_SYNC_SESSION.name] = session
+        cloudSessionMutableState.value = session
+    }
+
+    internal fun <T> withCloudSession(block: () -> T): T = syncUploadLock.withLock(block)
+
+    private val cloudSessionMutableState = MutableStateFlow(cloudSyncSession())
+    internal val cloudSyncSessionState = cloudSessionMutableState.asStateFlow()
 
     private val isSyncUploadRequiredMutableFlow = MutableStateFlow(getIsSyncUploadRequired())
     val isSyncUploadRequired: StateFlow<Boolean> = isSyncUploadRequiredMutableFlow.asStateFlow()
@@ -142,12 +162,33 @@ class SettingsRepository(
         settings.set(SettingsFields.USE_KLEAD_READER_PARSER.name, value)
     }
 
-    internal fun getIsSyncUploadRequired(): Boolean =
-        settings.getBoolean(SettingsFields.IS_SYNC_UPLOAD_REQUIRED.name, false)
+    internal fun getIsSyncUploadRequired(): Boolean = syncUploadLock.withLock {
+        settings.getBoolean(SettingsFields.IS_SYNC_UPLOAD_REQUIRED.name, false) ||
+            settings.hasKey(SettingsFields.SYNC_UPLOAD_GENERATION.name)
+    }
 
-    internal fun setIsSyncUploadRequired(value: Boolean) {
-        isSyncUploadRequiredMutableFlow.update { value }
+    internal fun setIsSyncUploadRequired(value: Boolean): Unit = syncUploadLock.withLock {
+        if (value) {
+            settings[SettingsFields.SYNC_UPLOAD_GENERATION.name] = Uuid.random().toString()
+        }
         settings[SettingsFields.IS_SYNC_UPLOAD_REQUIRED.name] = value
+        if (!value) settings.remove(SettingsFields.SYNC_UPLOAD_GENERATION.name)
+        isSyncUploadRequiredMutableFlow.value = value
+    }
+
+    internal fun captureSyncUploadGeneration(): String? = syncUploadLock.withLock {
+        settings.getStringOrNull(SettingsFields.SYNC_UPLOAD_GENERATION.name)
+    }
+
+    internal fun acknowledgeSyncUpload(generation: String?): Boolean = syncUploadLock.withLock {
+        if (settings.getStringOrNull(SettingsFields.SYNC_UPLOAD_GENERATION.name) != generation) {
+            return@withLock false
+        }
+        // Keep the generation until the legacy flag is cleared, so interrupted acknowledgment stays pending.
+        settings[SettingsFields.IS_SYNC_UPLOAD_REQUIRED.name] = false
+        settings.remove(SettingsFields.SYNC_UPLOAD_GENERATION.name)
+        isSyncUploadRequiredMutableFlow.value = false
+        true
     }
 
     fun getReaderModeFontSize(): Int =
@@ -279,6 +320,7 @@ class SettingsRepository(
         settings.set(SettingsFields.NOTIFICATION_MODE.name, mode.name)
 
     internal companion object {
+        private val syncUploadLock = Lock()
         const val DEFAULT_READER_MODE_FONT_SIZE = ReaderModeDefaults.FONT_SIZE
     }
 }
@@ -293,6 +335,8 @@ private enum class SettingsFields {
     PREFETCH_ARTICLE_CONTENT,
     USE_KLEAD_READER_PARSER,
     IS_SYNC_UPLOAD_REQUIRED,
+    SYNC_UPLOAD_GENERATION,
+    CLOUD_SYNC_SESSION,
     READER_MODE_FONT_SIZE,
     READER_MODE_LINE_HEIGHT,
     ARTICLE_OPEN_MODE,

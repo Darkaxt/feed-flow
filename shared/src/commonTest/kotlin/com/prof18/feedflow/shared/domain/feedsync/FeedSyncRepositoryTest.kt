@@ -20,6 +20,7 @@ import org.koin.dsl.module
 import org.koin.test.inject
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -40,7 +41,7 @@ class FeedSyncRepositoryTest : KoinTestBase() {
     }
 
     @Test
-    fun `enqueueBackup triggers upload when sync enabled and upload required`() {
+    fun `enqueueBackup triggers upload when sync enabled and upload required`() = runTest(testDispatcher) {
         enableDropboxSync()
         settingsRepository.setIsSyncUploadRequired(true)
 
@@ -50,7 +51,7 @@ class FeedSyncRepositoryTest : KoinTestBase() {
     }
 
     @Test
-    fun `enqueueBackup does nothing when sync disabled`() {
+    fun `enqueueBackup does nothing when sync disabled`() = runTest(testDispatcher) {
         settingsRepository.setIsSyncUploadRequired(true)
 
         feedSyncRepository.enqueueBackup()
@@ -70,146 +71,59 @@ class FeedSyncRepositoryTest : KoinTestBase() {
     }
 
     @Test
-    fun `onDropboxUploadSuccessAfterResume clears upload required`() {
+    fun `onDropboxUploadSuccessAfterResume preserves newer pending work`() {
+        enableDropboxSync()
         settingsRepository.setIsSyncUploadRequired(true)
 
         feedSyncRepository.onDropboxUploadSuccessAfterResume()
 
-        assertFalse(settingsRepository.getIsSyncUploadRequired())
+        assertTrue(settingsRepository.getIsSyncUploadRequired())
         assertNotNull(dropboxSettings.getLastUploadTimestamp())
     }
 
     @Test
-    fun `firstSync uploads when download fails`() = runTest(testDispatcher) {
+    fun `firstSync never uploads after an unknown download failure`() = runTest(testDispatcher) {
         enableDropboxSync()
         fakeFeedSyncWorker.downloadResult = SyncResult.General(SyncDownloadError.DropboxDownloadFailed)
 
         feedSyncRepository.firstSync()
 
         assertEquals(listOf(true), fakeFeedSyncWorker.downloadIsFirstSyncArgs)
+        assertEquals(0, fakeFeedSyncWorker.uploadImmediateCallCount)
+    }
+
+    @Test
+    fun `firstSync initializes only a confirmed missing backup`() = runTest(testDispatcher) {
+        enableDropboxSync()
+        fakeFeedSyncWorker.downloadResult = SyncResult.BackupNotFound(SyncDownloadError.DropboxDownloadFailed)
+
+        feedSyncRepository.firstSync()
+
         assertEquals(1, fakeFeedSyncWorker.uploadImmediateCallCount)
     }
 
     @Test
-    fun `addSourceAndCategories inserts data and marks upload required`() = runTest(testDispatcher) {
-        enableDropboxSync()
-        val category = FeedSourceCategory(id = "category-id", title = "Tech")
-        val feedSource = createFeedSource(id = "source-id", title = "Feed", category = category)
+    fun `ordinary refresh bootstraps a confirmed missing backup without reconciling stale data`() =
+        runTest(testDispatcher) {
+            enableDropboxSync()
+            fakeFeedSyncWorker.downloadResult = SyncResult.BackupNotFound(SyncDownloadError.DropboxDownloadFailed)
 
-        feedSyncRepository.addSourceAndCategories(
-            sources = listOf(feedSource),
-            categories = listOf(category),
-        )
+            feedSyncRepository.syncFeedSources()
+            feedSyncRepository.syncFeedItems()
 
-        val sources = syncedDatabaseHelper.getAllFeedSources()
-        val categories = syncedDatabaseHelper.getAllFeedSourceCategories()
-        assertEquals(1, sources.size)
-        assertEquals("source-id", sources.first().id)
-        assertEquals("category-id", categories.first().id)
-        assertTrue(settingsRepository.getIsSyncUploadRequired())
-    }
+            assertEquals(1, fakeFeedSyncWorker.uploadImmediateCallCount)
+            assertEquals(listOf("download", "upload"), fakeFeedSyncWorker.calls)
+        }
 
     @Test
-    fun `insertSyncedFeedSource inserts sources and marks upload required`() = runTest(testDispatcher) {
+    fun `firstSync retains pending work on sign in failure`() = runTest(testDispatcher) {
         enableDropboxSync()
-        val feedSource = createFeedSource(id = "source-id", title = "Feed")
+        settingsRepository.setIsSyncUploadRequired(true)
+        fakeFeedSyncWorker.downloadResult = SyncResult.GoogleDriveNeedReAuth()
 
-        feedSyncRepository.insertSyncedFeedSource(listOf(feedSource))
+        feedSyncRepository.firstSync()
 
-        val sources = syncedDatabaseHelper.getAllFeedSources()
-        assertEquals(1, sources.size)
-        assertEquals("source-id", sources.first().id)
-        assertTrue(settingsRepository.getIsSyncUploadRequired())
-    }
-
-    @Test
-    fun `insertFeedSourceCategories inserts categories and marks upload required`() = runTest(testDispatcher) {
-        enableDropboxSync()
-        val category = FeedSourceCategory(id = "category-id", title = "Tech")
-
-        feedSyncRepository.insertFeedSourceCategories(listOf(category))
-
-        val categories = syncedDatabaseHelper.getAllFeedSourceCategories()
-        assertEquals(1, categories.size)
-        assertEquals("category-id", categories.first().id)
-        assertTrue(settingsRepository.getIsSyncUploadRequired())
-    }
-
-    @Test
-    fun `updateCategory updates category and marks upload required`() = runTest(testDispatcher) {
-        enableDropboxSync()
-        val category = FeedSourceCategory(id = "category-id", title = "Tech")
-        syncedDatabaseHelper.insertFeedSourceCategories(listOf(category))
-
-        feedSyncRepository.updateCategory(category.copy(title = "Updated"))
-
-        val updatedCategory = syncedDatabaseHelper.getAllFeedSourceCategories().single()
-        assertEquals("Updated", updatedCategory.title)
-        assertTrue(settingsRepository.getIsSyncUploadRequired())
-    }
-
-    @Test
-    fun `deleteFeedSource removes source and marks upload required`() = runTest(testDispatcher) {
-        enableDropboxSync()
-        val feedSource = createFeedSource(id = "source-id", title = "Feed")
-        syncedDatabaseHelper.insertSyncedFeedSource(listOf(feedSource))
-
-        feedSyncRepository.deleteFeedSource(feedSource)
-
-        assertTrue(syncedDatabaseHelper.getAllFeedSources().isEmpty())
-        assertTrue(settingsRepository.getIsSyncUploadRequired())
-    }
-
-    @Test
-    fun `deleteAllFeedSources removes all sources and marks upload required`() = runTest(testDispatcher) {
-        enableDropboxSync()
-        val feedSources = listOf(
-            createFeedSource(id = "source-1", title = "Feed 1"),
-            createFeedSource(id = "source-2", title = "Feed 2"),
-        )
-        syncedDatabaseHelper.insertSyncedFeedSource(feedSources)
-
-        feedSyncRepository.deleteAllFeedSources()
-
-        assertTrue(syncedDatabaseHelper.getAllFeedSources().isEmpty())
-        assertTrue(settingsRepository.getIsSyncUploadRequired())
-    }
-
-    @Test
-    fun `updateFeedSourceName updates name and marks upload required`() = runTest(testDispatcher) {
-        enableDropboxSync()
-        val feedSource = createFeedSource(id = "source-id", title = "Old Title")
-        syncedDatabaseHelper.insertSyncedFeedSource(listOf(feedSource))
-
-        feedSyncRepository.updateFeedSourceName(feedSource.id, "New Title")
-
-        val updatedSource = syncedDatabaseHelper.getAllFeedSources().single()
-        assertEquals("New Title", updatedSource.title)
-        assertTrue(settingsRepository.getIsSyncUploadRequired())
-    }
-
-    @Test
-    fun `updateFeedSource updates source and marks upload required`() = runTest(testDispatcher) {
-        enableDropboxSync()
-        val feedSource = createFeedSource(id = "source-id", title = "Old Title")
-        syncedDatabaseHelper.insertSyncedFeedSource(listOf(feedSource))
-
-        feedSyncRepository.updateFeedSource(feedSource.copy(title = "New Title"))
-
-        val updatedSource = syncedDatabaseHelper.getAllFeedSources().single()
-        assertEquals("New Title", updatedSource.title)
-        assertTrue(settingsRepository.getIsSyncUploadRequired())
-    }
-
-    @Test
-    fun `deleteFeedSourceCategory removes category and marks upload required`() = runTest(testDispatcher) {
-        enableDropboxSync()
-        val category = FeedSourceCategory(id = "category-id", title = "Tech")
-        syncedDatabaseHelper.insertFeedSourceCategories(listOf(category))
-
-        feedSyncRepository.deleteFeedSourceCategory(category.id)
-
-        assertTrue(syncedDatabaseHelper.getAllFeedSourceCategories().isEmpty())
+        assertEquals(0, fakeFeedSyncWorker.uploadImmediateCallCount)
         assertTrue(settingsRepository.getIsSyncUploadRequired())
     }
 
@@ -226,12 +140,33 @@ class FeedSyncRepositoryTest : KoinTestBase() {
     }
 
     @Test
-    fun `setIsSyncUploadRequired updates flag when sync is enabled`() {
+    fun `local edit committed marks upload required for the captured session`() = runTest(testDispatcher) {
         enableDropboxSync()
+        val session = feedSyncRepository.cloudSessionForEdit()
 
-        feedSyncRepository.setIsSyncUploadRequired()
+        feedSyncRepository.localEditCommitted(session)
 
         assertTrue(settingsRepository.getIsSyncUploadRequired())
+    }
+
+    @Test
+    fun `stale local edit committed cannot dirty a rotated cloud session`() = runTest(testDispatcher) {
+        enableDropboxSync()
+        val session = feedSyncRepository.cloudSessionForEdit()
+        settingsRepository.rotateCloudSyncSession()
+
+        assertFailsWith<IllegalStateException> { feedSyncRepository.localEditCommitted(session) }
+
+        assertFalse(settingsRepository.getIsSyncUploadRequired())
+    }
+
+    @Test
+    fun `null local edit committed cannot dirty an enabled cloud session`() = runTest(testDispatcher) {
+        enableDropboxSync()
+
+        assertFailsWith<IllegalStateException> { feedSyncRepository.localEditCommitted(null) }
+
+        assertFalse(settingsRepository.getIsSyncUploadRequired())
     }
 
     @Test
@@ -245,7 +180,7 @@ class FeedSyncRepositoryTest : KoinTestBase() {
     }
 
     @Test
-    fun `syncFeedSources emits errors to message queue`() = runTest(testDispatcher) {
+    fun `failed download prevents source and item reconciliation`() = runTest(testDispatcher) {
         enableDropboxSync()
         val downloadError = SyncResult.General(SyncDownloadError.DropboxDownloadFailed)
         val sourcesError = SyncResult.General(SyncFeedError.FeedSourcesSyncFailed)
@@ -254,10 +189,37 @@ class FeedSyncRepositoryTest : KoinTestBase() {
 
         feedSyncMessageQueue.messageQueue.test {
             feedSyncRepository.syncFeedSources()
+            feedSyncRepository.syncFeedItems()
 
             assertEquals(downloadError, awaitItem())
-            assertEquals(sourcesError, awaitItem())
+            expectNoEvents()
+            assertEquals(listOf("download"), fakeFeedSyncWorker.calls)
         }
+    }
+
+    @Test
+    fun `syncFeedSources never uploads a pending stale snapshot`() = runTest(testDispatcher) {
+        enableDropboxSync()
+        settingsRepository.setIsSyncUploadRequired(true)
+        fakeFeedSyncWorker.onUploadImmediate = {
+            settingsRepository.setIsSyncUploadRequired(false)
+        }
+
+        feedSyncRepository.syncFeedSources()
+
+        assertEquals(listOf("download", "syncSources"), fakeFeedSyncWorker.calls)
+        assertTrue(settingsRepository.getIsSyncUploadRequired())
+    }
+
+    @Test
+    fun `syncFeedSources downloads without requiring a pending upload`() = runTest(testDispatcher) {
+        enableDropboxSync()
+        settingsRepository.setIsSyncUploadRequired(true)
+
+        feedSyncRepository.syncFeedSources()
+
+        assertEquals(listOf("download", "syncSources"), fakeFeedSyncWorker.calls)
+        assertTrue(settingsRepository.getIsSyncUploadRequired())
     }
 
     @Test
@@ -265,6 +227,7 @@ class FeedSyncRepositoryTest : KoinTestBase() {
         enableDropboxSync()
         val itemError = SyncResult.General(SyncFeedError.FeedItemsSyncFailed)
         fakeFeedSyncWorker.syncFeedItemsResult = itemError
+        feedSyncRepository.syncFeedSources()
 
         feedSyncMessageQueue.messageQueue.test {
             feedSyncRepository.syncFeedItems()
@@ -307,6 +270,8 @@ private class FakeFeedSyncWorker : FeedSyncWorker {
     var downloadResult: SyncResult = SyncResult.Success
     var syncFeedSourcesResult: SyncResult = SyncResult.Success
     var syncFeedItemsResult: SyncResult = SyncResult.Success
+    var onUploadImmediate: () -> Unit = {}
+    val calls = mutableListOf<String>()
 
     override fun upload() {
         uploadCallCount++
@@ -314,14 +279,23 @@ private class FakeFeedSyncWorker : FeedSyncWorker {
 
     override suspend fun uploadImmediate() {
         uploadImmediateCallCount++
+        calls.add("upload")
+        onUploadImmediate()
     }
 
     override suspend fun download(isFirstSync: Boolean): SyncResult {
+        calls.add("download")
         downloadIsFirstSyncArgs.add(isFirstSync)
         return downloadResult
     }
 
-    override suspend fun syncFeedSources(): SyncResult = syncFeedSourcesResult
+    override suspend fun syncFeedSources(): SyncResult {
+        calls.add("syncSources")
+        return syncFeedSourcesResult
+    }
 
-    override suspend fun syncFeedItems(): SyncResult = syncFeedItemsResult
+    override suspend fun syncFeedItems(): SyncResult {
+        calls.add("syncItems")
+        return syncFeedItemsResult
+    }
 }

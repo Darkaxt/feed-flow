@@ -214,11 +214,13 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.koin.test)
-    testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.multiplatform.settings)
     testImplementation(libs.multiplatform.settings.test)
-    testImplementation(libs.androidx.test.core.ktx)
+    testImplementation(libs.multiplatform.settings)
+    testImplementation(libs.google.api.client)
+    testImplementation(libs.google.api.services.drive)
     testImplementation(libs.org.robolectric)
+    testImplementation(libs.androidx.test.core.ktx)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
 
 play {
@@ -241,4 +243,10 @@ androidComponents {
         googleTask?.enabled = !name.contains("Fdroid")
         uploadTask?.enabled = !name.contains("Fdroid")
     }
+}
+
+// Include Google Play cloud adapter tests in the repository-wide allTests selection.
+tasks.register("allTests") {
+    group = "verification"
+    dependsOn("testGooglePlayDebugUnitTest")
 }

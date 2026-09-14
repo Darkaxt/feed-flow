@@ -1,23 +1,28 @@
 package com.prof18.feedflow.shared.domain.feedsync
 
-class ICloudNativeBridge {
+interface ICloudFileTransfer {
+    fun uploadToICloud(isDebug: Boolean): Int
+    fun downloadToFile(isDebug: Boolean, destinationPath: String): Int
+}
+
+class ICloudNativeBridge : ICloudFileTransfer {
     /**
      * Result:
      *   0 -> success
      *   1 -> iCloud folder URL null
      *   2 -> upload error
      */
-    external fun uploadToICloud(isDebug: Boolean): Int
+    external override fun uploadToICloud(isDebug: Boolean): Int
 
     /**
      * Result:
      *  0 -> success
      *  1 -> url null
-     *  2 -> temp url null
      *  3 -> download error
-     *  4 -> database replace error
+     *  5 -> local file not found (remote absence is unconfirmed)
+     *  6 -> completed cloud discovery found no backup
      */
-    external fun iCloudDownload(isDebug: Boolean): Int
+    external override fun downloadToFile(isDebug: Boolean, destinationPath: String): Int
 }
 
 @Suppress("MagicNumber")
@@ -42,6 +47,8 @@ enum class DownloadResult(val code: Int) {
     TEMP_URL_NULL(2),
     DOWNLOAD_ERROR(3),
     DATABASE_REPLACE_ERROR(4),
+    FILE_NOT_FOUND(5),
+    REMOTE_FILE_NOT_FOUND(6),
     UNKNOWN_ERROR(-1),
     ;
 

@@ -2,7 +2,7 @@ package com.prof18.feedflow.database
 
 import app.cash.sqldelight.EnumColumnAdapter
 import app.cash.sqldelight.Transacter
-import app.cash.sqldelight.TransactionWithoutReturn
+import app.cash.sqldelight.TransactionWithReturn
 import app.cash.sqldelight.adapter.primitive.IntColumnAdapter
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
@@ -12,6 +12,10 @@ import co.touchlab.kermit.Logger
 import com.prof18.feedflow.core.model.ArticleExportFilter
 import com.prof18.feedflow.core.model.ArticleOpenMode
 import com.prof18.feedflow.core.model.CategoryWithUnreadCount
+import com.prof18.feedflow.core.model.CloudFeedAndCategorySnapshot
+import com.prof18.feedflow.core.model.CloudFeedOrCategoryEntity
+import com.prof18.feedflow.core.model.CloudFeedOrCategoryField
+import com.prof18.feedflow.core.model.CloudPendingFeedOrCategoryChange
 import com.prof18.feedflow.core.model.FeedFilter
 import com.prof18.feedflow.core.model.FeedItem
 import com.prof18.feedflow.core.model.FeedItemId
@@ -27,7 +31,10 @@ import com.prof18.feedflow.core.model.FeedSourceWithUnreadCount
 import com.prof18.feedflow.core.model.ParsedFeedSource
 import com.prof18.feedflow.core.model.PrefetchQueueItem
 import com.prof18.feedflow.core.model.SyncedFeedItem
+import com.prof18.feedflow.core.model.applyCloudFeedAndCategoryChanges
 import com.prof18.feedflow.core.utils.withSuspensionGuard
+import com.prof18.feedflow.db.Cloud_pending_article_flag
+import com.prof18.feedflow.db.Cloud_pending_feed_or_category_change
 import com.prof18.feedflow.db.FeedFlowDB
 import com.prof18.feedflow.db.Feed_item_status
 import com.prof18.feedflow.db.Feed_source
@@ -56,6 +63,13 @@ class DatabaseHelper(
 ) {
     private val dbRef: FeedFlowDB = FeedFlowDB(
         sqlDriver,
+        cloud_pending_article_flagAdapter = Cloud_pending_article_flag.Adapter(
+            field_Adapter = EnumColumnAdapter(),
+        ),
+        cloud_pending_feed_or_category_changeAdapter = Cloud_pending_feed_or_category_change.Adapter(
+            entityAdapter = EnumColumnAdapter(),
+            field_Adapter = EnumColumnAdapter(),
+        ),
         feed_sourceAdapter = Feed_source.Adapter(
             positionAdapter = IntColumnAdapter,
         ),
@@ -172,48 +186,82 @@ class DatabaseHelper(
             .asFlow()
             .mapToList(backgroundDispatcher)
 
-    suspend fun insertCategories(categories: List<FeedSourceCategory>) =
-        dbRef.transactionWithContext(backgroundDispatcher) {
-            categories.forEach { category ->
-                dbRef.feedSourceCategoryQueries.insertFeedSourceCategory(
-                    id = category.id,
-                    title = category.title,
-                )
-                dbRef.feedSourceCategoryQueries.updateCategoryName(
-                    id = category.id,
-                    title = category.title,
-                )
-            }
+    suspend fun insertCategories(
+        categories: List<FeedSourceCategory>,
+        cloudSessionId: String? = null,
+        withCurrentSession: (() -> Unit) -> Unit = { it() },
+    ) = cloudMutation(withCurrentSession) {
+        categories.forEach { category ->
+            upsertCategory(category, cloudSessionId)
         }
+    }
 
-    suspend fun insertFeedSource(feedSource: List<ParsedFeedSource>) {
-        dbRef.transactionWithContext(backgroundDispatcher) {
-            feedSource.forEach { feedSource ->
-                if (feedSource.websiteUrl != null) {
-                    dbRef.feedSourceQueries.insertFeedSourceWithWebsite(
-                        url_hash = feedSource.id,
-                        url = feedSource.url,
-                        title = feedSource.title,
-                        category_id = feedSource.category?.id,
-                        logo_url = feedSource.logoUrl,
-                        website_url = feedSource.websiteUrl,
-                    )
-                } else {
-                    dbRef.feedSourceQueries.insertFeedSource(
-                        url_hash = feedSource.id,
-                        url = feedSource.url,
-                        title = feedSource.title,
-                        category_id = feedSource.category?.id,
-                        logo_url = feedSource.logoUrl,
-                    )
-                }
-                dbRef.feedSourceQueries.updateFeedSourceMetadata(
-                    urlHash = feedSource.id,
+    suspend fun insertFeedSource(
+        feedSource: List<ParsedFeedSource>,
+        cloudSessionId: String? = null,
+        withCurrentSession: (() -> Unit) -> Unit = { it() },
+    ) = cloudMutation(withCurrentSession) {
+        feedSource.forEach { feedSource ->
+            feedSource.category?.let { category ->
+                insertEmbeddedCategoryIfNeeded(category, cloudSessionId)
+            }
+            val existing = dbRef.feedSourceQueries.selectCloudFieldsById(feedSource.id).executeAsOneOrNull()
+            if (feedSource.websiteUrl != null) {
+                dbRef.feedSourceQueries.insertFeedSourceWithWebsite(
+                    url_hash = feedSource.id,
                     url = feedSource.url,
                     title = feedSource.title,
-                    categoryId = feedSource.category?.id,
-                    logoUrl = feedSource.logoUrl,
-                    websiteUrl = feedSource.websiteUrl,
+                    category_id = feedSource.category?.id,
+                    logo_url = feedSource.logoUrl,
+                    website_url = feedSource.websiteUrl,
+                )
+            } else {
+                dbRef.feedSourceQueries.insertFeedSource(
+                    url_hash = feedSource.id,
+                    url = feedSource.url,
+                    title = feedSource.title,
+                    category_id = feedSource.category?.id,
+                    logo_url = feedSource.logoUrl,
+                )
+            }
+            dbRef.feedSourceQueries.updateFeedSourceMetadata(
+                urlHash = feedSource.id,
+                url = feedSource.url,
+                title = feedSource.title,
+                categoryId = feedSource.category?.id,
+                logoUrl = feedSource.logoUrl,
+                websiteUrl = feedSource.websiteUrl,
+            )
+            val inserted = dbRef.feedSourceQueries.selectCloudFieldsById(feedSource.id).executeAsOneOrNull()
+            if (existing == null && inserted != null) {
+                recordCloudFeedOrCategoryCreation(
+                    sessionId = cloudSessionId,
+                    entity = CloudFeedOrCategoryEntity.SOURCE,
+                    id = feedSource.id,
+                    fields = listOf(
+                        CloudFeedOrCategoryField.URL to inserted.url,
+                        CloudFeedOrCategoryField.TITLE to inserted.title,
+                        CloudFeedOrCategoryField.CATEGORY to inserted.category_id,
+                        CloudFeedOrCategoryField.LOGO to inserted.logo_url,
+                    ),
+                )
+            } else if (existing != null && inserted != null) {
+                recordCloudFeedOrCategoryUpdates(
+                    sessionId = cloudSessionId,
+                    entity = CloudFeedOrCategoryEntity.SOURCE,
+                    id = feedSource.id,
+                    fields = buildList {
+                        if (existing.url != inserted.url) add(CloudFeedOrCategoryField.URL to inserted.url)
+                        if (existing.title != inserted.title) {
+                            add(CloudFeedOrCategoryField.TITLE to inserted.title)
+                        }
+                        if (existing.category_id != inserted.category_id) {
+                            add(CloudFeedOrCategoryField.CATEGORY to inserted.category_id)
+                        }
+                        if (existing.logo_url != inserted.logo_url) {
+                            add(CloudFeedOrCategoryField.LOGO to inserted.logo_url)
+                        }
+                    },
                 )
             }
         }
@@ -274,15 +322,157 @@ class DatabaseHelper(
             }
         }
 
-    suspend fun updateReadStatus(feedItemId: FeedItemId, isRead: Boolean) =
+    suspend fun updateReadStatus(
+        feedItemId: FeedItemId,
+        isRead: Boolean,
+        cloudSessionId: String? = null,
+        withCurrentSession: (() -> Unit) -> Unit = { it() },
+    ) = cloudMutation(withCurrentSession) {
+        dbRef.feedItemQueries.updateReadStatus(urlHash = feedItemId.id, isRead = isRead)
+        recordCloudPendingArticleFlags(cloudSessionId, listOf(feedItemId.id), CloudArticleFlag.READ, isRead)
+    }
+
+    suspend fun updateReadStatus(
+        feedItemId: List<FeedItemId>,
+        isRead: Boolean,
+        cloudSessionId: String? = null,
+        withCurrentSession: (() -> Unit) -> Unit = { it() },
+    ) = cloudMutation(withCurrentSession) {
+        dbRef.feedItemQueries.updateAllReadStatus(urlHash = feedItemId.map { it.id }, isRead = isRead)
+        recordCloudPendingArticleFlags(cloudSessionId, feedItemId.map { it.id }, CloudArticleFlag.READ, isRead)
+    }
+
+    suspend fun ensureCloudSyncState(sessionId: String) {
         dbRef.transactionWithContext(backgroundDispatcher) {
-            dbRef.feedItemQueries.updateReadStatus(urlHash = feedItemId.id, isRead = isRead)
+            dbRef.cloudPendingArticleFlagQueries.insertCloudSyncState(sessionId)
+        }
+    }
+
+    suspend fun getCloudPendingArticleFlags(sessionId: String): List<CloudPendingArticleFlag> =
+        withContext(backgroundDispatcher) {
+            dbRef.cloudPendingArticleFlagQueries.selectCloudPendingArticleFlags(sessionId) {
+                    itemId, field, value, revision ->
+                CloudPendingArticleFlag(
+                    itemId = itemId,
+                    field = field,
+                    value = value,
+                    revision = revision,
+                )
+            }.executeAsList()
         }
 
-    suspend fun updateReadStatus(feedItemId: List<FeedItemId>, isRead: Boolean) =
-        dbRef.transactionWithContext(backgroundDispatcher) {
-            dbRef.feedItemQueries.updateAllReadStatus(urlHash = feedItemId.map { it.id }, isRead = isRead)
+    fun observeCloudPendingArticleFlags(sessionId: String): Flow<Boolean> =
+        dbRef.cloudPendingArticleFlagQueries.countCloudPendingArticleFlags(sessionId).asFlow()
+            .mapToOneOrDefault(0L, backgroundDispatcher)
+            .map { it > 0 }
+
+    suspend fun getCloudPendingFeedAndCategoryChanges(sessionId: String): List<CloudPendingFeedOrCategoryChange> =
+        withContext(backgroundDispatcher) {
+            selectCloudPendingFeedAndCategoryChanges(sessionId)
         }
+
+    fun observeCloudPendingFeedAndCategoryChanges(sessionId: String): Flow<Boolean> =
+        dbRef.cloudPendingFeedOrCategoryChangeQueries.countCloudPendingFeedAndCategoryChanges(sessionId).asFlow()
+            .mapToOneOrDefault(0L, backgroundDispatcher)
+            .map { it > 0 }
+
+    suspend fun acknowledgeCloudPendingFeedAndCategoryChanges(
+        sessionId: String,
+        captured: List<CloudPendingFeedOrCategoryChange>,
+    ) = dbRef.transactionWithContext(backgroundDispatcher) {
+        captured.forEach { change ->
+            dbRef.cloudPendingFeedOrCategoryChangeQueries.deleteCloudPendingFeedOrCategoryChangeIfRevisionMatches(
+                sessionId = sessionId,
+                entity = change.entity,
+                id = change.id,
+                field = change.field,
+                revision = change.revision,
+            )
+        }
+    }
+
+    suspend fun acknowledgeCloudPendingArticleFlags(
+        sessionId: String,
+        captured: List<CloudPendingArticleFlag>,
+    ) = dbRef.transactionWithContext(backgroundDispatcher) {
+        captured.forEach { pendingField ->
+            dbRef.cloudPendingArticleFlagQueries.deleteCloudPendingArticleFlagIfRevisionMatches(
+                sessionId = sessionId,
+                itemId = pendingField.itemId,
+                field = pendingField.field,
+                revision = pendingField.revision,
+            )
+        }
+    }
+
+    suspend fun applyCloudFeedAndCategoryChanges(
+        snapshot: CloudFeedAndCategorySnapshot,
+        sessionId: String,
+        withCurrentSession: (() -> Unit) -> Unit = { it() },
+    ) = dbRef.transactionWithContext(backgroundDispatcher) {
+        val merged = snapshot.applyCloudFeedAndCategoryChanges(selectCloudPendingFeedAndCategoryChanges(sessionId))
+        withCurrentSession {
+            reconcileCategories(merged.categories)
+            reconcileSources(merged.sources)
+        }
+    }
+
+    private fun reconcileCategories(categories: List<FeedSourceCategory>) {
+        val positions = dbRef.feedSourceCategoryQueries.selectAll().executeAsList().associate { it.id to it.position }
+        // Reinsert together so valid remote title swaps cannot collide with the old unique titles.
+        dbRef.feedSourceCategoryQueries.deleteAll()
+        categories.forEach { category ->
+            dbRef.feedSourceCategoryQueries.insertFeedSourceCategory(
+                id = category.id,
+                title = category.title,
+            )
+            dbRef.feedSourceCategoryQueries.updateCategoryPosition(
+                id = category.id,
+                position = positions[category.id] ?: category.position,
+            )
+        }
+    }
+
+    private fun reconcileSources(sources: List<ParsedFeedSource>) {
+        val sourceIds = sources.map { it.id }
+        dbRef.readStatusPendingActionQueries.deleteReadStatusPendingActionsForFeedSourcesExcept(sourceIds)
+        dbRef.feedSourceCacheInfoQueries.deleteAllExcept(sourceIds)
+        dbRef.feedSourceQueries.deleteAllExcept(sourceIds)
+        dbRef.feedItemQueries.deleteAllExcept(sourceIds)
+        sources.forEach { source ->
+            val existing = dbRef.feedSourceQueries.selectCloudFieldsById(source.id).executeAsOneOrNull()
+            if (existing != null && existing.url != source.url) {
+                dbRef.feedSourceCacheInfoQueries.deleteCacheInfo(source.id)
+            }
+            val websiteUrl = source.websiteUrl ?: existing?.website_url
+            if (websiteUrl != null) {
+                dbRef.feedSourceQueries.insertFeedSourceWithWebsite(
+                    url_hash = source.id,
+                    url = source.url,
+                    title = source.title,
+                    category_id = source.category?.id,
+                    logo_url = source.logoUrl,
+                    website_url = websiteUrl,
+                )
+            } else {
+                dbRef.feedSourceQueries.insertFeedSource(
+                    url_hash = source.id,
+                    url = source.url,
+                    title = source.title,
+                    category_id = source.category?.id,
+                    logo_url = source.logoUrl,
+                )
+            }
+            dbRef.feedSourceQueries.updateFeedSourceMetadata(
+                urlHash = source.id,
+                url = source.url,
+                title = source.title,
+                categoryId = source.category?.id,
+                logoUrl = source.logoUrl,
+                websiteUrl = websiteUrl,
+            )
+        }
+    }
 
     suspend fun upsertReadStatusPendingActions(
         feedItemIds: List<FeedItemId>,
@@ -327,30 +517,48 @@ class DatabaseHelper(
             dbRef.readStatusPendingActionQueries.countReadStatusPendingActions().executeAsOne()
         }
 
-    suspend fun markAllFeedAsRead(feedFilter: FeedFilter) =
-        dbRef.transactionWithContext(backgroundDispatcher) {
-            when (feedFilter) {
-                is FeedFilter.Category -> {
-                    dbRef.feedItemQueries.markAllReadByCategory(feedFilter.feedCategory.id)
-                }
-
-                is FeedFilter.Source -> {
-                    dbRef.feedItemQueries.markAllReadByFeedSource(feedFilter.feedSource.id)
-                }
-
-                FeedFilter.Timeline -> {
-                    dbRef.feedItemQueries.markAllRead()
-                }
-
-                FeedFilter.Uncategorized -> {
-                    dbRef.feedItemQueries.markAllReadUncategorized()
-                }
-
-                FeedFilter.Read, FeedFilter.Bookmarks -> {
-                    // Do nothing
-                }
+    suspend fun markAllFeedAsRead(
+        feedFilter: FeedFilter,
+        cloudSessionId: String? = null,
+        withCurrentSession: (() -> Unit) -> Unit = { it() },
+    ) = cloudMutation(withCurrentSession) {
+        val affectedItemIds = when {
+            cloudSessionId == null -> emptyList()
+            feedFilter == FeedFilter.Read || feedFilter == FeedFilter.Bookmarks -> emptyList()
+            else -> {
+                dbRef.feedItemQueries.selectFeedUrlsForFilter(
+                    feedSourceId = feedFilter.getFeedSourceId(),
+                    feedSourceCategoryId = feedFilter.getCategoryId(),
+                    isRead = false,
+                    isBookmarked = null,
+                    isUncategorized = feedFilter.getIsUncategorized(),
+                    isHidden = null,
+                ).executeAsList()
             }
         }
+        when (feedFilter) {
+            is FeedFilter.Category -> {
+                dbRef.feedItemQueries.markAllReadByCategory(feedFilter.feedCategory.id)
+            }
+
+            is FeedFilter.Source -> {
+                dbRef.feedItemQueries.markAllReadByFeedSource(feedFilter.feedSource.id)
+            }
+
+            FeedFilter.Timeline -> {
+                dbRef.feedItemQueries.markAllRead()
+            }
+
+            FeedFilter.Uncategorized -> {
+                dbRef.feedItemQueries.markAllReadUncategorized()
+            }
+
+            FeedFilter.Read, FeedFilter.Bookmarks -> {
+                // Do nothing
+            }
+        }
+        recordCloudPendingArticleFlags(cloudSessionId, affectedItemIds, CloudArticleFlag.READ, true)
+    }
 
     suspend fun getNewerItems(targetItemId: String, feedFilter: FeedFilter): List<String> =
         withContext(backgroundDispatcher) {
@@ -372,25 +580,55 @@ class DatabaseHelper(
             ).executeAsList()
         }
 
-    suspend fun markAllNewerAsRead(targetItemId: String, feedFilter: FeedFilter) =
-        dbRef.transactionWithContext(backgroundDispatcher) {
-            dbRef.feedItemQueries.markAllNewerAsRead(
+    suspend fun markAllNewerAsRead(
+        targetItemId: String,
+        feedFilter: FeedFilter,
+        cloudSessionId: String? = null,
+        withCurrentSession: (() -> Unit) -> Unit = { it() },
+    ) = cloudMutation(withCurrentSession) {
+        val affectedItemIds = if (cloudSessionId == null) {
+            emptyList()
+        } else {
+            dbRef.feedItemQueries.selectNewerItems(
                 targetItemId = targetItemId,
                 feedSourceId = feedFilter.getFeedSourceId(),
                 feedSourceCategoryId = feedFilter.getCategoryId(),
                 isUncategorized = feedFilter.getIsUncategorized(),
-            )
+            ).executeAsList()
         }
+        dbRef.feedItemQueries.markAllNewerAsRead(
+            targetItemId = targetItemId,
+            feedSourceId = feedFilter.getFeedSourceId(),
+            feedSourceCategoryId = feedFilter.getCategoryId(),
+            isUncategorized = feedFilter.getIsUncategorized(),
+        )
+        recordCloudPendingArticleFlags(cloudSessionId, affectedItemIds, CloudArticleFlag.READ, true)
+    }
 
-    suspend fun markAllOlderAsRead(targetItemId: String, feedFilter: FeedFilter) =
-        dbRef.transactionWithContext(backgroundDispatcher) {
-            dbRef.feedItemQueries.markAllOlderAsRead(
+    suspend fun markAllOlderAsRead(
+        targetItemId: String,
+        feedFilter: FeedFilter,
+        cloudSessionId: String? = null,
+        withCurrentSession: (() -> Unit) -> Unit = { it() },
+    ) = cloudMutation(withCurrentSession) {
+        val affectedItemIds = if (cloudSessionId == null) {
+            emptyList()
+        } else {
+            dbRef.feedItemQueries.selectOlderItems(
                 targetItemId = targetItemId,
                 feedSourceId = feedFilter.getFeedSourceId(),
                 feedSourceCategoryId = feedFilter.getCategoryId(),
                 isUncategorized = feedFilter.getIsUncategorized(),
-            )
+            ).executeAsList()
         }
+        dbRef.feedItemQueries.markAllOlderAsRead(
+            targetItemId = targetItemId,
+            feedSourceId = feedFilter.getFeedSourceId(),
+            feedSourceCategoryId = feedFilter.getCategoryId(),
+            isUncategorized = feedFilter.getIsUncategorized(),
+        )
+        recordCloudPendingArticleFlags(cloudSessionId, affectedItemIds, CloudArticleFlag.READ, true)
+    }
 
     suspend fun deleteOldFeedItems(timeThreshold: Long, feedFilter: FeedFilter) =
         try {
@@ -491,13 +729,24 @@ class DatabaseHelper(
             }
         }
 
-    suspend fun deleteFeedSource(feedSourceId: String) =
-        dbRef.transactionWithContext(backgroundDispatcher) {
-            dbRef.readStatusPendingActionQueries.deleteReadStatusPendingActionsForFeedSource(feedSourceId)
-            dbRef.feedItemQueries.deleteAllWithFeedSource(feedSourceId)
-            dbRef.feedSourceCacheInfoQueries.deleteCacheInfo(feedSourceId)
-            dbRef.feedSourceQueries.deleteFeedSource(feedSourceId)
+    suspend fun deleteFeedSource(
+        feedSourceId: String,
+        cloudSessionId: String? = null,
+        withCurrentSession: (() -> Unit) -> Unit = { it() },
+    ) = cloudMutation(withCurrentSession) {
+        val exists = dbRef.feedSourceQueries.selectCloudFieldsById(feedSourceId).executeAsOneOrNull() != null
+        dbRef.readStatusPendingActionQueries.deleteReadStatusPendingActionsForFeedSource(feedSourceId)
+        dbRef.feedItemQueries.deleteAllWithFeedSource(feedSourceId)
+        dbRef.feedSourceCacheInfoQueries.deleteCacheInfo(feedSourceId)
+        dbRef.feedSourceQueries.deleteFeedSource(feedSourceId)
+        if (exists) {
+            recordCloudFeedOrCategoryDeletion(
+                sessionId = cloudSessionId,
+                entity = CloudFeedOrCategoryEntity.SOURCE,
+                id = feedSourceId,
+            )
         }
+    }
 
     suspend fun deleteFeedSourceExcept(feedSourceIds: List<String>) =
         dbRef.transactionWithContext(backgroundDispatcher, suspensionGuardReason = "Removing unsubscribed feeds") {
@@ -596,11 +845,22 @@ class DatabaseHelper(
             .mapToOneOrDefault(0, backgroundDispatcher)
             .flowOn(backgroundDispatcher)
 
-    suspend fun deleteCategory(id: String) =
-        dbRef.transactionWithContext(backgroundDispatcher) {
-            dbRef.feedSourceQueries.resetCategory(categoryId = id)
-            dbRef.feedSourceCategoryQueries.delete(id = id)
+    suspend fun deleteCategory(
+        id: String,
+        cloudSessionId: String? = null,
+        withCurrentSession: (() -> Unit) -> Unit = { it() },
+    ) = cloudMutation(withCurrentSession) {
+        val exists = dbRef.feedSourceCategoryQueries.selectById(id).executeAsOneOrNull() != null
+        dbRef.feedSourceQueries.resetCategory(categoryId = id)
+        dbRef.feedSourceCategoryQueries.delete(id = id)
+        if (exists) {
+            recordCloudFeedOrCategoryDeletion(
+                sessionId = cloudSessionId,
+                entity = CloudFeedOrCategoryEntity.CATEGORY,
+                id = id,
+            )
         }
+    }
 
     suspend fun getCategoryByName(name: String): FeedSourceCategory? =
         withContext(backgroundDispatcher) {
@@ -615,10 +875,23 @@ class DatabaseHelper(
                 }
         }
 
-    suspend fun updateCategoryName(id: String, newName: String) =
-        dbRef.transactionWithContext(backgroundDispatcher) {
-            dbRef.feedSourceCategoryQueries.updateCategoryName(title = newName, id = id)
+    suspend fun updateCategoryName(
+        id: String,
+        newName: String,
+        cloudSessionId: String? = null,
+        withCurrentSession: (() -> Unit) -> Unit = { it() },
+    ) = cloudMutation(withCurrentSession) {
+        val existing = dbRef.feedSourceCategoryQueries.selectById(id).executeAsOneOrNull()
+        dbRef.feedSourceCategoryQueries.updateCategoryName(title = newName, id = id)
+        if (existing != null && existing.title != newName) {
+            recordCloudFeedOrCategoryUpdates(
+                sessionId = cloudSessionId,
+                entity = CloudFeedOrCategoryEntity.CATEGORY,
+                id = id,
+                fields = listOf(CloudFeedOrCategoryField.TITLE to newName),
+            )
         }
+    }
 
     suspend fun updateCategoryNameAndId(oldId: String, newId: String, newName: String) =
         dbRef.transactionWithContext(backgroundDispatcher) {
@@ -626,38 +899,79 @@ class DatabaseHelper(
             dbRef.feedSourceQueries.updateCategoryId(newCategoryId = newId, oldCategoryId = oldId)
         }
 
-    suspend fun updateBookmarkStatus(feedItemId: FeedItemId, isBookmarked: Boolean) =
-        dbRef.transactionWithContext(backgroundDispatcher) {
-            dbRef.feedItemQueries.updateBookmarkStatus(
-                starred = isBookmarked,
-                urlHash = feedItemId.id,
-            )
-        }
+    suspend fun updateBookmarkStatus(
+        feedItemId: FeedItemId,
+        isBookmarked: Boolean,
+        cloudSessionId: String? = null,
+        withCurrentSession: (() -> Unit) -> Unit = { it() },
+    ) = cloudMutation(withCurrentSession) {
+        dbRef.feedItemQueries.updateBookmarkStatus(
+            starred = isBookmarked,
+            urlHash = feedItemId.id,
+        )
+        recordCloudPendingArticleFlags(
+            sessionId = cloudSessionId,
+            itemIds = listOf(feedItemId.id),
+            field = CloudArticleFlag.BOOKMARK,
+            value = isBookmarked,
+        )
+    }
 
-    suspend fun updateFeedSourceName(feedSourceId: String, newName: String) =
-        dbRef.transactionWithContext(backgroundDispatcher) {
-            dbRef.feedSourceQueries.updateFeedSourceTitle(
-                title = newName,
-                urlHash = feedSourceId,
+    suspend fun updateFeedSourceName(
+        feedSourceId: String,
+        newName: String,
+        cloudSessionId: String? = null,
+        withCurrentSession: (() -> Unit) -> Unit = { it() },
+    ) = cloudMutation(withCurrentSession) {
+        val existing = dbRef.feedSourceQueries.selectCloudFieldsById(feedSourceId).executeAsOneOrNull()
+        dbRef.feedSourceQueries.updateFeedSourceTitle(
+            title = newName,
+            urlHash = feedSourceId,
+        )
+        if (existing != null && existing.title != newName) {
+            recordCloudFeedOrCategoryUpdates(
+                sessionId = cloudSessionId,
+                entity = CloudFeedOrCategoryEntity.SOURCE,
+                id = feedSourceId,
+                fields = listOf(CloudFeedOrCategoryField.TITLE to newName),
             )
         }
+    }
 
-    suspend fun updateFeedSource(feedSource: FeedSource) =
-        dbRef.transactionWithContext(backgroundDispatcher) {
-            val oldUrl = dbRef.feedSourceQueries.selectFeedSourceById(feedSource.id)
-                .executeAsOneOrNull()
-                ?.url
-            if (oldUrl != null && oldUrl != feedSource.url) {
-                // Stale validators must not be sent to the new URL
-                dbRef.feedSourceCacheInfoQueries.deleteCacheInfo(feedSource.id)
-            }
-            dbRef.feedSourceQueries.updateFeedSource(
-                urlHash = feedSource.id,
-                url = feedSource.url,
-                title = feedSource.title,
-                categoryId = feedSource.category?.id,
+    suspend fun updateFeedSource(
+        feedSource: FeedSource,
+        cloudSessionId: String? = null,
+        withCurrentSession: (() -> Unit) -> Unit = { it() },
+    ) = cloudMutation(withCurrentSession) {
+        val existing = dbRef.feedSourceQueries.selectCloudFieldsById(feedSource.id).executeAsOneOrNull()
+        val oldUrl = existing?.url
+        if (oldUrl != null && oldUrl != feedSource.url) {
+            // Stale validators must not be sent to the new URL
+            dbRef.feedSourceCacheInfoQueries.deleteCacheInfo(feedSource.id)
+        }
+        dbRef.feedSourceQueries.updateFeedSource(
+            urlHash = feedSource.id,
+            url = feedSource.url,
+            title = feedSource.title,
+            categoryId = feedSource.category?.id,
+        )
+        if (existing != null) {
+            recordCloudFeedOrCategoryUpdates(
+                sessionId = cloudSessionId,
+                entity = CloudFeedOrCategoryEntity.SOURCE,
+                id = feedSource.id,
+                fields = buildList {
+                    if (existing.url != feedSource.url) add(CloudFeedOrCategoryField.URL to feedSource.url)
+                    if (existing.title != feedSource.title) {
+                        add(CloudFeedOrCategoryField.TITLE to feedSource.title)
+                    }
+                    if (existing.category_id != feedSource.category?.id) {
+                        add(CloudFeedOrCategoryField.CATEGORY to feedSource.category?.id)
+                    }
+                },
             )
         }
+    }
 
     fun search(
         searchQuery: String,
@@ -810,7 +1124,13 @@ class DatabaseHelper(
 
     suspend fun updateFeedItemReadAndBookmarked(
         syncedFeedItems: List<SyncedFeedItem>,
-    ) = dbRef.transactionWithContext(backgroundDispatcher) {
+        cloudSessionId: String? = null,
+        replaceAll: Boolean = false,
+        withCurrentSession: (() -> Unit) -> Unit = { it() },
+    ) = cloudMutation(withCurrentSession) {
+        if (replaceAll) {
+            dbRef.feedItemQueries.resetAllFeedItemFlags()
+        }
         syncedFeedItems.forEach { syncedFeedItem ->
             dbRef.feedItemQueries.updateFeedItemReadAndBookmarked(
                 isRead = syncedFeedItem.isRead,
@@ -818,10 +1138,44 @@ class DatabaseHelper(
                 urlHash = syncedFeedItem.id,
             )
         }
+        if (cloudSessionId != null) {
+            dbRef.cloudPendingArticleFlagQueries.selectCloudPendingArticleFlags(
+                sessionId = cloudSessionId,
+                mapper = { itemId, field, value, revision ->
+                    CloudPendingArticleFlag(itemId, field, value, revision)
+                },
+            )
+                .executeAsList()
+                .forEach { pendingField ->
+                    when (pendingField.field) {
+                        CloudArticleFlag.READ -> dbRef.feedItemQueries.updateReadStatus(
+                            urlHash = pendingField.itemId,
+                            isRead = pendingField.value,
+                        )
+
+                        CloudArticleFlag.BOOKMARK -> dbRef.feedItemQueries.updateBookmarkStatus(
+                            urlHash = pendingField.itemId,
+                            starred = pendingField.value,
+                        )
+                    }
+                }
+        }
     }
 
     suspend fun getFeedItemsForSync(): List<SyncedFeedItem> = withContext(backgroundDispatcher) {
         dbRef.feedItemQueries.selectForSync()
+            .executeAsList()
+            .map { queryResult ->
+                SyncedFeedItem(
+                    id = queryResult.url_hash,
+                    isRead = queryResult.is_read,
+                    isBookmarked = queryResult.is_bookmarked,
+                )
+            }
+    }
+
+    suspend fun getAllFeedItemFlagsForCloud(): List<SyncedFeedItem> = withContext(backgroundDispatcher) {
+        dbRef.feedItemQueries.selectAllFeedItemFlagsForCloud()
             .executeAsList()
             .map { queryResult ->
                 SyncedFeedItem(
@@ -861,8 +1215,29 @@ class DatabaseHelper(
             dbRef.feedItemStatusQueries.deleteAllStatuses()
         }
 
+    suspend fun deleteAllCloudSubscriptions(
+        sessionId: String,
+        withCurrentSession: (() -> Unit) -> Unit = { it() },
+    ) = cloudMutation(withCurrentSession) {
+        val sourceIds = dbRef.feedSourceQueries.selectAllUrlHashes().executeAsList()
+        val categoryIds = dbRef.feedSourceCategoryQueries.selectAllIds().executeAsList()
+        recordCloudFeedAndCategoryDeletions(
+            sessionId = sessionId,
+            entities = sourceIds.map { CloudFeedOrCategoryEntity.SOURCE to it } +
+                categoryIds.map { CloudFeedOrCategoryEntity.CATEGORY to it },
+        )
+        dbRef.readStatusPendingActionQueries.deleteAllReadStatusPendingActions()
+        dbRef.feedItemQueries.deleteAll()
+        dbRef.feedSourceCategoryQueries.deleteAll()
+        dbRef.feedSourceCacheInfoQueries.deleteAll()
+        dbRef.feedSourceQueries.deleteAll()
+    }
+
     suspend fun deleteAll() = dbRef.transactionWithContext(backgroundDispatcher) {
         dbRef.readStatusPendingActionQueries.deleteAllReadStatusPendingActions()
+        dbRef.cloudPendingArticleFlagQueries.deleteAllCloudPendingArticleFlags()
+        dbRef.cloudPendingFeedOrCategoryChangeQueries.deleteAllCloudPendingFeedAndCategoryChanges()
+        dbRef.cloudPendingArticleFlagQueries.deleteAllCloudSyncStates()
         dbRef.feedItemQueries.deleteAll()
         dbRef.feedSourceCategoryQueries.deleteAll()
         dbRef.feedSourceCacheInfoQueries.deleteAll()
@@ -871,6 +1246,9 @@ class DatabaseHelper(
 
     suspend fun deleteAllE2eData() = dbRef.transactionWithContext(backgroundDispatcher) {
         dbRef.readStatusPendingActionQueries.deleteAllReadStatusPendingActions()
+        dbRef.cloudPendingArticleFlagQueries.deleteAllCloudPendingArticleFlags()
+        dbRef.cloudPendingFeedOrCategoryChangeQueries.deleteAllCloudPendingFeedAndCategoryChanges()
+        dbRef.cloudPendingArticleFlagQueries.deleteAllCloudSyncStates()
         dbRef.contentPrefetchQueueQueries.clearQueue()
         dbRef.feedItemStatusQueries.deleteAllStatuses()
         dbRef.feedItemTempQueries.clearTempFeedItemIds()
@@ -1059,25 +1437,210 @@ class DatabaseHelper(
      * which gets the process killed (0xdead10cc). Short transactions should leave it null,
      * since asserting background time is not free.
      */
-    private suspend fun Transacter.transactionWithContext(
+    private suspend fun cloudMutation(
+        withCurrentSession: (() -> Unit) -> Unit,
+        suspensionGuardReason: String? = null,
+        body: () -> Unit,
+    ) = dbRef.transactionWithContext(
+        coroutineContext = backgroundDispatcher,
+        suspensionGuardReason = suspensionGuardReason,
+    ) {
+        withCurrentSession(body)
+    }
+
+    private suspend fun <T> Transacter.transactionWithContext(
         coroutineContext: CoroutineContext,
         noEnclosing: Boolean = false,
         suspensionGuardReason: String? = null,
-        body: TransactionWithoutReturn.() -> Unit,
-    ) {
+        body: TransactionWithReturn<T>.() -> T,
+    ): T =
         withContext(coroutineContext) {
             if (suspensionGuardReason == null) {
-                this@transactionWithContext.transaction(noEnclosing) {
-                    body()
-                }
+                this@transactionWithContext.transactionWithResult(noEnclosing, body)
             } else {
                 withSuspensionGuard(suspensionGuardReason) {
-                    this@transactionWithContext.transaction(noEnclosing) {
-                        body()
-                    }
+                    this@transactionWithContext.transactionWithResult(noEnclosing, body)
                 }
             }
         }
+
+    private fun recordCloudPendingArticleFlags(
+        sessionId: String?,
+        itemIds: List<String>,
+        field: CloudArticleFlag,
+        value: Boolean,
+    ) {
+        if (sessionId == null || itemIds.isEmpty()) return
+
+        dbRef.cloudPendingArticleFlagQueries.incrementCloudRevision(sessionId)
+        val revision = dbRef.cloudPendingArticleFlagQueries.selectCloudRevision(sessionId).executeAsOne()
+        itemIds.forEach { itemId ->
+            dbRef.cloudPendingArticleFlagQueries.insertOrReplaceCloudPendingArticleFlag(
+                sessionId = sessionId,
+                itemId = itemId,
+                field = field,
+                value = value,
+                revision = revision,
+            )
+        }
+    }
+
+    private fun upsertCategory(
+        category: FeedSourceCategory,
+        cloudSessionId: String?,
+    ) {
+        val existing = dbRef.feedSourceCategoryQueries.selectById(category.id).executeAsOneOrNull()
+        dbRef.feedSourceCategoryQueries.insertFeedSourceCategory(
+            id = category.id,
+            title = category.title,
+        )
+        dbRef.feedSourceCategoryQueries.updateCategoryName(
+            id = category.id,
+            title = category.title,
+        )
+        val updated = dbRef.feedSourceCategoryQueries.selectById(category.id).executeAsOneOrNull()
+        if (existing == null && updated != null) {
+            recordCloudFeedOrCategoryCreation(
+                sessionId = cloudSessionId,
+                entity = CloudFeedOrCategoryEntity.CATEGORY,
+                id = category.id,
+                fields = listOf(CloudFeedOrCategoryField.TITLE to updated.title),
+            )
+        } else if (existing != null && updated != null && existing.title != updated.title) {
+            recordCloudFeedOrCategoryUpdates(
+                sessionId = cloudSessionId,
+                entity = CloudFeedOrCategoryEntity.CATEGORY,
+                id = category.id,
+                fields = listOf(CloudFeedOrCategoryField.TITLE to updated.title),
+            )
+        }
+    }
+
+    private fun insertEmbeddedCategoryIfNeeded(
+        category: FeedSourceCategory,
+        cloudSessionId: String?,
+    ) {
+        if (cloudSessionId == null ||
+            dbRef.feedSourceCategoryQueries.selectById(category.id).executeAsOneOrNull() != null
+        ) {
+            return
+        }
+
+        dbRef.feedSourceCategoryQueries.insertFeedSourceCategory(
+            id = category.id,
+            title = category.title,
+        )
+        val inserted = dbRef.feedSourceCategoryQueries.selectById(category.id).executeAsOneOrNull() ?: return
+        recordCloudFeedOrCategoryCreation(
+            sessionId = cloudSessionId,
+            entity = CloudFeedOrCategoryEntity.CATEGORY,
+            id = category.id,
+            fields = listOf(CloudFeedOrCategoryField.TITLE to inserted.title),
+        )
+    }
+
+    private fun selectCloudPendingFeedAndCategoryChanges(sessionId: String): List<CloudPendingFeedOrCategoryChange> =
+        dbRef.cloudPendingFeedOrCategoryChangeQueries.selectCloudPendingFeedAndCategoryChanges(
+            sessionId = sessionId,
+            mapper = { entity, id, field, value, revision ->
+                CloudPendingFeedOrCategoryChange(
+                    entity = entity,
+                    id = id,
+                    field = field,
+                    value = value,
+                    revision = revision,
+                )
+            },
+        ).executeAsList()
+
+    private fun recordCloudFeedOrCategoryCreation(
+        sessionId: String?,
+        entity: CloudFeedOrCategoryEntity,
+        id: String,
+        fields: List<Pair<CloudFeedOrCategoryField, String?>>,
+    ) {
+        if (sessionId == null) return
+
+        dbRef.cloudPendingFeedOrCategoryChangeQueries.deleteCloudPendingFeedAndCategoryChangesForEntity(
+            sessionId = sessionId,
+            entity = entity,
+            id = id,
+        )
+        val revision = nextCloudRevision(sessionId)
+        insertCloudPendingFeedOrCategoryChange(sessionId, entity, id, CloudFeedOrCategoryField.EXISTS, "1", revision)
+        fields.forEach { (field, value) ->
+            insertCloudPendingFeedOrCategoryChange(sessionId, entity, id, field, value, revision)
+        }
+    }
+
+    private fun recordCloudFeedOrCategoryUpdates(
+        sessionId: String?,
+        entity: CloudFeedOrCategoryEntity,
+        id: String,
+        fields: List<Pair<CloudFeedOrCategoryField, String?>>,
+    ) {
+        if (sessionId == null || fields.isEmpty()) return
+
+        val revision = nextCloudRevision(sessionId)
+        fields.forEach { (field, value) ->
+            insertCloudPendingFeedOrCategoryChange(sessionId, entity, id, field, value, revision)
+        }
+    }
+
+    private fun recordCloudFeedOrCategoryDeletion(
+        sessionId: String?,
+        entity: CloudFeedOrCategoryEntity,
+        id: String,
+    ) {
+        if (sessionId == null) return
+        recordCloudFeedAndCategoryDeletions(sessionId, listOf(entity to id))
+    }
+
+    private fun recordCloudFeedAndCategoryDeletions(
+        sessionId: String,
+        entities: List<Pair<CloudFeedOrCategoryEntity, String>>,
+    ) {
+        if (entities.isEmpty()) return
+
+        val revision = nextCloudRevision(sessionId)
+        entities.forEach { (entity, id) ->
+            dbRef.cloudPendingFeedOrCategoryChangeQueries.deleteCloudPendingFeedAndCategoryChangesForEntity(
+                sessionId = sessionId,
+                entity = entity,
+                id = id,
+            )
+            insertCloudPendingFeedOrCategoryChange(
+                sessionId,
+                entity,
+                id,
+                CloudFeedOrCategoryField.EXISTS,
+                "0",
+                revision,
+            )
+        }
+    }
+
+    private fun nextCloudRevision(sessionId: String): Long {
+        dbRef.cloudPendingArticleFlagQueries.incrementCloudRevision(sessionId)
+        return dbRef.cloudPendingArticleFlagQueries.selectCloudRevision(sessionId).executeAsOne()
+    }
+
+    private fun insertCloudPendingFeedOrCategoryChange(
+        sessionId: String,
+        entity: CloudFeedOrCategoryEntity,
+        id: String,
+        field: CloudFeedOrCategoryField,
+        value: String?,
+        revision: Long,
+    ) {
+        dbRef.cloudPendingFeedOrCategoryChangeQueries.insertOrReplaceCloudPendingFeedOrCategoryChange(
+            sessionId = sessionId,
+            entity = entity,
+            id = id,
+            field = field,
+            value = value,
+            revision = revision,
+        )
     }
 
     private fun FeedFilter.getFeedSourceId(): String? {

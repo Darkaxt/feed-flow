@@ -13,6 +13,24 @@ import UIKit
 
 class DropboxDataSourceIos: DropboxDataSource {
     private var client: DropboxClient?
+    private let injectedClient: DropboxClientBridge?
+    private let documentsDirectoryURL: () -> URL
+    private let logError: (String) -> Void
+
+    init(
+        client: DropboxClientBridge? = nil,
+        documentsDirectoryURL: @escaping () -> URL = {
+            FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        },
+        logError: @escaping (String) -> Void = {
+            Deps.shared.getLogger(tag: "DropboxDataSourceIos").e(messageString: $0)
+        }
+    ) {
+        self.client = nil
+        injectedClient = client
+        self.documentsDirectoryURL = documentsDirectoryURL
+        self.logError = logError
+    }
 
     func setup(apiKey: String) {
         DropboxClientsManager.setupWithAppKey(
@@ -36,12 +54,11 @@ class DropboxDataSourceIos: DropboxDataSource {
         for request in successfulReturnedRequests {
             switch request {
             case let .files_upload(uploadResponse):
-                uploadResponse.response { _, error in
-                    // handle response
-                    if error != nil {
+                uploadResponse.response { response, error in
+                    if shouldAcknowledgeResumedUpload(response: response, error: error) {
                         Deps.shared.getFeedSyncRepository().onDropboxUploadSuccessAfterResume()
                     } else {
-                        print("ERROR: Upload error after resume")
+                        print("ERROR: Dropbox upload failed after resume: \(String(describing: error))")
                     }
                 }
 
@@ -49,6 +66,10 @@ class DropboxDataSourceIos: DropboxDataSource {
                 break
             }
         }
+    }
+
+    static func shouldAcknowledgeResumedUpload<Response>(response: Response?, error: Error?) -> Bool {
+        response != nil && error == nil
     }
 
     func startAuthorization(platformAuthHandler: @escaping () -> Void) {
@@ -70,7 +91,7 @@ class DropboxDataSourceIos: DropboxDataSource {
     }
 
     func isClientSet() -> Bool {
-        client != nil
+        client != nil || injectedClient != nil
     }
 
     func revokeAccess() async throws {
@@ -82,41 +103,41 @@ class DropboxDataSourceIos: DropboxDataSource {
         downloadParam: DropboxDownloadParam,
         completionHandler: @escaping (DropboxDownloadResult?, Error?) -> Void
     ) {
-        let fileManager = FileManager.default
-        let directoryURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let destURL = directoryURL.appendingPathComponent(downloadParam.outputName)
+        let destURL = documentsDirectoryURL().appendingPathComponent(downloadParam.outputName)
 
-        if let client = getBackgroundClient() {
-            client.files.download(path: downloadParam.path, overwrite: true, destination: destURL)
-                .response { response, error in
-                    if let response = response {
-                        print("Data successfully downloaded from Dropbox")
-                        let downloadResult = DropboxDownloadResult(
-                            id: response.0.id,
-                            sizeInByte: Int64(response.0.size),
-                            contentHash: response.0.contentHash,
-                            destinationUrl: DatabaseDestinationUrl(url: response.1)
+        let transport = injectedClient ?? getBackgroundClient().map { DropboxSDKClientBridge(client: $0) }
+        if let transport {
+            transport.download(path: downloadParam.path, overwrite: true, destination: destURL) { response, error in
+                if let response = response {
+                    print("Data successfully downloaded from Dropbox")
+                    let downloadResult = DropboxDownloadResult(
+                        id: response.metadata.id,
+                        sizeInByte: Int64(response.metadata.size),
+                        contentHash: response.metadata.contentHash,
+                        destinationUrl: DatabaseDestinationUrl(url: response.destination),
+                        isBackupNotFound: false,
+                        revision: response.metadata.revision
+                    )
+                    completionHandler(downloadResult, nil)
+                } else if let error = error {
+                    self.logError(String(describing: error))
+                    if case DropboxErrors.downloadNotFound = error {
+                        completionHandler(
+                            DropboxDownloadResult(
+                                id: "",
+                                sizeInByte: 0,
+                                contentHash: nil,
+                                destinationUrl: nil,
+                                isBackupNotFound: true,
+                                revision: nil
+                            ),
+                            nil
                         )
-                        completionHandler(downloadResult, nil)
-                    } else if let error = error {
-                        Deps.shared.getLogger(tag: "DropboxDataSourceIos").e(
-                            messageString: error.description
-                        )
-
-                        switch error as CallError {
-                        case let .routeError(boxed, _, _, _):
-                            let err = boxed.unboxed as Files.DownloadError
-                            Deps.shared.getLogger(tag: "DropboxDataSourceIos").e(
-                                messageString: "Boxed error: \(err.description)"
-                            )
-
-                        default:
-                            break
-                        }
-
-                        completionHandler(nil, DropboxErrors.downloadError(reason: error.description))
+                    } else {
+                        completionHandler(nil, DropboxErrors.downloadError(reason: String(describing: error)))
                     }
                 }
+            }
         } else {
             completionHandler(nil, DropboxErrors.downloadError(reason: "The client is nil"))
         }
@@ -126,13 +147,13 @@ class DropboxDataSourceIos: DropboxDataSource {
         uploadParam: DropboxUploadParam,
         completionHandler: @escaping (DropboxUploadResult?, Error?) -> Void
     ) {
-        if let client = getClient() {
-            client.files.upload(
+        let transport = injectedClient ?? getClient().map { DropboxSDKClientBridge(client: $0) }
+        if let transport {
+            transport.upload(
                 path: uploadParam.path,
-                mode: .overwrite,
+                expectedRevision: uploadParam.expectedRevision,
                 input: uploadParam.url
-            )
-            .response { response, error in
+            ) { response, error in
                 if let response = response {
                     print("Data successfully uploaded to Dropbox")
 
@@ -140,26 +161,28 @@ class DropboxDataSourceIos: DropboxDataSource {
                         id: response.id,
                         editDateMillis: Int64(response.serverModified.timeIntervalSince1970 * 1_000),
                         sizeInByte: Int64(response.size),
-                        contentHash: response.contentHash
+                        contentHash: response.contentHash,
+                        revision: response.revision,
+                        isConflict: false
                     )
                     completionHandler(uploadResult, nil)
                 } else if let error = error {
-                    Deps.shared.getLogger(tag: "DropboxDataSourceIos").e(
-                        messageString: error.description
-                    )
-
-                    switch error as CallError {
-                    case let .routeError(boxed, _, _, _):
-                        let err = boxed.unboxed as Files.UploadError
-                        Deps.shared.getLogger(tag: "DropboxDataSourceIos").e(
-                            messageString: "Boxed error: \(err.description)"
+                    self.logError(String(describing: error))
+                    if case DropboxErrors.uploadConflict = error {
+                        completionHandler(
+                            DropboxUploadResult(
+                                id: "",
+                                editDateMillis: 0,
+                                sizeInByte: 0,
+                                contentHash: nil,
+                                revision: nil,
+                                isConflict: true
+                            ),
+                            nil
                         )
-
-                    default:
-                        break
+                    } else {
+                        completionHandler(nil, DropboxErrors.uploadError(reason: String(describing: error)))
                     }
-
-                    completionHandler(nil, DropboxErrors.uploadError(reason: error.description))
                 }
             }
         } else {
