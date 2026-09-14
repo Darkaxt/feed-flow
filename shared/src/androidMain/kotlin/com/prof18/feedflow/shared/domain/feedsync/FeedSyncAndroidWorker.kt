@@ -271,7 +271,7 @@ internal class FeedSyncAndroidWorker(
     }
 
     private suspend fun installDownloadedFile(stagedFile: File) {
-        prepareSyncDatabaseFile(context, stagedFile)
+        prepareSyncDatabaseFile(stagedFile)
         feedSyncer.withClosedDatabase {
             pendingCloudChanges.withAccountSession(downloadSession) {
                 Files.move(
