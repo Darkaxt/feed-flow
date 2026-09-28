@@ -327,7 +327,9 @@
       "android/regression/162-pagination-scroll-read.yaml",
       "android/regression/163-rtl-content-direction.yaml",
       "android/regression/164-drawer-swipe-gesture.yaml",
-      "android/regression/166-widget-card-settings.yaml",
+      "android/regression/166-reader-rotation-retention.yaml",
+      "android/regression/167-scroll-read-auto-hide.yaml",
+      "android/regression/168-widget-card-settings.yaml",
       "android/smoke/001-first-launch-empty.yaml",
       "android/smoke/002-seeded-timeline-loads.yaml",
       "android/smoke/003-library-filters.yaml",
@@ -404,6 +406,7 @@
       "ios/regression/161-reader-no-url-no-content.yaml",
       "ios/regression/163-ios-rtl-content-direction.yaml",
       "ios/regression/165-ios-reader-scroll-retention.yaml",
+      "ios/regression/167-scroll-read-auto-hide.yaml",
       "ios/smoke/001-first-launch-empty.yaml",
       "ios/smoke/002-seeded-timeline-loads.yaml",
       "ios/smoke/003-library-filters.yaml",
@@ -511,7 +514,9 @@
       "regression/163": "Timeline rows follow each article's inferred content direction.",
       "regression/164": "A drag over the timeline neither opens the drawer nor falls through to the article, and drag-to-close still works once it is open.",
       "regression/165": "iOS reader mode preserves scroll position across background and foreground appearance changes.",
-      "regression/166": "Android in-app Widget Settings exposes and mutates Card appearance controls, then returns to the preview container."
+      "regression/166": "Android reader mode preserves scroll position and the full-screen image viewer across rotation.",
+      "regression/167": "With scroll marking and saved auto-hide on, earlier articles remain reachable in the current list while the next page still loads.",
+      "regression/168": "Android in-app Widget Settings exposes and mutates Card appearance controls, then returns to the preview container."
     };
 
     const sections = document.querySelector("#sections");

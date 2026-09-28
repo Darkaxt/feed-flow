@@ -49,6 +49,7 @@ import com.multiplatform.webview.jsbridge.IJsMessageHandler
 import com.multiplatform.webview.jsbridge.JsMessage
 import com.multiplatform.webview.jsbridge.rememberWebViewJsBridge
 import com.multiplatform.webview.web.LoadingState
+import com.multiplatform.webview.web.PlatformWebViewParams
 import com.multiplatform.webview.web.WebView
 import com.multiplatform.webview.web.WebViewNavigator
 import com.multiplatform.webview.web.rememberWebViewNavigator
@@ -92,7 +93,7 @@ internal fun ReaderModeScreen(
 
     val context = LocalContext.current
     val navigator = rememberWebViewNavigator()
-    var fullscreenImageUrl by remember { mutableStateOf<String?>(null) }
+    var fullscreenImageUrl by rememberSaveable { mutableStateOf<String?>(null) }
     var toolbarExpanded by rememberSaveable { mutableStateOf(true) }
 
     Box(
@@ -303,6 +304,7 @@ private fun FallbackWebView(
             modifier = Modifier.fillMaxSize(),
             state = state,
             navigator = navigator,
+            platformWebViewParams = PlatformWebViewParams(chromeClient = rememberFullscreenVideoChromeClient()),
         )
 
         if (showPageLoader) {
@@ -441,6 +443,7 @@ private fun ReaderMode(
             state = state,
             navigator = navigator,
             webViewJsBridge = jsBridge,
+            platformWebViewParams = PlatformWebViewParams(chromeClient = rememberFullscreenVideoChromeClient()),
             onCreated = { webView ->
                 CookieManager.getInstance().setAcceptCookie(true)
                 CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
