@@ -1,7 +1,6 @@
 package com.prof18.feedflow.android.widget
 
 import com.prof18.feedflow.android.settings.widget.WidgetSettingsViewModel
-import com.prof18.feedflow.core.utils.AppEnvironment
 import com.prof18.feedflow.shared.data.SettingsRepository
 import com.prof18.feedflow.shared.data.WidgetSettingsRepository
 import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
@@ -44,7 +43,7 @@ class WidgetSettingsViewModelTest {
         val repository = WidgetSettingsRepository(settings)
         val widgetUpdater = FakeWidgetUpdater()
         val viewModel = WidgetSettingsViewModel(
-            settingsRepository = SettingsRepository(MapSettings(), AppEnvironment.Release),
+            settingsRepository = SettingsRepository(MapSettings()),
             widgetSettingsRepository = repository,
             widgetUpdater = widgetUpdater,
         )
@@ -68,7 +67,7 @@ class WidgetSettingsViewModelTest {
         val repository = WidgetSettingsRepository(settings)
         val widgetUpdater = FakeWidgetUpdater()
         val viewModel = WidgetSettingsViewModel(
-            settingsRepository = SettingsRepository(MapSettings(), AppEnvironment.Release),
+            settingsRepository = SettingsRepository(MapSettings()),
             widgetSettingsRepository = repository,
             widgetUpdater = widgetUpdater,
         )
@@ -88,7 +87,7 @@ class WidgetSettingsViewModelTest {
         val repository = WidgetSettingsRepository(settings)
         val widgetUpdater = FakeWidgetUpdater()
         val viewModel = WidgetSettingsViewModel(
-            settingsRepository = SettingsRepository(MapSettings(), AppEnvironment.Release),
+            settingsRepository = SettingsRepository(MapSettings()),
             widgetSettingsRepository = repository,
             widgetUpdater = widgetUpdater,
         )
@@ -111,7 +110,7 @@ class WidgetSettingsViewModelTest {
         val repository = WidgetSettingsRepository(MapSettings())
         val widgetUpdater = FakeWidgetUpdater()
         val viewModel = WidgetSettingsViewModel(
-            settingsRepository = SettingsRepository(MapSettings(), AppEnvironment.Release),
+            settingsRepository = SettingsRepository(MapSettings()),
             widgetSettingsRepository = repository,
             widgetUpdater = widgetUpdater,
         )
@@ -169,7 +168,7 @@ class WidgetSettingsViewModelTest {
         }
         val widgetUpdater = FakeWidgetUpdater()
         val viewModel = WidgetSettingsViewModel(
-            settingsRepository = SettingsRepository(MapSettings(), AppEnvironment.Release),
+            settingsRepository = SettingsRepository(MapSettings()),
             widgetSettingsRepository = repository,
             widgetUpdater = widgetUpdater,
         )
@@ -217,7 +216,7 @@ class WidgetConfigurationViewModelTest {
         val settings = CountingWidgetSettings()
         val repository = WidgetSettingsRepository(settings)
         val viewModel = WidgetConfigurationViewModel(
-            settingsRepository = SettingsRepository(MapSettings(), AppEnvironment.Release),
+            settingsRepository = SettingsRepository(MapSettings()),
             widgetSettingsRepository = repository,
         )
         advanceUntilIdle()
@@ -235,7 +234,7 @@ class WidgetConfigurationViewModelTest {
         val settings = CountingWidgetSettings()
         val repository = WidgetSettingsRepository(settings)
         val viewModel = WidgetConfigurationViewModel(
-            settingsRepository = SettingsRepository(MapSettings(), AppEnvironment.Release),
+            settingsRepository = SettingsRepository(MapSettings()),
             widgetSettingsRepository = repository,
         )
         advanceUntilIdle()
@@ -251,7 +250,7 @@ class WidgetConfigurationViewModelTest {
     fun `card appearance callbacks persist all six settings without an updater`() = runTest(dispatcher) {
         val repository = WidgetSettingsRepository(MapSettings())
         val viewModel = WidgetConfigurationViewModel(
-            settingsRepository = SettingsRepository(MapSettings(), AppEnvironment.Release),
+            settingsRepository = SettingsRepository(MapSettings()),
             widgetSettingsRepository = repository,
         )
         advanceUntilIdle()
@@ -287,7 +286,7 @@ class WidgetConfigurationViewModelTest {
             setWidgetCardAppearance(initialAppearance)
         }
         val viewModel = WidgetConfigurationViewModel(
-            settingsRepository = SettingsRepository(MapSettings(), AppEnvironment.Release),
+            settingsRepository = SettingsRepository(MapSettings()),
             widgetSettingsRepository = repository,
         )
         advanceUntilIdle()
