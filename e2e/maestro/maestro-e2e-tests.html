@@ -247,7 +247,7 @@
     <section class="summary" aria-label="Summary">
       <div class="metric"><strong id="total-count">0</strong><span>automated flow files</span></div>
       <div class="metric"><strong>13</strong><span>smoke coverage IDs</span></div>
-      <div class="metric"><strong>62</strong><span>regression coverage IDs</span></div>
+      <div class="metric"><strong>71</strong><span>regression coverage IDs</span></div>
     </section>
 
     <div class="toolbar">
@@ -329,7 +329,12 @@
       "android/regression/164-drawer-swipe-gesture.yaml",
       "android/regression/166-reader-rotation-retention.yaml",
       "android/regression/167-scroll-read-auto-hide.yaml",
-      "android/regression/168-widget-card-settings.yaml",
+      "android/regression/168-mark-read-filter-boundaries.yaml",
+      "android/regression/169-bookmarks-mark-all-read-confirmation.yaml",
+      "android/regression/170-force-english.yaml",
+      "android/regression/171-search-reader-navigation.yaml",
+      "android/regression/172-sidebar-visibility-persistence.yaml",
+      "android/regression/173-widget-card-settings.yaml",
       "android/smoke/001-first-launch-empty.yaml",
       "android/smoke/002-seeded-timeline-loads.yaml",
       "android/smoke/003-library-filters.yaml",
@@ -407,6 +412,8 @@
       "ios/regression/163-ios-rtl-content-direction.yaml",
       "ios/regression/165-ios-reader-scroll-retention.yaml",
       "ios/regression/167-scroll-read-auto-hide.yaml",
+      "ios/regression/168-mark-read-filter-boundaries.yaml",
+      "ios/regression/172-sidebar-visibility-persistence.yaml",
       "ios/smoke/001-first-launch-empty.yaml",
       "ios/smoke/002-seeded-timeline-loads.yaml",
       "ios/smoke/003-library-filters.yaml",
@@ -516,7 +523,12 @@
       "regression/165": "iOS reader mode preserves scroll position across background and foreground appearance changes.",
       "regression/166": "Android reader mode preserves scroll position and the full-screen image viewer across rotation.",
       "regression/167": "With scroll marking and saved auto-hide on, earlier articles remain reachable in the current list while the next page still loads.",
-      "regression/168": "Android in-app Widget Settings exposes and mutates Card appearance controls, then returns to the preview container."
+      "regression/168": "Mark-all-above/below from Bookmarks moves the bookmarked unread item to Read and keeps unbookmarked boundary articles unread on Timeline.",
+      "regression/169": "Toolbar and footer confirm before marking saved articles read; cancellation preserves state and unbookmarked articles stay unread.",
+      "regression/170": "Force English on Android updates labels, persists across a restart, and can be disabled. iOS uses the system per-app language setting.",
+      "regression/171": "Cached search reader follows result order and boundaries, preserves results on return, and restores Home timeline navigation after leaving Search.",
+      "regression/172": "Opt-in tablet/iPad check: closed and open sidebars survive app termination and relaunch (-e LARGE_SCREEN=true).",
+      "regression/173": "Android in-app Widget Settings exposes and mutates Card appearance controls, then returns to the preview container."
     };
 
     const sections = document.querySelector("#sections");

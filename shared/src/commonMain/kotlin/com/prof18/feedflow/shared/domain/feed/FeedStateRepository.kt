@@ -208,11 +208,6 @@ internal class FeedStateRepository(
             )
         }
 
-    fun getUnreadBookmarksCountFlow(): Flow<Long> =
-        databaseHelper.getUnreadFeedCountFlow(
-            feedFilter = FeedFilter.Bookmarks,
-        )
-
     fun getUnreadTimelineCountFlow(): Flow<Long> =
         databaseHelper.getUnreadFeedCountFlow(
             feedFilter = FeedFilter.Timeline,
@@ -425,11 +420,6 @@ internal class FeedStateRepository(
             mutableFeedListVersion.update { it + 1 }
         }
     }
-
-    data class ArticlePosition(
-        val currentPosition: Int,
-        val totalArticles: Int,
-    )
 
     companion object {
         internal const val FEED_DB_PAGE_SIZE = 40L

@@ -5,6 +5,7 @@ import com.prof18.feedflow.android.BrowserManager
 import com.prof18.feedflow.core.model.ArticleOpenMode
 import com.prof18.feedflow.core.model.FeedItem
 import com.prof18.feedflow.core.model.FeedSource
+import com.prof18.feedflow.shared.data.SettingsRepository
 import com.prof18.feedflow.shared.data.WidgetSettingsRepository
 import com.prof18.feedflow.shared.domain.feed.FeedWidgetRepository
 import kotlinx.collections.immutable.toImmutableList
@@ -20,6 +21,7 @@ class FeedFlowWidgetTest {
             repository = instanceWithoutConstructor(FeedWidgetRepository::class.java),
             widgetSettingsRepository = instanceWithoutConstructor(WidgetSettingsRepository::class.java),
             browserManager = instanceWithoutConstructor(BrowserManager::class.java),
+            settingsRepository = instanceWithoutConstructor(SettingsRepository::class.java),
         )
 
         assertEquals(SizeMode.Exact, widget.sizeMode)

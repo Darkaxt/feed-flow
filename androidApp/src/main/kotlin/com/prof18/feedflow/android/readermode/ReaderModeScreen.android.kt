@@ -59,10 +59,11 @@ import com.prof18.feedflow.android.BrowserManager
 import com.prof18.feedflow.android.openShareSheet
 import com.prof18.feedflow.core.model.FeedItemId
 import com.prof18.feedflow.core.model.ReaderModeState
-import com.prof18.feedflow.core.model.ShownContentSource
 import com.prof18.feedflow.core.model.ThemeMode
 import com.prof18.feedflow.shared.domain.ReaderColors
 import com.prof18.feedflow.shared.domain.getReaderModeStyledHtml
+import com.prof18.feedflow.shared.domain.readerCodeBlockColors
+import com.prof18.feedflow.shared.domain.readerFontSizeJs
 import com.prof18.feedflow.shared.domain.readerLineHeightJs
 import com.prof18.feedflow.shared.ui.utils.LocalFeedFlowStrings
 import com.prof18.feedflow.shared.utils.getArchiveISUrl
@@ -171,11 +172,7 @@ internal fun ReaderModeScreen(
                             }
                         },
                         onFontSizeChange = { newFontSize ->
-                            navigator.evaluateJavaScript(
-                                """
-        document.getElementById("container").style.fontSize = "$newFontSize" + "px";
-                                """.trimIndent(),
-                            )
+                            navigator.evaluateJavaScript(readerFontSizeJs(newFontSize))
                             onUpdateFontSize(newFontSize)
                         },
                         lineHeight = lineHeight,
@@ -193,7 +190,7 @@ internal fun ReaderModeScreen(
                 }
 
                 when (readerModeState) {
-                    is ReaderModeState.HtmlNotAvailable -> {
+                    is ReaderModeState.ContentNotAvailable -> {
                         if (readerModeState.url.isBlank()) {
                             ReaderContentUnavailable(
                                 modifier = Modifier
@@ -346,22 +343,13 @@ private fun ReaderMode(
             }
         }
     }
-    val backgroundColor = if (isDarkMode) {
-        "#1e1e1e"
-    } else {
-        "#f6f8fa"
-    }
-    val borderColor = if (isDarkMode) {
-        "#444444"
-    } else {
-        "#d1d9e0"
-    }
+    val codeBlockColors = readerCodeBlockColors(isDarkMode)
 
     val colors = ReaderColors(
         textColor = "#$bodyColor",
         linkColor = "#$linkColor",
-        backgroundColor = backgroundColor,
-        borderColor = borderColor,
+        backgroundColor = codeBlockColors.backgroundColor,
+        borderColor = codeBlockColors.borderColor,
     )
 
     val latestOpenInBrowser by rememberUpdatedState(openInBrowser)
@@ -377,9 +365,7 @@ private fun ReaderMode(
         content = readerModeState.readerModeData.content,
         fontSize = readerModeState.readerModeData.fontSize,
         lineHeight = readerModeState.readerModeData.lineHeight,
-        title = readerModeState.readerModeData.title.takeIf {
-            readerModeState.readerModeData.shownContentSource == ShownContentSource.FEED
-        },
+        title = readerModeState.readerModeData.title,
         imageUrl = readerModeState.readerModeData.imageUrl,
         leadingContent = "<div id=\"__feedflow_top_spacer\" style=\"height: ${spacerHeightDp}px;\"></div>",
         siteName = readerModeState.readerModeData.siteName,

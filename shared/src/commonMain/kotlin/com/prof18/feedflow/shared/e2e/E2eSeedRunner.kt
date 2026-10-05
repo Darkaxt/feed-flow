@@ -153,7 +153,6 @@ class E2eSeedRunner internal constructor(
         settingsRepository.setArticleOpenMode(ArticleOpenMode.FULL_ARTICLE)
         settingsRepository.setSaveItemContentOnOpen(false)
         settingsRepository.setPrefetchArticleContent(false)
-        settingsRepository.setKleadParserEnabled(false)
         settingsRepository.setIsSyncUploadRequired(false)
         settingsRepository.setReaderModeFontSize(SettingsRepository.DEFAULT_READER_MODE_FONT_SIZE)
         settingsRepository.setReaderModeLineHeight(ReaderModeDefaults.LINE_HEIGHT)
@@ -168,6 +167,7 @@ class E2eSeedRunner internal constructor(
         )
         settingsRepository.setThemeMode(ThemeMode.SYSTEM)
         settingsRepository.setReduceMotionEnabled(true)
+        settingsRepository.setForceEnglishEnabled(false)
         settingsRepository.setRefreshFeedsOnLaunch(false)
         settingsRepository.setNotificationMode(NotificationMode.FEED_SOURCE)
 
@@ -998,7 +998,6 @@ class E2eSeedRunner internal constructor(
 
         private const val READER_SUCCESS_HTML = """
             <article>
-              <h1>E2E Reader Mode Success Article</h1>
               <p>E2E cached reader content loaded from the seed fixture.</p>
             </article>
         """
@@ -1029,7 +1028,6 @@ class E2eSeedRunner internal constructor(
 
         private const val READER_FALLBACK_HTML = """
             <article>
-              <h1>E2E Reader Mode Fallback Article</h1>
               <p>E2E fallback reader content loaded from the seed fixture.</p>
             </article>
         """

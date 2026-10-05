@@ -62,7 +62,6 @@
     <string name="bookmarked_articles_empty_screen_message">Тут нічого немає, час додати щось у закладки!</string>
     <string name="empty_screen_back_to_timeline">Повернутись до хронології</string>
     <string name="rename_feed_source_name_button">Перейменувати</string>
-    <string name="settings_reader_mode">Відкривати статті в режимі читання</string>
     <string name="search_no_data">Немає збігів для %s.</string>
     <string name="search_placeholder">Шукати…</string>
     <string name="search_hint_title">Почніть друкувати…</string>
@@ -389,17 +388,12 @@
     <string name="settings_feed_layout_big_image">Картка з великим зображенням</string>
     <string name="settings_feed_layout_grid">Сітка</string>
     <string name="settings_feed_layout_grid_toggle">Використовувати сітку на широких екранах</string>
-    <string name="increase_line_height_button_content_description">Збільшити висоту рядка</string>
-    <string name="decrease_line_height_button_content_description">Зменшити висоту рядка</string>
     <string name="reader_mode_reset_to_default">Скинути налаштування до стандартних</string>
     <string name="reorder_mode_done">Готово</string>
     <string name="mark_all_above_as_read_confirmation_title">Позначити все вищезазначене як прочитане?</string>
     <string name="mark_all_above_as_read_confirmation_message">Усі статті, що знаходяться вище цієї, будуть позначені як прочитані.</string>
     <string name="mark_all_below_as_read_confirmation_title">Позначити все нижче як прочитане?</string>
     <string name="mark_all_below_as_read_confirmation_message">Усі статті, що знаходяться нижче цієї, будуть позначені як прочитані.</string>
-    <string name="settings_use_new_article_parser">Новий механізм режиму читання</string>
-    <string name="settings_new_reader_mode_engine_confirmation_title">Спробувати новий механізм режиму читання?</string>
-    <string name="settings_new_reader_mode_engine_confirmation_message">Новий механізм розроблено для точнішого вилучення статей та швидшого завантаження режиму читання. Він все ще експериментальний, тому на деяких сторінках може бути відсутній контент, неправильне форматування або вони можуть взагалі не завантажуватися. Будь ласка, повідомляйте про будь-які виявлені проблеми. Ваш відгук допоможе нам покращити режим читання для всіх, перш ніж цей механізм стане стандартним.</string>
     <string name="server_account_subscriptions_warning">Цей обліковий запис використовує підписки, що зберігаються на його сервері.</string>
     <string name="server_account_replace_local_title">Замінити локальні підписки?</string>
     <string name="server_account_replace_local_message">Підключення замінить канали, які наразі зберігаються на цьому пристрої, на підписки з сервера. Пізніше відключення не призведе до відновлення локальних каналів. Якщо ви хочете зберегти їх копію, спочатку експортуйте їх у формат OPML.</string>

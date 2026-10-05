@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.RssFeed
 import androidx.compose.material.icons.filled.Share
@@ -51,6 +52,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.prof18.feedflow.android.components.rememberConfirmedBookmarkAction
 import com.prof18.feedflow.core.model.FeedItemId
 import com.prof18.feedflow.core.model.ReaderModeState
 import com.prof18.feedflow.core.model.ShownContentSource
@@ -58,7 +60,6 @@ import com.prof18.feedflow.i18n.FeedFlowStrings
 import com.prof18.feedflow.shared.ui.icons.BookmarkIcon
 import com.prof18.feedflow.shared.ui.icons.BookmarkOffIcon
 import com.prof18.feedflow.shared.ui.readermode.ReaderTextSettingsSheetContent
-import com.prof18.feedflow.shared.ui.readermode.hammerIcon
 import com.prof18.feedflow.shared.ui.utils.LocalFeedFlowStrings
 import com.prof18.feedflow.shared.ui.utils.exposeTestTagsAsResourceIds
 import kotlinx.collections.immutable.ImmutableList
@@ -124,13 +125,19 @@ fun ReaderModeFloatingToolbar(
     val id = readerModeState.getId
     val latestOpenInBrowser by rememberUpdatedState(openInBrowser)
     val latestOnShareClick by rememberUpdatedState(onShareClick)
-    val latestOnBookmarkClick by rememberUpdatedState(onBookmarkClick)
     val latestOnArchiveClick by rememberUpdatedState(onArchiveClick)
     val latestOnCommentsClick by rememberUpdatedState(onCommentsClick)
     val latestOnToggleContentSource by rememberUpdatedState(onToggleContentSource)
     var isBookmarked by remember(readerModeState) {
         mutableStateOf(readerModeState.getIsBookmarked)
     }
+    val confirmedBookmarkAction = rememberConfirmedBookmarkAction(
+        scopeKey = id,
+        onBookmarkClick = { feedItemId, newIsBookmarked ->
+            isBookmarked = newIsBookmarked
+            onBookmarkClick(feedItemId, newIsBookmarked)
+        },
+    )
 
     val isContentVisible = expanded && readerModeState !is ReaderModeState.Loading
 
@@ -165,7 +172,15 @@ fun ReaderModeFloatingToolbar(
     val shownContentSource = (readerModeState as? ReaderModeState.Success)?.readerModeData?.shownContentSource
     val canToggleContentSource =
         (readerModeState as? ReaderModeState.Success)?.readerModeData?.canToggleContentSource == true
-    val trailingActions = remember(readerModeState, strings, url, id, isBookmarked, shownContentSource) {
+    val trailingActions = remember(
+        readerModeState,
+        strings,
+        url,
+        id,
+        isBookmarked,
+        shownContentSource,
+        confirmedBookmarkAction,
+    ) {
         buildList {
             if (id != null) {
                 val bookmarkLabel = if (isBookmarked) {
@@ -184,9 +199,7 @@ fun ReaderModeFloatingToolbar(
                         label = bookmarkLabel,
                         testTag = ReaderModeE2eIds.BOOKMARK_BUTTON,
                         onClick = {
-                            val newIsBookmarked = !isBookmarked
-                            isBookmarked = newIsBookmarked
-                            latestOnBookmarkClick(FeedItemId(id), newIsBookmarked)
+                            confirmedBookmarkAction(FeedItemId(id), !isBookmarked)
                         },
                     ),
                 )
@@ -205,7 +218,7 @@ fun ReaderModeFloatingToolbar(
             if (url != null) {
                 add(
                     ToolbarAction(
-                        icon = hammerIcon,
+                        icon = Icons.Default.LockOpen,
                         label = strings.readerModeArchiveButton,
                         onClick = { latestOnArchiveClick(url) },
                     ),

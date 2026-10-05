@@ -70,7 +70,6 @@ import com.prof18.feedflow.core.model.SyncResult
 import com.prof18.feedflow.core.model.isReaderMode
 import com.prof18.feedflow.core.model.resolveArticleOpenMode
 import com.prof18.feedflow.core.utils.FeedSyncMessageQueue
-import com.prof18.feedflow.shared.domain.parser.ReaderModeParserWarmer
 import com.prof18.feedflow.shared.presentation.DeeplinkFeedViewModel
 import com.prof18.feedflow.shared.presentation.EditFeedViewModel
 import com.prof18.feedflow.shared.presentation.HomeViewModel
@@ -80,7 +79,6 @@ import com.prof18.feedflow.shared.presentation.ThemeViewModel
 import com.prof18.feedflow.shared.presentation.model.DeeplinkFeedState
 import com.prof18.feedflow.shared.ui.utils.LocalFeedFlowStrings
 import com.prof18.feedflow.shared.ui.utils.LocalReduceMotion
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.viewModel
@@ -92,7 +90,6 @@ class MainActivity : BaseThemeActivity() {
     private val reviewViewModel by viewModel<ReviewViewModel>()
     private val homeViewModel by viewModel<HomeViewModel>()
     private val browserManager by inject<BrowserManager>()
-    private val readerModeParserWarmer by inject<ReaderModeParserWarmer>()
 
     private var currentIntent by mutableStateOf<Intent?>(null)
 
@@ -174,11 +171,6 @@ class MainActivity : BaseThemeActivity() {
                 readerModeViewModel = readerModeViewModel,
                 backStack = backStack,
             )
-        }
-
-        LaunchedEffect(Unit) {
-            delay(READER_MODE_WARMUP_DELAY_MILLIS)
-            readerModeParserWarmer.warmUp()
         }
 
         LaunchedEffect(Unit) {
@@ -272,7 +264,7 @@ class MainActivity : BaseThemeActivity() {
                         onAddFeedClick = { backStack.add(AddFeed) },
                         onImportExportClick = { backStack.add(ImportExport) },
                         navigateToReaderMode = { url ->
-                            readerModeViewModel.getReaderModeHtml(url)
+                            readerModeViewModel.loadReaderContent(url)
                             backStack.add(ReaderMode)
                         },
                         onSearchClick = { backStack.add(Search) },
@@ -437,7 +429,7 @@ class MainActivity : BaseThemeActivity() {
                     SearchScreen(
                         navigateBack = navigateBack,
                         navigateToReaderMode = { urlInfo ->
-                            readerModeViewModel.getReaderModeHtml(urlInfo)
+                            readerModeViewModel.loadReaderContent(urlInfo)
                             backStack.add(ReaderMode)
                         },
                         navigateToEditFeed = { feedSource ->
@@ -554,11 +546,7 @@ class MainActivity : BaseThemeActivity() {
         feedUrlInfo: FeedItemUrlInfo,
         backStack: NavBackStack<NavKey>,
     ) {
-        readerModeViewModel.getReaderModeHtml(feedUrlInfo)
+        readerModeViewModel.loadReaderContent(feedUrlInfo)
         backStack.add(ReaderMode)
-    }
-
-    private companion object {
-        const val READER_MODE_WARMUP_DELAY_MILLIS = 1_500L
     }
 }

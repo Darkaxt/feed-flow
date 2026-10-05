@@ -25,7 +25,12 @@ class SettingsRepository(
     private var articleOpenMode: ArticleOpenMode? = null
     private var saveItemContentOnOpenEnabled: Boolean? = null
     private var prefetchArticleContentEnabled: Boolean? = null
-    private var kleadParserEnabled: Boolean? = null
+
+    fun getLargeScreenSidebarVisible(): Boolean? =
+        settings.getBooleanOrNull(SettingsFields.LARGE_SCREEN_SIDEBAR_VISIBLE.name)
+
+    fun setLargeScreenSidebarVisible(value: Boolean) =
+        settings.set(SettingsFields.LARGE_SCREEN_SIDEBAR_VISIBLE.name, value)
 
     internal fun cloudSyncSession(): String = syncUploadLock.withLock {
         settings.getStringOrNull(SettingsFields.CLOUD_SYNC_SESSION.name) ?: Uuid.random().toString().also {
@@ -60,6 +65,9 @@ class SettingsRepository(
 
     private val reduceMotionEnabledMutableFlow = MutableStateFlow(getReduceMotionEnabled())
     val reduceMotionEnabledFlow: StateFlow<Boolean> = reduceMotionEnabledMutableFlow.asStateFlow()
+
+    private val forceEnglishEnabledMutableFlow = MutableStateFlow(getForceEnglishEnabled())
+    val forceEnglishEnabledFlow: StateFlow<Boolean> = forceEnglishEnabledMutableFlow.asStateFlow()
 
     private val showReadArticlesTimelineMutableFlow = MutableStateFlow(getShowReadArticlesTimeline())
     internal val showReadArticlesTimelineFlow: StateFlow<Boolean> = showReadArticlesTimelineMutableFlow.asStateFlow()
@@ -148,21 +156,6 @@ class SettingsRepository(
         settings[SettingsFields.PREFETCH_ARTICLE_CONTENT.name] = value
     }
 
-    fun isKleadParserEnabled(): Boolean {
-        kleadParserEnabled?.let { return it }
-        val value = settings.getBoolean(
-            SettingsFields.USE_KLEAD_READER_PARSER.name,
-            true,
-        )
-        kleadParserEnabled = value
-        return value
-    }
-
-    fun setKleadParserEnabled(value: Boolean) {
-        kleadParserEnabled = value
-        settings.set(SettingsFields.USE_KLEAD_READER_PARSER.name, value)
-    }
-
     internal fun getIsSyncUploadRequired(): Boolean = syncUploadLock.withLock {
         settings.getBoolean(SettingsFields.IS_SYNC_UPLOAD_REQUIRED.name, false) ||
             settings.hasKey(SettingsFields.SYNC_UPLOAD_GENERATION.name)
@@ -197,6 +190,12 @@ class SettingsRepository(
 
     fun setReaderModeFontSize(value: Int) =
         settings.set(SettingsFields.READER_MODE_FONT_SIZE.name, value)
+
+    internal fun getReaderContentCacheVersion(): Int =
+        settings.getInt(SettingsFields.READER_CONTENT_CACHE_VERSION.name, 0)
+
+    internal fun setReaderContentCacheVersion(value: Int) =
+        settings.set(SettingsFields.READER_CONTENT_CACHE_VERSION.name, value)
 
     fun getReaderModeLineHeight(): Int =
         settings.getInt(SettingsFields.READER_MODE_LINE_HEIGHT.name, ReaderModeDefaults.LINE_HEIGHT)
@@ -317,6 +316,14 @@ class SettingsRepository(
         settings.getString(SettingsFields.NOTIFICATION_MODE.name, NotificationMode.FEED_SOURCE.name)
             .let { NotificationMode.valueOf(it) }
 
+    fun getForceEnglishEnabled(): Boolean =
+        settings.getBoolean(SettingsFields.FORCE_ENGLISH_ENABLED.name, false)
+
+    fun setForceEnglishEnabled(value: Boolean) {
+        settings[SettingsFields.FORCE_ENGLISH_ENABLED.name] = value
+        forceEnglishEnabledMutableFlow.value = value
+    }
+
     fun setNotificationMode(mode: NotificationMode) =
         settings.set(SettingsFields.NOTIFICATION_MODE.name, mode.name)
 
@@ -327,6 +334,8 @@ class SettingsRepository(
 }
 
 private enum class SettingsFields {
+    LARGE_SCREEN_SIDEBAR_VISIBLE,
+    READER_CONTENT_CACHE_VERSION,
     FAVOURITE_BROWSER_ID,
     MARK_FEED_AS_READ_WHEN_SCROLLING,
     SHOW_READ_ARTICLES_TIMELINE,
@@ -334,7 +343,6 @@ private enum class SettingsFields {
     USE_READER_MODE,
     SAVE_ITEM_CONTENT_ON_OPEN,
     PREFETCH_ARTICLE_CONTENT,
-    USE_KLEAD_READER_PARSER,
     IS_SYNC_UPLOAD_REQUIRED,
     SYNC_UPLOAD_GENERATION,
     CLOUD_SYNC_SESSION,
@@ -348,6 +356,7 @@ private enum class SettingsFields {
     BACKGROUND_SYNC_CHARGING_ONLY,
     THEME_MODE,
     REDUCE_MOTION_ENABLED,
+    FORCE_ENGLISH_ENABLED,
     REFRESH_FEEDS_ON_LAUNCH,
     NOTIFICATION_MODE,
     UNCATEGORIZED_CATEGORY_POSITION,

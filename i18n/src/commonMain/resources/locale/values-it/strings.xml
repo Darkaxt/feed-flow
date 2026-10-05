@@ -77,7 +77,6 @@
     <string name="in_app_browser">Browser integrato</string>
     <string name="search_no_data">Impossibile trovare \"%s\".</string>
     <string name="search_hint_subtitle">i risultati appariranno automaticamente</string>
-    <string name="settings_reader_mode">Apri gli articoli in modalità lettura</string>
     <string name="link_copied_success">Link copiato!</string>
     <string name="search_placeholder">Cerca…</string>
     <string name="search_hint_title">Inizia a scrivere…</string>
@@ -381,8 +380,6 @@
     <string name="settings_notifications_open_settings_button">Apri Impostazioni</string>
     <string name="date_format_iso">Anno-Mese-Giorno</string>
     <string name="article_bookmarked_content_description">Salvato nei segnalibri</string>
-    <string name="increase_line_height_button_content_description">Aumenta interlinea</string>
-    <string name="decrease_line_height_button_content_description">Diminuisci interlinea</string>
     <string name="next">Successivo</string>
     <string name="delete_all_feeds_in_category">Elimina tutti i feed</string>
     <string name="delete_all_feeds_confirmation_title">Eliminare tutti i feed in questa categoria?</string>
@@ -423,9 +420,9 @@
     <string name="server_account_replace_local_title">Sostituire le iscrizioni locali?</string>
     <string name="server_account_replace_local_message">La connessione sostituisce i feed attualmente memorizzati su questo dispositivo con gli abbonamenti del server. Una successiva disconnessione non ripristinerà i feed locali. Esportali prima in OPML se desideri conservarne una copia.</string>
     <string name="server_account_replace_and_connect_button">Sostituisci e connetti</string>
-    <string name="settings_use_new_article_parser">Nuovo motore per modalità lettura</string>
-    <string name="settings_new_reader_mode_engine_confirmation_title">Vuoi provare il nuovo motore per la modalità lettura?</string>
-    <string name="settings_new_reader_mode_engine_confirmation_message">Il nuovo motore è progettato per estrarre gli articoli in modo più preciso e caricare la Modalità lettura più velocemente. È ancora sperimentale, quindi alcune pagine potrebbero presentare contenuti mancanti, formattazione errata o potrebbero non caricarsi affatto. Si prega di segnalare qualsiasi problema riscontrato. Il tuo riscontro ci aiuterà a migliorare la Modalità lettura per tutti prima che questo motore diventi quello predefinito.</string>
     <string name="feed_already_exists_message">%s è già presente nei tuoi feed.</string>
     <string name="settings_hide_read_items_disabled_while_scrolling">L’auto-nascondimento non è disponibile con «Segna come letto durante lo scorrimento» attivo. Disattiva l’opzione per utilizzare l’auto-nascondimento.</string>
+    <string name="feed_fetch_refused_error">Impossibile raggiungere questo feed. Il sito potrebbe bloccare i lettori RSS. Riprova più tardi.</string>
+    <string name="mark_all_bookmarks_read_dialog_message">Sei sicuro di voler contrassegnare come letti tutti gli articoli salvati nei segnalibri?</string>
+    <string name="remove_bookmark_dialog_message">Sei sicuro di voler rimuovere questo articolo dai segnalibri?</string>
 </resources>

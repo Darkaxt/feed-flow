@@ -14,12 +14,13 @@ import androidx.glance.appwidget.LocalAppWidgetOptions
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.provideContent
 import com.prof18.feedflow.android.BrowserManager
+import com.prof18.feedflow.android.util.rememberAndroidFeedFlowStrings
 import com.prof18.feedflow.core.model.FeedItem
+import com.prof18.feedflow.shared.data.SettingsRepository
 import com.prof18.feedflow.shared.data.WidgetSettingsRepository
 import com.prof18.feedflow.shared.domain.feed.FeedWidgetRepository
 import com.prof18.feedflow.shared.domain.model.filterWidgetItemsByFreshness
 import com.prof18.feedflow.shared.ui.utils.ProvideFeedFlowStrings
-import com.prof18.feedflow.shared.ui.utils.rememberFeedFlowStrings
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.first
@@ -28,6 +29,7 @@ internal class FeedFlowWidget(
     private val repository: FeedWidgetRepository,
     private val widgetSettingsRepository: WidgetSettingsRepository,
     private val browserManager: BrowserManager,
+    private val settingsRepository: SettingsRepository,
 ) : GlanceAppWidget() {
     override val sizeMode: SizeMode = SizeMode.Exact
 
@@ -39,7 +41,7 @@ internal class FeedFlowWidget(
         val nowMillis = System.currentTimeMillis()
 
         provideContent {
-            val lyricist = rememberFeedFlowStrings()
+            val lyricist = rememberAndroidFeedFlowStrings(settingsRepository)
 
             ProvideFeedFlowStrings(lyricist) {
                 val feedItems by feedItemsFlow.collectAsState(initialFeedItems)

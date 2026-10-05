@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.RssFeed
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.TextFields
@@ -81,13 +82,13 @@ import com.prof18.feedflow.core.model.ShownContentSource
 import com.prof18.feedflow.desktop.ui.components.FeedFlowVerticalScrollbar
 import com.prof18.feedflow.desktop.utils.copyToClipboard
 import com.prof18.feedflow.desktop.utils.openUriSafely
+import com.prof18.feedflow.shared.domain.buildReaderModeMarkdown
 import com.prof18.feedflow.shared.domain.readerLineHeightToTextLineHeightSp
 import com.prof18.feedflow.shared.presentation.ReaderModeViewModel
 import com.prof18.feedflow.shared.ui.components.TopToolbarContentFade
 import com.prof18.feedflow.shared.ui.icons.BookmarkIcon
 import com.prof18.feedflow.shared.ui.icons.BookmarkOffIcon
 import com.prof18.feedflow.shared.ui.readermode.ReaderTextSettingsSheetContent
-import com.prof18.feedflow.shared.ui.readermode.hammerIcon
 import com.prof18.feedflow.shared.ui.style.Spacing
 import com.prof18.feedflow.shared.ui.utils.LocalFeedFlowStrings
 import com.prof18.feedflow.shared.utils.getArchiveISUrl
@@ -113,7 +114,7 @@ internal fun ReaderModeScreen(
     val lineHeight = fontSettings.lineHeight
 
     LaunchedEffect(feedItemUrlInfo.id) {
-        readerModeViewModel.getReaderModeHtml(feedItemUrlInfo)
+        readerModeViewModel.loadReaderContent(feedItemUrlInfo)
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -213,7 +214,7 @@ internal fun ReaderModeScreen(
                     .fillMaxWidth()
 
                 when (val s = state) {
-                    is ReaderModeState.HtmlNotAvailable -> {
+                    is ReaderModeState.ContentNotAvailable -> {
                         ReaderModeFallbackContent(
                             modifier = contentModifier
                                 .fillMaxHeight(),
@@ -253,12 +254,20 @@ internal fun ReaderModeScreen(
                                 ) {
                                     key(s.readerModeData.content, fontSize, lineHeight) {
                                         val bodyLineHeight = readerLineHeightToTextLineHeightSp(fontSize, lineHeight).sp
+                                        val markdown = remember(s.readerModeData) {
+                                            buildReaderModeMarkdown(
+                                                content = s.readerModeData.content,
+                                                title = s.readerModeData.title,
+                                                imageUrl = s.readerModeData.imageUrl,
+                                                siteName = s.readerModeData.siteName,
+                                            )
+                                        }
                                         SelectionContainer {
                                             Markdown(
                                                 modifier = Modifier
                                                     .padding(Spacing.regular)
                                                     .padding(bottom = 64.dp),
-                                                content = s.readerModeData.content,
+                                                content = markdown,
                                                 imageTransformer = Coil3ImageTransformerImpl,
                                                 components = desktopReaderModeMarkdownComponents(
                                                     onHoveredLinkChange = { hoveredLink = it },
@@ -365,7 +374,7 @@ internal fun ReaderModeScreen(
             }
         }
 
-        if (state is ReaderModeState.Success || state is ReaderModeState.HtmlNotAvailable) {
+        if (state is ReaderModeState.Success || state is ReaderModeState.ContentNotAvailable) {
             val strings = LocalFeedFlowStrings.current
 
             Surface(
@@ -436,7 +445,7 @@ private fun handleKeyEvent(
     onNavigatePrevious: () -> Unit,
     onNavigateNext: () -> Unit,
 ): Boolean {
-    val canNavigate = state is ReaderModeState.Success || state is ReaderModeState.HtmlNotAvailable
+    val canNavigate = state is ReaderModeState.Success || state is ReaderModeState.ContentNotAvailable
     if (keyEvent.type == KeyEventType.KeyDown && canNavigate) {
         return when (keyEvent.key) {
             Key.DirectionLeft -> {
@@ -612,7 +621,7 @@ private fun ReaderModeToolbar(
                                 },
                             ) {
                                 Icon(
-                                    imageVector = hammerIcon,
+                                    imageVector = Icons.Default.LockOpen,
                                     contentDescription = LocalFeedFlowStrings.current.readerModeArchiveButton,
                                     tint = MaterialTheme.colorScheme.onSurface,
                                 )

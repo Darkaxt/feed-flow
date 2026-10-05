@@ -26,7 +26,6 @@ func startKoin(notifier: (any Notifier)? = nil) {
     let regionCode = currentLocale.region?.identifier
 
     _ = doInitKoinIos(
-        htmlParser: IosHtmlParser(),
         appEnvironment: appEnvironment,
         languageCode: languageCode,
         regionCode: regionCode,
@@ -34,7 +33,6 @@ func startKoin(notifier: (any Notifier)? = nil) {
         googleDrivePlatformClient: GoogleDrivePlatformClient(),
         appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
         telemetry: TelemetryReporter(),
-        feedItemParserWorker: FeedItemParserWorkerIos(),
         notifier: notifier ?? NoOpNotifier(),
         feedUrlProtocolClasses: [FeedConditionalGetURLProtocol.self]
     )

@@ -96,6 +96,7 @@ kotlin {
                 implementation(libs.skie.annotation)
                 implementation(libs.stately.concurrency)
                 implementation(libs.klead)
+                implementation(libs.ksoup)
 
                 api(project(":core"))
                 api(project(":i18n"))
@@ -126,7 +127,6 @@ kotlin {
             dependsOn(commonMain.get())
 
             dependencies {
-                implementation(libs.jsoup)
                 implementation(libs.ktor.client.okhttp)
             }
         }
@@ -202,8 +202,6 @@ kotlin {
 
             dependencies {
                 implementation(libs.kotlinx.coroutines.swing)
-                implementation(libs.htmlunit)
-                implementation(libs.kotlinx.serialization.json)
                 api(libs.sentry)
             }
         }

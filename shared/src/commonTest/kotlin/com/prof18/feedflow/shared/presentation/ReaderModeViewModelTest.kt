@@ -9,17 +9,21 @@ import com.prof18.feedflow.core.model.FeedItemUrlInfo
 import com.prof18.feedflow.core.model.FeedOrder
 import com.prof18.feedflow.core.model.FeedSource
 import com.prof18.feedflow.core.model.ParsedFeedSource
-import com.prof18.feedflow.core.model.ParsingResult
 import com.prof18.feedflow.core.model.ReaderModeDefaults
 import com.prof18.feedflow.core.model.ReaderModeState
+import com.prof18.feedflow.core.model.SearchState
 import com.prof18.feedflow.core.model.ShownContentSource
 import com.prof18.feedflow.database.DatabaseHelper
 import com.prof18.feedflow.shared.data.SettingsRepository
 import com.prof18.feedflow.shared.data.SettingsRepository.Companion.DEFAULT_READER_MODE_FONT_SIZE
+import com.prof18.feedflow.shared.domain.feed.ArticleNavigationRepository
+import com.prof18.feedflow.shared.domain.feed.ArticlePosition
 import com.prof18.feedflow.shared.domain.feed.FeedStateRepository
+import com.prof18.feedflow.shared.domain.feeditem.ArticleContentParser
 import com.prof18.feedflow.shared.domain.feeditem.FeedItemContentFileHandler
-import com.prof18.feedflow.shared.domain.feeditem.FeedItemParserWorker
 import com.prof18.feedflow.shared.test.KoinTestBase
+import com.prof18.feedflow.shared.test.TestDispatcherProvider.testDispatcher
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -30,6 +34,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.koin.core.module.Module
 import org.koin.dsl.module
+import org.koin.test.get
 import org.koin.test.inject
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -39,6 +44,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 
 class ReaderModeViewModelTest : KoinTestBase() {
@@ -46,43 +52,27 @@ class ReaderModeViewModelTest : KoinTestBase() {
     private val viewModel: ReaderModeViewModel by inject()
     private val databaseHelper: DatabaseHelper by inject()
     private val feedStateRepository: FeedStateRepository by inject()
+    private val articleNavigationRepository: ArticleNavigationRepository by inject()
     private val feedItemContentFileHandler: FeedItemContentFileHandler by inject()
     private val settingsRepository: SettingsRepository by inject()
     private var parserBehavior: ParserBehavior = ParserBehavior.Success
 
     override fun getTestModules(): List<Module> = super.getTestModules() + module {
-        single<FeedItemParserWorker> {
-            object : FeedItemParserWorker {
-                override suspend fun parse(feedItemId: String, url: String, imageUrl: String?): ParsingResult {
-                    val currentParserBehavior = parserBehavior
-                    return when (currentParserBehavior) {
-                        ParserBehavior.Success -> ParsingResult.Success(
-                            htmlContent = "Content",
-                            title = "Title",
-                            siteName = "Site Name",
-                        )
-                        ParserBehavior.HtmlNull -> ParsingResult.Success(
-                            htmlContent = null,
-                            title = "Title",
-                            siteName = "Site Name",
-                        )
-                        ParserBehavior.HtmlBlank -> ParsingResult.Success(
-                            htmlContent = "   ",
-                            title = "Title",
-                            siteName = "Site Name",
-                        )
-                        ParserBehavior.Error -> ParsingResult.Error
-                        is ParserBehavior.DelayedSuccessById -> {
-                            val delayMillis = currentParserBehavior.delaysByArticleId[feedItemId] ?: 0
-                            delay(delayMillis)
-                            ParsingResult.Success(
-                                htmlContent = "Content-$feedItemId",
-                                title = "Title-$feedItemId",
-                                siteName = "Site Name",
-                            )
+        single<ArticleContentParser> {
+            object : ArticleContentParser {
+                override suspend fun parse(url: String): String? =
+                    when (val currentParserBehavior = parserBehavior) {
+                        ParserBehavior.Success -> "Content"
+                        ParserBehavior.HtmlBlank -> "   "
+                        ParserBehavior.Error -> null
+                        is ParserBehavior.DelayedSuccessByUrlPath -> {
+                            val pathSegment = url.substringAfterLast('/')
+                            delay(currentParserBehavior.delaysByUrlPathSegment[pathSegment] ?: 0)
+                            "Content-$pathSegment"
                         }
                     }
-                }
+
+                override suspend fun prepareFeedContent(html: String, baseUrl: String?): String = html
             }
         }
     }
@@ -100,7 +90,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
     }
 
     @Test
-    fun `getReaderModeHtml updates selected article`() = runTest {
+    fun `loadReaderContent updates selected article`() = runTest {
         val urlInfo = FeedItemUrlInfo(
             id = "open-1",
             url = "https://example.com/articles/open-1",
@@ -110,7 +100,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
             commentsUrl = null,
         )
 
-        viewModel.getReaderModeHtml(urlInfo)
+        viewModel.loadReaderContent(urlInfo)
 
         assertEquals(urlInfo.id, viewModel.currentArticleState.value?.id)
     }
@@ -126,7 +116,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
             commentsUrl = null,
         )
 
-        viewModel.getReaderModeHtml(urlInfo)
+        viewModel.loadReaderContent(urlInfo)
         assertEquals(urlInfo.id, viewModel.currentArticleState.value?.id)
 
         viewModel.clearSelection()
@@ -137,7 +127,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
     @Test
     fun `resetState clears selected article and navigation flags`() = runTest {
         val feedItems = seedFeedItems()
-        viewModel.getReaderModeHtml(feedItems[1].toUrlInfo())
+        viewModel.loadReaderContent(feedItems[1].toUrlInfo())
 
         assertTrue(viewModel.canNavigateToPreviousState.value)
         assertTrue(viewModel.canNavigateToNextState.value)
@@ -152,7 +142,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
     }
 
     @Test
-    fun `getReaderModeHtml uses cached content when available`() = runTest {
+    fun `loadReaderContent uses cached content when available`() = runTest {
         val urlInfo = FeedItemUrlInfo(
             id = "cached-1",
             url = "https://example.com/articles/1",
@@ -166,7 +156,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         viewModel.readerModeState.test {
             assertEquals(ReaderModeState.Loading, awaitItem())
 
-            viewModel.getReaderModeHtml(urlInfo)
+            viewModel.loadReaderContent(urlInfo)
 
             val successState = awaitItem() as ReaderModeState.Success
             assertEquals("Cached content", successState.readerModeData.content)
@@ -176,7 +166,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
     }
 
     @Test
-    fun `getReaderModeHtml uses parser result when cache missing`() = runTest {
+    fun `loadReaderContent uses parser result when cache missing`() = runTest {
         val urlInfo = FeedItemUrlInfo(
             id = "parser-1",
             url = "https://example.com/articles/2",
@@ -189,11 +179,11 @@ class ReaderModeViewModelTest : KoinTestBase() {
         viewModel.readerModeState.test {
             assertEquals(ReaderModeState.Loading, awaitItem())
 
-            viewModel.getReaderModeHtml(urlInfo)
+            viewModel.loadReaderContent(urlInfo)
 
             val successState = awaitItem() as ReaderModeState.Success
             assertEquals("Content", successState.readerModeData.content)
-            assertEquals("Title", successState.readerModeData.title)
+            assertEquals("Original title", successState.readerModeData.title)
             assertEquals(urlInfo.id, successState.readerModeData.id.id)
         }
     }
@@ -209,7 +199,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
             commentsUrl = null,
         )
 
-        viewModel.getReaderModeHtml(urlInfo)
+        viewModel.loadReaderContent(urlInfo)
         assertIs<ReaderModeState.Success>(viewModel.readerModeState.value)
 
         viewModel.setLoading()
@@ -217,27 +207,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
     }
 
     @Test
-    fun `getReaderModeHtml sets HtmlNotAvailable when parser returns null html`() = runTest {
-        parserBehavior = ParserBehavior.HtmlNull
-        val urlInfo = FeedItemUrlInfo(
-            id = "null-html-1",
-            url = "https://example.com/articles/null-html",
-            title = "Null Html Article",
-            isBookmarked = false,
-            articleOpenMode = ArticleOpenMode.FULL_ARTICLE,
-            commentsUrl = null,
-        )
-
-        viewModel.getReaderModeHtml(urlInfo)
-
-        val state = viewModel.readerModeState.value
-        assertIs<ReaderModeState.HtmlNotAvailable>(state)
-        assertEquals(urlInfo.url, state.url)
-        assertEquals(urlInfo.id, state.id)
-    }
-
-    @Test
-    fun `getReaderModeHtml sets HtmlNotAvailable when parser returns error`() = runTest {
+    fun `loadReaderContent sets ContentNotAvailable when parser returns error`() = runTest {
         parserBehavior = ParserBehavior.Error
         val urlInfo = FeedItemUrlInfo(
             id = "error-1",
@@ -248,20 +218,20 @@ class ReaderModeViewModelTest : KoinTestBase() {
             commentsUrl = null,
         )
 
-        viewModel.getReaderModeHtml(urlInfo)
+        viewModel.loadReaderContent(urlInfo)
 
         val state = viewModel.readerModeState.value
-        assertIs<ReaderModeState.HtmlNotAvailable>(state)
+        assertIs<ReaderModeState.ContentNotAvailable>(state)
         assertEquals(urlInfo.url, state.url)
         assertEquals(urlInfo.id, state.id)
     }
 
     @Test
-    fun `getReaderModeHtml keeps latest requested article when previous request finishes later`() = runTest {
-        parserBehavior = ParserBehavior.DelayedSuccessById(
-            delaysByArticleId = mapOf(
-                "slow-article" to 300,
-                "fast-article" to 10,
+    fun `loadReaderContent keeps latest requested article when previous request finishes later`() = runTest {
+        parserBehavior = ParserBehavior.DelayedSuccessByUrlPath(
+            delaysByUrlPathSegment = mapOf(
+                "slow" to 300,
+                "fast" to 10,
             ),
         )
 
@@ -282,14 +252,65 @@ class ReaderModeViewModelTest : KoinTestBase() {
             commentsUrl = null,
         )
 
-        viewModel.getReaderModeHtml(slowArticle)
-        viewModel.getReaderModeHtml(fastArticle)
+        viewModel.loadReaderContent(slowArticle)
+        viewModel.loadReaderContent(fastArticle)
         advanceUntilIdle()
 
         val state = viewModel.readerModeState.value
         assertIs<ReaderModeState.Success>(state)
         assertEquals("fast-article", state.readerModeData.id.id)
     }
+
+    @Test
+    fun `loadReaderContent saves parsed content when save on open is enabled`() = runTest {
+        settingsRepository.setSaveItemContentOnOpen(true)
+        val urlInfo = webArticle(id = "save-enabled")
+
+        viewModel.loadReaderContent(urlInfo)
+        advanceUntilIdle()
+
+        assertIs<ReaderModeState.Success>(viewModel.readerModeState.value)
+        assertEquals("Content", feedItemContentFileHandler.loadFeedItemContent(urlInfo.id))
+    }
+
+    @Test
+    fun `loadReaderContent does not save parsed content when save on open is disabled`() = runTest {
+        settingsRepository.setSaveItemContentOnOpen(false)
+        val urlInfo = webArticle(id = "save-disabled")
+
+        viewModel.loadReaderContent(urlInfo)
+        advanceUntilIdle()
+
+        assertIs<ReaderModeState.Success>(viewModel.readerModeState.value)
+        assertFalse(feedItemContentFileHandler.isContentAvailable(urlInfo.id))
+    }
+
+    @Test
+    fun `only the latest requested article is saved when requests overlap`() = runTest {
+        settingsRepository.setSaveItemContentOnOpen(true)
+        parserBehavior = ParserBehavior.DelayedSuccessByUrlPath(
+            delaysByUrlPathSegment = mapOf(
+                "slow-article" to 300,
+                "fast-article" to 10,
+            ),
+        )
+
+        viewModel.loadReaderContent(webArticle(id = "slow-article"))
+        viewModel.loadReaderContent(webArticle(id = "fast-article"))
+        advanceUntilIdle()
+
+        assertFalse(feedItemContentFileHandler.isContentAvailable("slow-article"))
+        assertEquals("Content-fast-article", feedItemContentFileHandler.loadFeedItemContent("fast-article"))
+    }
+
+    private fun webArticle(id: String) = FeedItemUrlInfo(
+        id = id,
+        url = "https://example.com/articles/$id",
+        title = "Article $id",
+        isBookmarked = false,
+        articleOpenMode = ArticleOpenMode.FULL_ARTICLE,
+        commentsUrl = null,
+    )
 
     @Test
     fun `updateFontSize updates settings and state`() = runTest {
@@ -353,7 +374,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         val feedItems = seedFeedItems()
 
         val middleItem = feedItems[1]
-        viewModel.getReaderModeHtml(middleItem.toUrlInfo())
+        viewModel.loadReaderContent(middleItem.toUrlInfo())
 
         assertTrue(viewModel.canNavigateToPreviousState.value)
         assertTrue(viewModel.canNavigateToNextState.value)
@@ -381,14 +402,14 @@ class ReaderModeViewModelTest : KoinTestBase() {
         val middleItem = feedItems[1]
         val nextItem = feedItems[2]
 
-        viewModel.getReaderModeHtml(middleItem.toUrlInfo())
+        viewModel.loadReaderContent(middleItem.toUrlInfo())
         assertTrue(viewModel.canNavigateToNextState.value)
 
         viewModel.navigateToNextArticle()
         advanceUntilIdle()
 
         val state = viewModel.readerModeState.value
-        assertIs<ReaderModeState.HtmlNotAvailable>(state)
+        assertIs<ReaderModeState.ContentNotAvailable>(state)
         assertEquals(nextItem.id, state.id)
         assertEquals(nextItem.url, state.url)
         assertEquals(nextItem.id, viewModel.currentArticleState.value?.id)
@@ -402,14 +423,14 @@ class ReaderModeViewModelTest : KoinTestBase() {
         val previousItem = feedItems[0]
         val middleItem = feedItems[1]
 
-        viewModel.getReaderModeHtml(middleItem.toUrlInfo())
+        viewModel.loadReaderContent(middleItem.toUrlInfo())
         assertTrue(viewModel.canNavigateToPreviousState.value)
 
         viewModel.navigateToPreviousArticle()
         advanceUntilIdle()
 
         val state = viewModel.readerModeState.value
-        assertIs<ReaderModeState.HtmlNotAvailable>(state)
+        assertIs<ReaderModeState.ContentNotAvailable>(state)
         assertEquals(previousItem.id, state.id)
         assertEquals(previousItem.url, state.url)
         assertEquals(previousItem.id, viewModel.currentArticleState.value?.id)
@@ -422,7 +443,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         val feedItems = seedFeedItems()
         val middleItem = feedItems[1]
 
-        viewModel.getReaderModeHtml(middleItem.toUrlInfo())
+        viewModel.loadReaderContent(middleItem.toUrlInfo())
         assertTrue(viewModel.canNavigateToNextState.value)
 
         feedStateRepository.updateFeedFilter(FeedFilter.Bookmarks)
@@ -443,7 +464,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         viewModel.readerModeState.test {
             assertEquals(ReaderModeState.Loading, awaitItem())
 
-            viewModel.getReaderModeHtml(item.toUrlInfo(ArticleOpenMode.FEED_CONTENT))
+            viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FEED_CONTENT))
 
             val state = awaitItem() as ReaderModeState.Success
             assertEquals(SUBSTANTIAL_CONTENT, state.readerModeData.content)
@@ -462,7 +483,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         viewModel.readerModeState.test {
             assertEquals(ReaderModeState.Loading, awaitItem())
 
-            viewModel.getReaderModeHtml(item.toUrlInfo(ArticleOpenMode.FEED_CONTENT))
+            viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FEED_CONTENT))
 
             val state = awaitItem() as ReaderModeState.Success
             assertEquals(content, state.readerModeData.content)
@@ -479,7 +500,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         viewModel.readerModeState.test {
             assertEquals(ReaderModeState.Loading, awaitItem())
 
-            viewModel.getReaderModeHtml(item.toUrlInfo(ArticleOpenMode.FEED_CONTENT))
+            viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FEED_CONTENT))
 
             val state = awaitItem() as ReaderModeState.Success
             assertEquals(content, state.readerModeData.content)
@@ -495,7 +516,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         viewModel.readerModeState.test {
             assertEquals(ReaderModeState.Loading, awaitItem())
 
-            viewModel.getReaderModeHtml(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
+            viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
 
             val state = awaitItem() as ReaderModeState.Success
             assertEquals(ShownContentSource.WEB, state.readerModeData.shownContentSource)
@@ -504,11 +525,48 @@ class ReaderModeViewModelTest : KoinTestBase() {
     }
 
     @Test
+    fun `web reader does not reinsert an inline feed thumbnail removed by extraction`() = runTest {
+        val imageUrl = "https://example.com/masthead.png?width=600&format=png"
+        val item = seedItemWithContent(
+            "inline-thumbnail",
+            "https://example.com/article",
+            """<img src="${imageUrl.replace("&", "&amp;")}">$SUBSTANTIAL_CONTENT""",
+        )
+        val urlInfo = item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE).copy(imageUrl = imageUrl)
+
+        viewModel.loadReaderContent(urlInfo)
+        advanceUntilIdle()
+
+        val state = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value)
+        assertNull(state.readerModeData.imageUrl)
+        assertEquals("Content", state.readerModeData.content)
+
+        viewModel.toggleContentSource()
+        advanceUntilIdle()
+
+        val feedState = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value)
+        assertEquals(ShownContentSource.FEED, feedState.readerModeData.shownContentSource)
+        assertEquals(imageUrl, feedState.readerModeData.imageUrl)
+    }
+
+    @Test
+    fun `web reader retains independently supplied feed hero metadata`() = runTest {
+        val imageUrl = "https://example.com/hero.jpg"
+        val item = seedItemWithContent("metadata-hero", "https://example.com/article", SUBSTANTIAL_CONTENT)
+
+        viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE).copy(imageUrl = imageUrl))
+        advanceUntilIdle()
+
+        val state = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value)
+        assertEquals(imageUrl, state.readerModeData.imageUrl)
+    }
+
+    @Test
     fun `web preference falls back to feed content when parsing fails`() = runTest {
         parserBehavior = ParserBehavior.Error
         val item = seedItemWithContent("web-fallback", "https://example.com/a/web-fallback", SUBSTANTIAL_CONTENT)
 
-        viewModel.getReaderModeHtml(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
+        viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
         advanceUntilIdle()
 
         val state = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value)
@@ -522,7 +580,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         settingsRepository.setArticleOpenMode(ArticleOpenMode.FEED_CONTENT)
         val item = seedItemWithContent("global-feed", "https://example.com/a/global-feed", SUBSTANTIAL_CONTENT)
 
-        viewModel.getReaderModeHtml(item.toUrlInfo(ArticleOpenMode.DEFAULT))
+        viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.DEFAULT))
         advanceUntilIdle()
 
         val state = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value)
@@ -535,7 +593,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         val urlInfo = item.toUrlInfo(ArticleOpenMode.DEFAULT)
 
         settingsRepository.setArticleOpenMode(ArticleOpenMode.FULL_ARTICLE)
-        viewModel.getReaderModeHtml(urlInfo)
+        viewModel.loadReaderContent(urlInfo)
         advanceUntilIdle()
         assertEquals(
             ShownContentSource.WEB,
@@ -543,7 +601,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         )
 
         settingsRepository.setArticleOpenMode(ArticleOpenMode.FEED_CONTENT)
-        viewModel.getReaderModeHtml(urlInfo)
+        viewModel.loadReaderContent(urlInfo)
         advanceUntilIdle()
         assertEquals(
             ShownContentSource.FEED,
@@ -557,7 +615,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         val item = seedItemWithContent("blank-cache", "https://example.com/a/blank-cache", SUBSTANTIAL_CONTENT)
         feedItemContentFileHandler.saveFeedItemContentToFile(item.id, "   ")
 
-        viewModel.getReaderModeHtml(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
+        viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
         advanceUntilIdle()
 
         val state = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value)
@@ -569,7 +627,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         parserBehavior = ParserBehavior.HtmlBlank
         val item = seedItemWithContent("blank-parser", "https://example.com/a/blank-parser", SUBSTANTIAL_CONTENT)
 
-        viewModel.getReaderModeHtml(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
+        viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
         advanceUntilIdle()
 
         val state = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value)
@@ -577,13 +635,27 @@ class ReaderModeViewModelTest : KoinTestBase() {
     }
 
     @Test
+    fun `web content shows the feed item title and feed source name`() = runTest {
+        val item = seedItemWithContent("web-meta", "https://example.com/a/web-meta", SUBSTANTIAL_CONTENT)
+
+        viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
+        advanceUntilIdle()
+
+        val state = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value)
+        assertEquals(ShownContentSource.WEB, state.readerModeData.shownContentSource)
+        assertEquals("Title web-meta", state.readerModeData.title)
+        assertEquals("Content Feed web-meta", state.readerModeData.siteName)
+        assertEquals("Content", state.readerModeData.content)
+    }
+
+    @Test
     fun `web preference falls back to feed content when parsing times out`() = runTest {
         val item = seedItemWithContent("web-timeout", "https://example.com/a/web-timeout", SUBSTANTIAL_CONTENT)
-        parserBehavior = ParserBehavior.DelayedSuccessById(
-            delaysByArticleId = mapOf(item.id to 21_000),
+        parserBehavior = ParserBehavior.DelayedSuccessByUrlPath(
+            delaysByUrlPathSegment = mapOf(item.id to 21_000),
         )
 
-        viewModel.getReaderModeHtml(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
+        viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
         advanceUntilIdle()
 
         val state = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value)
@@ -593,15 +665,15 @@ class ReaderModeViewModelTest : KoinTestBase() {
     }
 
     @Test
-    fun `sets HtmlNotAvailable when neither web nor feed content is available`() = runTest {
+    fun `sets ContentNotAvailable when neither web nor feed content is available`() = runTest {
         parserBehavior = ParserBehavior.Error
         val item = seedItemWithContent("nothing", "https://example.com/a/nothing", content = null)
 
-        viewModel.getReaderModeHtml(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
+        viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
         advanceUntilIdle()
 
         val state = viewModel.readerModeState.value
-        assertIs<ReaderModeState.HtmlNotAvailable>(state)
+        assertIs<ReaderModeState.ContentNotAvailable>(state)
         assertEquals(item.id, state.id)
     }
 
@@ -612,7 +684,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         viewModel.readerModeState.test {
             assertEquals(ReaderModeState.Loading, awaitItem())
 
-            viewModel.getReaderModeHtml(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
+            viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
             val initialState = awaitItem() as ReaderModeState.Success
             assertEquals(ShownContentSource.WEB, initialState.readerModeData.shownContentSource)
             assertTrue(initialState.readerModeData.canToggleContentSource)
@@ -624,7 +696,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
             assertEquals(SUBSTANTIAL_CONTENT, feedState.readerModeData.content)
             assertTrue(feedState.readerModeData.canToggleContentSource)
 
-            viewModel.getReaderModeHtml(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
+            viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
             assertEquals(
                 ShownContentSource.FEED,
                 assertIs<ReaderModeState.Success>(viewModel.readerModeState.value).readerModeData.shownContentSource,
@@ -641,7 +713,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
     fun `toggleContentSource keeps the web article when feed content is missing`() = runTest {
         val item = seedItemWithContent("toggle-missing", "https://example.com/a/toggle-missing", content = null)
 
-        viewModel.getReaderModeHtml(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
+        viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
         advanceUntilIdle()
         val initialState = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value)
         assertEquals(ShownContentSource.WEB, initialState.readerModeData.shownContentSource)
@@ -661,7 +733,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         val url = "https://example.com/a/toggle-web-failure"
         val item = seedItemWithContent("toggle-web-failure", url, content = SUBSTANTIAL_CONTENT)
 
-        viewModel.getReaderModeHtml(item.toUrlInfo(ArticleOpenMode.FEED_CONTENT))
+        viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FEED_CONTENT))
         advanceUntilIdle()
         val feedState = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value)
         assertEquals(ShownContentSource.FEED, feedState.readerModeData.shownContentSource)
@@ -671,7 +743,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         viewModel.toggleContentSource()
         advanceUntilIdle()
 
-        val fallbackState = assertIs<ReaderModeState.HtmlNotAvailable>(viewModel.readerModeState.value)
+        val fallbackState = assertIs<ReaderModeState.ContentNotAvailable>(viewModel.readerModeState.value)
         assertEquals(url, fallbackState.url)
     }
 
@@ -682,7 +754,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         viewModel.readerModeState.test {
             assertEquals(ReaderModeState.Loading, awaitItem())
 
-            viewModel.getReaderModeHtml(item.toUrlInfo())
+            viewModel.loadReaderContent(item.toUrlInfo())
 
             val state = awaitItem() as ReaderModeState.Success
             assertEquals(SUBSTANTIAL_CONTENT, state.readerModeData.content)
@@ -696,7 +768,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         val item = seedItemWithContent("blank-url-base", url = "", content = "<p>Short post</p>")
         val urlInfo = item.toUrlInfo().copy(feedSourceBaseUrl = "https://example.com/source/")
 
-        viewModel.getReaderModeHtml(urlInfo)
+        viewModel.loadReaderContent(urlInfo)
         advanceUntilIdle()
 
         val state = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value)
@@ -709,7 +781,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         // The Compose feed list and the desktop reader route build FeedItemUrlInfo without it.
         val urlInfo = item.toUrlInfo().copy(feedSourceBaseUrl = null)
 
-        viewModel.getReaderModeHtml(urlInfo)
+        viewModel.loadReaderContent(urlInfo)
         advanceUntilIdle()
 
         val state = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value)
@@ -720,7 +792,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
     fun `feed content for ineligible url cannot toggle to web parsing`() = runTest {
         val item = seedItemWithContent("pdf", "https://example.com/file.pdf", SUBSTANTIAL_CONTENT)
 
-        viewModel.getReaderModeHtml(item.toUrlInfo(ArticleOpenMode.FEED_CONTENT))
+        viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FEED_CONTENT))
         advanceUntilIdle()
 
         val state = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value)
@@ -732,7 +804,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
     fun `blank url item accepts short feed content`() = runTest {
         val item = seedItemWithContent("blank-url-short", url = "", content = "<p>Short post</p>")
 
-        viewModel.getReaderModeHtml(item.toUrlInfo())
+        viewModel.loadReaderContent(item.toUrlInfo())
         advanceUntilIdle()
 
         val state = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value)
@@ -748,7 +820,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
             item3Content = "<p>Next short post</p>",
         )
 
-        viewModel.getReaderModeHtml(feedItems[1].toUrlInfo())
+        viewModel.loadReaderContent(feedItems[1].toUrlInfo())
         viewModel.navigateToNextArticle()
         advanceUntilIdle()
         assertEquals(
@@ -767,13 +839,137 @@ class ReaderModeViewModelTest : KoinTestBase() {
     }
 
     @Test
-    fun `blank url item with no content is HtmlNotAvailable`() = runTest {
+    fun `blank url item with no content is ContentNotAvailable`() = runTest {
         val item = seedItemWithContent("blank-url-empty", url = "", content = null)
 
-        viewModel.getReaderModeHtml(item.toUrlInfo())
+        viewModel.loadReaderContent(item.toUrlInfo())
         advanceUntilIdle()
 
-        assertIs<ReaderModeState.HtmlNotAvailable>(viewModel.readerModeState.value)
+        assertIs<ReaderModeState.ContentNotAvailable>(viewModel.readerModeState.value)
+    }
+
+    @Test
+    fun `reader follows overlapping search results in both directions`() = runTest(testDispatcher) {
+        keepReadNavigationItems()
+        val items = seedFeedItems()
+        articleNavigationRepository.setSearchResults(listOf(items[2], items[0]).toImmutableList())
+
+        viewModel.loadReaderContent(items[2].toUrlInfo())
+        advanceUntilIdle()
+        assertReaderSelection(items[2], previous = false, next = true)
+        viewModel.navigateToNextArticle()
+        advanceUntilIdle()
+        assertReaderSelection(items[0], previous = true, next = false)
+        viewModel.navigateToPreviousArticle()
+        advanceUntilIdle()
+        assertReaderSelection(items[2], previous = false, next = true)
+    }
+
+    @Test
+    fun `reader navigates search results absent from the loaded home list`() = runTest(testDispatcher) {
+        keepReadNavigationItems()
+        val home = seedFeedItems()
+        val source = home.first().feedSource
+        val results = listOf(
+            createFeedItem("search-x", "https://example.com/search-x", "Search X", 5000, source),
+            createFeedItem("search-y", "https://example.com/search-y", "Search Y", 4000, source),
+        )
+        databaseHelper.insertFeedItems(results, lastSyncTimestamp = 0)
+        articleNavigationRepository.setSearchResults(results.toImmutableList())
+
+        viewModel.loadReaderContent(results[0].toUrlInfo())
+        advanceUntilIdle()
+        assertReaderSelection(results[0], previous = false, next = true)
+        viewModel.navigateToNextArticle()
+        advanceUntilIdle()
+        assertReaderSelection(results[1], previous = true, next = false)
+        viewModel.navigateToPreviousArticle()
+        advanceUntilIdle()
+        assertReaderSelection(results[0], previous = false, next = true)
+        assertEquals(home.map { it.id }, feedStateRepository.feedState.value.map { it.id })
+    }
+
+    @Test
+    fun `clearing search restores reader home navigation`() = runTest(testDispatcher) {
+        keepReadNavigationItems()
+        val items = seedFeedItems()
+        articleNavigationRepository.setSearchResults(listOf(items[2], items[0]).toImmutableList())
+        articleNavigationRepository.clearSearchResults()
+
+        viewModel.loadReaderContent(items[1].toUrlInfo())
+        advanceUntilIdle()
+        assertReaderSelection(items[1], previous = true, next = true)
+        viewModel.navigateToNextArticle()
+        advanceUntilIdle()
+        assertReaderSelection(items[2], previous = true, next = false)
+        viewModel.navigateToPreviousArticle()
+        advanceUntilIdle()
+        assertReaderSelection(items[1], previous = true, next = true)
+    }
+
+    @Test
+    fun `reader uses home neighbors when current item is not a search result`() = runTest(testDispatcher) {
+        keepReadNavigationItems()
+        val items = seedFeedItems()
+        articleNavigationRepository.setSearchResults(listOf(items[2], items[0]).toImmutableList())
+
+        viewModel.loadReaderContent(items[1].toUrlInfo())
+        advanceUntilIdle()
+        assertReaderSelection(items[1], previous = true, next = true)
+        viewModel.navigateToNextArticle()
+        advanceUntilIdle()
+        assertReaderSelection(items[2], previous = false, next = true)
+        viewModel.loadReaderContent(items[1].toUrlInfo())
+        advanceUntilIdle()
+        viewModel.navigateToPreviousArticle()
+        advanceUntilIdle()
+        assertReaderSelection(items[0], previous = true, next = false)
+    }
+
+    @Test
+    fun `published search navigation survives reader mark-read emissions`() = runTest(testDispatcher) {
+        keepReadNavigationItems()
+        val items = seedFeedItems(item1Title = "NavigationMatch A", item3Title = "NavigationMatch C")
+        val searchViewModel = get<SearchViewModel>()
+        searchViewModel.updateSearchQuery("NavigationMatch")
+        advanceTimeBy(500.milliseconds)
+        advanceUntilIdle()
+        assertEquals(
+            listOf(items[0].id, items[2].id),
+            assertIs<SearchState.DataFound>(searchViewModel.searchState.value).items.map { it.id },
+        )
+
+        viewModel.loadReaderContent(items[0].toUrlInfo())
+        advanceUntilIdle()
+        assertReaderSelection(items[0], previous = false, next = true)
+        viewModel.navigateToNextArticle()
+        advanceUntilIdle()
+        assertReaderSelection(items[2], previous = true, next = false)
+        viewModel.navigateToPreviousArticle()
+        advanceUntilIdle()
+        assertReaderSelection(items[0], previous = false, next = true)
+        assertEquals(ArticlePosition(1, 2), articleNavigationRepository.getArticlePosition(items[0].id))
+        assertEquals(ArticlePosition(2, 2), articleNavigationRepository.getArticlePosition(items[2].id))
+        val dbItems = databaseHelper.getFeedItems(
+            feedFilter = FeedFilter.Timeline,
+            pageSize = 10,
+            showReadItems = true,
+            sortOrder = FeedOrder.NEWEST_FIRST,
+        ).associateBy { it.url_hash }
+        assertTrue(dbItems.getValue(items[0].id).is_read)
+        assertTrue(dbItems.getValue(items[2].id).is_read)
+    }
+
+    private fun keepReadNavigationItems() {
+        settingsRepository.setShowReadArticlesTimeline(true)
+        settingsRepository.setHideReadItems(false)
+    }
+
+    private fun assertReaderSelection(item: FeedItem, previous: Boolean, next: Boolean) {
+        assertEquals(item.id, viewModel.currentArticleState.value?.id)
+        assertEquals(item.id, assertIs<ReaderModeState.Success>(viewModel.readerModeState.value).readerModeData.id.id)
+        assertEquals(previous, viewModel.canNavigateToPreviousState.value)
+        assertEquals(next, viewModel.canNavigateToNextState.value)
     }
 
     private suspend fun seedFeedItems(
@@ -782,6 +978,8 @@ class ReaderModeViewModelTest : KoinTestBase() {
         item3Url: String = "https://example.com/articles/3",
         item1Content: String? = null,
         item3Content: String? = null,
+        item1Title: String = "Article 1",
+        item3Title: String = "Article 3",
     ): List<FeedItem> {
         val feedSource = FeedSource(
             id = "source-1",
@@ -816,7 +1014,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
             createFeedItem(
                 id = "item-1",
                 url = item1Url,
-                title = "Article 1",
+                title = item1Title,
                 pubDateMillis = 3000,
                 feedSource = feedSource,
             ).copy(content = item1Content),
@@ -830,7 +1028,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
             createFeedItem(
                 id = "item-3",
                 url = item3Url,
-                title = "Article 3",
+                title = item3Title,
                 pubDateMillis = 1000,
                 feedSource = feedSource,
             ).copy(content = item3Content),
@@ -922,11 +1120,10 @@ class ReaderModeViewModelTest : KoinTestBase() {
 
     private sealed interface ParserBehavior {
         data object Success : ParserBehavior
-        data object HtmlNull : ParserBehavior
         data object HtmlBlank : ParserBehavior
         data object Error : ParserBehavior
-        data class DelayedSuccessById(
-            val delaysByArticleId: Map<String, Long>,
+        data class DelayedSuccessByUrlPath(
+            val delaysByUrlPathSegment: Map<String, Long>,
         ) : ParserBehavior
     }
 
@@ -941,16 +1138,14 @@ class ReaderModeViewModelTimeoutTest : KoinTestBase() {
     private val viewModel: ReaderModeViewModel by inject()
 
     override fun getTestModules(): List<Module> = super.getTestModules() + module {
-        single<FeedItemParserWorker> {
-            object : FeedItemParserWorker {
-                override suspend fun parse(feedItemId: String, url: String, imageUrl: String?): ParsingResult {
+        single<ArticleContentParser> {
+            object : ArticleContentParser {
+                override suspend fun parse(url: String): String? {
                     delay(2.minutes)
-                    return ParsingResult.Success(
-                        htmlContent = "Content",
-                        title = "Title",
-                        siteName = "Site Name",
-                    )
+                    return "Content"
                 }
+
+                override suspend fun prepareFeedContent(html: String, baseUrl: String?): String = html
             }
         }
     }
@@ -968,7 +1163,7 @@ class ReaderModeViewModelTimeoutTest : KoinTestBase() {
     }
 
     @Test
-    fun `getReaderModeHtml sets HtmlNotAvailable when parser returns null html`() = runTest {
+    fun `loadReaderContent sets ContentNotAvailable when parser returns null html`() = runTest {
         val urlInfo = FeedItemUrlInfo(
             id = "null-html-1",
             url = "https://example.com/articles/null-html",
@@ -978,11 +1173,11 @@ class ReaderModeViewModelTimeoutTest : KoinTestBase() {
             commentsUrl = null,
         )
 
-        viewModel.getReaderModeHtml(urlInfo)
+        viewModel.loadReaderContent(urlInfo)
         advanceTimeBy(1.minutes)
 
         val state = viewModel.readerModeState.value
-        assertIs<ReaderModeState.HtmlNotAvailable>(state)
+        assertIs<ReaderModeState.ContentNotAvailable>(state)
         assertEquals(urlInfo.url, state.url)
         assertEquals(urlInfo.id, state.id)
     }

@@ -24,20 +24,12 @@ fun getReaderModeStyledHtml(
     } else {
         ""
     }
-    val contentWithSubtitle = subtitleTag + content
-
-    val processedContent = if (imageUrl != null && !hasLeadingImage(content)) {
-        val heroTag = "<img class=\"__hero\" src=\"${imageUrl.escapeHtml()}\" alt=\"\" />"
-        val h4CloseIndex = contentWithSubtitle.indexOf("</h4>", ignoreCase = true)
-        if (h4CloseIndex >= 0) {
-            val insertAt = h4CloseIndex + "</h4>".length
-            contentWithSubtitle.substring(0, insertAt) + heroTag + contentWithSubtitle.substring(insertAt)
-        } else {
-            heroTag + contentWithSubtitle
-        }
+    val heroTag = if (imageUrl != null && !hasLeadingImage(content)) {
+        "<img class=\"__hero\" src=\"${imageUrl.escapeHtml()}\" alt=\"\" />"
     } else {
-        contentWithSubtitle
+        ""
     }
+    val processedContent = subtitleTag + heroTag + content
 
     // language=html
     return """
@@ -517,6 +509,17 @@ fun readerLineHeightToTextLineHeightSp(fontSize: Int, step: Int): Int =
             LINE_HEIGHT_DESKTOP_ROUNDING_OFFSET
         ) / LINE_HEIGHT_TENTHS_DIVISOR
 
+fun readerFontSizeJs(fontSize: Int): String =
+    """document.getElementById("container").style.fontSize = "$fontSize" + "px";"""
+
+fun readerLineHeightLabel(step: Int): String = readerLineHeightToCss(step)
+
+fun readerCodeBlockColors(isDarkMode: Boolean): ReaderCodeBlockColors = if (isDarkMode) {
+    ReaderCodeBlockColors(backgroundColor = "#1e1e1e", borderColor = "#444444")
+} else {
+    ReaderCodeBlockColors(backgroundColor = "#f6f8fa", borderColor = "#d1d9e0")
+}
+
 // Live update injected into the reader WebView (Android & iOS use the same rule string).
 fun readerLineHeightJs(step: Int): String {
     val lineHeight = readerLineHeightToCss(step)
@@ -539,4 +542,9 @@ data class ReaderColors(
     val linkColor: String,
     val backgroundColor: String,
     val borderColor: String? = null,
+)
+
+data class ReaderCodeBlockColors(
+    val backgroundColor: String,
+    val borderColor: String,
 )

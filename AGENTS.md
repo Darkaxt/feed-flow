@@ -100,10 +100,6 @@ Use the Gradle daemon for manual local runs so repeated desktop iterations stay 
 
 Use the MCP tools when you need to interact with the running Desktop app: check status, reload code changes, list windows, capture screenshots, inspect the semantic tree, click/type/scroll, or resize windows. The MCP server is experimental in Compose Hot Reload; if it is unavailable or not connected, fall back to `./gradlew --quiet --console=plain desktopApp:run` and note the limitation in handoff.
 
-### Desktop reader parser bundles
-
-The desktop reader bundles `readability-es5.js` and `turndown-es5.js` in `shared/src/jvmMain/resources/` are committed pre-built ES5 artifacts; do not hand-edit them (the generator tool has been removed from the repo). `reader-content-parser.js` is hand-written glue and can be edited normally.
-
 ### Local Klead development
 
 Klead resolves from Maven Central by default. Its composite-build substitution in `settings.gradle.kts` is deliberately commented out; only enable it for explicit local Klead work, using `-Pfeedflow.kleadPath=<checkout>` (default: `../../klead`), and do not commit that local substitution.
@@ -272,7 +268,8 @@ When creating commits:
 - In the SwiftUI feed list, keep row callbacks narrowly captured and put `.refreshable` at the screen boundary; broad environment captures or nested refresh wrappers can invalidate every visible row while scrolling. Validate changes with a warmed-up Instruments capture on a physical iPad as described in `e2e/maestro/maestro-e2e-tests.md`.
 
 ### Reader mode
-- Use `ReaderModeEligibility.canOpenReaderMode` / `FeedItemUrlInfo.canOpenWebReaderMode()` as the shared gate before opening reader mode on Android, Desktop, and iOS. Ineligible links such as blank, non-http(s), media/PDF/download URLs, YouTube, and Telegram should fall back to the configured browser or `HtmlNotAvailable` behavior instead of attempting reader parsing.
+- Klead is the sole reader-content engine on Android, Desktop, and iOS; keep parsing in the shared pipeline rather than adding a platform HTML parser. Shared HTML parsing uses `KsoupHtmlParser`.
+- Use `ReaderModeEligibility.canOpenReaderMode` / `FeedItemUrlInfo.canOpenWebReaderMode()` as the shared gate before opening reader mode on Android, Desktop, and iOS. Ineligible links such as blank, non-http(s), media/PDF/download URLs, YouTube, and Telegram should fall back to the configured browser or `ContentNotAvailable` behavior instead of attempting reader parsing.
 - URL-less items are a separate case: they are never web-reader eligible, but they still open in the reader from their feed content. Check `FeedItemUrlInfo.hasNoUrl()` first (it must bypass the whole `linkOpeningPreference` branch, since there is no URL any browser could open).
 
 ### HTTP clients
