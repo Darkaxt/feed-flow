@@ -7,15 +7,20 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreVert
@@ -48,6 +53,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.testTag
@@ -85,6 +92,22 @@ private fun contentSourceToolbarAction(
     onClick = onClick,
 )
 
+private fun speechToolbarAction(
+    isPreparingSpeech: Boolean,
+    isSpeechPlaying: Boolean,
+    strings: FeedFlowStrings,
+    onClick: () -> Unit,
+) = ToolbarAction(
+    icon = Icons.Default.Headphones,
+    label = when {
+        isPreparingSpeech -> strings.readerModeTtsPreparing
+        isSpeechPlaying -> strings.audioPause
+        else -> strings.readerModeTtsListen
+    },
+    testTag = ReaderModeE2eIds.TTS_BUTTON,
+    onClick = onClick,
+)
+
 @Composable
 fun ReaderModeFloatingToolbar(
     readerModeState: ReaderModeState,
@@ -100,10 +123,14 @@ fun ReaderModeFloatingToolbar(
     onArchiveClick: (String) -> Unit,
     onCommentsClick: (String) -> Unit,
     onToggleContentSource: () -> Unit,
+    onListenClick: () -> Unit,
+    isPreparingSpeech: Boolean,
+    isSpeechPlaying: Boolean,
     onFontSizeChange: (Int) -> Unit,
     lineHeight: Int,
     onLineHeightChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    audioContent: (@Composable () -> Unit)? = null,
 ) {
     var showFontSizeMenu by remember { mutableStateOf(false) }
     var showOverflowMenu by remember { mutableStateOf(false) }
@@ -128,6 +155,7 @@ fun ReaderModeFloatingToolbar(
     val latestOnArchiveClick by rememberUpdatedState(onArchiveClick)
     val latestOnCommentsClick by rememberUpdatedState(onCommentsClick)
     val latestOnToggleContentSource by rememberUpdatedState(onToggleContentSource)
+    val latestOnListenClick by rememberUpdatedState(onListenClick)
     var isBookmarked by remember(readerModeState) {
         mutableStateOf(readerModeState.getIsBookmarked)
     }
@@ -180,6 +208,8 @@ fun ReaderModeFloatingToolbar(
         isBookmarked,
         shownContentSource,
         confirmedBookmarkAction,
+        isPreparingSpeech,
+        isSpeechPlaying,
     ) {
         buildList {
             if (id != null) {
@@ -225,6 +255,7 @@ fun ReaderModeFloatingToolbar(
                 )
             }
             if (readerModeState is ReaderModeState.Success) {
+                add(speechToolbarAction(isPreparingSpeech, isSpeechPlaying, strings) { latestOnListenClick() })
                 add(
                     ToolbarAction(
                         icon = Icons.Outlined.TextFields,
@@ -249,13 +280,14 @@ fun ReaderModeFloatingToolbar(
 
     Surface(
         modifier = modifier,
-        shape = FloatingToolbarDefaults.ContainerShape,
+        shape = readerToolbarShape(hasAudio = audioContent != null),
         color = toolbarContainerColor,
         contentColor = MaterialTheme.colorScheme.onSurface,
         shadowElevation = 6.dp,
         border = toolbarBorder,
     ) {
-        Box {
+        Column {
+            audioContent?.invoke()
             OverflowToolbarLayout(
                 leadingActions = leadingActions,
                 trailingActions = trailingActions,
@@ -263,6 +295,7 @@ fun ReaderModeFloatingToolbar(
                 showOverflowMenu = showOverflowMenu,
                 onShowOverflowMenu = { showOverflowMenu = it },
                 moreOptionsLabel = strings.moreOptionsButtonContentDescription,
+                fillAvailableWidth = audioContent != null,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             ) {
                 TooltipBox(
@@ -345,6 +378,7 @@ private fun OverflowToolbarLayout(
     showOverflowMenu: Boolean,
     onShowOverflowMenu: (Boolean) -> Unit,
     moreOptionsLabel: String,
+    fillAvailableWidth: Boolean,
     modifier: Modifier = Modifier,
     fixedContent: @Composable () -> Unit,
 ) {
@@ -383,7 +417,11 @@ private fun OverflowToolbarLayout(
         val overflowActions = leadingActions.drop(visibleLeading) + trailingActions.drop(visibleTrailing)
 
         val contentPlaceable = subcompose("content") {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = if (fillAvailableWidth) Modifier.fillMaxWidth() else Modifier,
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = if (fillAvailableWidth) Arrangement.SpaceBetween else Arrangement.Start,
+            ) {
                 AnimatedVisibility(
                     visible = isContentVisible && visibleLeading > 0,
                     enter = fadeIn() + expandHorizontally(),
@@ -396,7 +434,9 @@ private fun OverflowToolbarLayout(
                     }
                 }
 
-                fixedContent()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    fixedContent()
+                }
 
                 AnimatedVisibility(
                     visible = isContentVisible && (visibleTrailing > 0 || needsOverflow),
@@ -432,6 +472,7 @@ private fun OverflowToolbarLayout(
                                     }
                                 }
                                 DropdownMenu(
+                                    modifier = Modifier.exposeTestTagsAsResourceIds(),
                                     expanded = showOverflowMenu,
                                     onDismissRequest = { onShowOverflowMenu(false) },
                                     shape = MaterialTheme.shapes.large,
@@ -483,7 +524,7 @@ private fun ToolbarActionButton(
                 onCheckedChange = { action.onClick() },
                 modifier = action.testTagModifier(),
                 colors = IconButtonDefaults.filledIconToggleButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    containerColor = Color.Transparent,
                     contentColor = MaterialTheme.colorScheme.onSurface,
                     checkedContainerColor = MaterialTheme.colorScheme.primary,
                     checkedContentColor = MaterialTheme.colorScheme.onPrimary,
@@ -543,3 +584,7 @@ private fun ToolbarAction.testTagModifier(): Modifier =
 
 private fun Modifier.toolbarTooltipE2eTag(): Modifier =
     exposeTestTagsAsResourceIds().testTag(ReaderModeE2eIds.TOOLTIP)
+
+@Composable
+private fun readerToolbarShape(hasAudio: Boolean): Shape =
+    if (hasAudio) RoundedCornerShape(28.dp) else FloatingToolbarDefaults.ContainerShape

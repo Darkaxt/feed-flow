@@ -272,6 +272,7 @@ targets:
       - path: Source/Accounts/GoogleDrive/Data/GoogleDriveServiceClient.swift
       - path: Source/Accounts/GoogleDrive/Data/GoogleDriveServiceClientImpl.swift
       - path: Source/UI/Style/Spacing.swift
+      - path: Source/Utils/FeedConditionalGetURLProtocol.swift
     settings:
       base:
         PRODUCT_NAME: $(TARGET_NAME)
@@ -304,6 +305,7 @@ targets:
           DEBUG_INFORMATION_FORMAT: dwarf
           DEVELOPMENT_TEAM: Q7CUB3RNAK
           PRODUCT_BUNDLE_IDENTIFIER: com.prof18.feedflow.dev.Widget
+          FEEDFLOW_HOST_BUNDLE_IDENTIFIER: com.prof18.feedflow.dev
           PROVISIONING_PROFILE_SPECIFIER: ""
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG $(inherited) APP_EXTENSION"
         Release:
@@ -312,6 +314,7 @@ targets:
           DEVELOPMENT_TEAM[sdk=iphoneos*]: Q7CUB3RNAK
           CODE_SIGN_IDENTITY[sdk=iphoneos*]: "Apple Development"
           PRODUCT_BUNDLE_IDENTIFIER: com.prof18.feedflow.Widget
+          FEEDFLOW_HOST_BUNDLE_IDENTIFIER: com.prof18.feedflow
           PROVISIONING_PROFILE_SPECIFIER: ""
           PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]: FeedFlowWidgetGHActionDevProvisioning
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: APP_EXTENSION
@@ -410,11 +413,57 @@ targets:
       - package: GoogleAPIClientForREST
         product: GoogleAPIClientForREST_Drive
 
+  WidgetTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/Widget/WidgetRefreshCoordinatorTests.swift
+      - path: Widget/WidgetRefreshCoordinator.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.prof18.feedflow.dev.WidgetTests
+        GENERATE_INFOPLIST_FILE: "YES"
+        INFOPLIST_PREPROCESS: "NO"
+        INFOPLIST_PREFIX_HEADER: ""
+        TEST_HOST: ""
+
+  AudioPlaybackTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/AudioPlayback
+      - path: Source/Audio/AudioEpisode.swift
+      - path: Source/Audio/AudioPlaybackPositionStore.swift
+      - path: Source/Audio/AudioPlaybackProgress.swift
+      - path: Source/Audio/AudioPlaybackController.swift
+      - path: Source/Audio/AudioPlaybackController+System.swift
+      - path: Source/Audio/AudioSourceKind.swift
+      - path: Source/Audio/SpeechPlaybackRequest.swift
+      - path: Source/Audio/SpeechAudioGenerating.swift
+      - path: Source/Audio/SpeechAudioGenerationError.swift
+      - path: Source/Audio/SpeechAudioGenerator.swift
+      - path: Source/Audio/SpeechLanguageDetector.swift
+      - path: Source/Audio/SpeechSynthesizerDriving.swift
+      - path: Source/Audio/SpeechAudioWriting.swift
+      - path: Source/Audio/NativeSpeechSynthesizer.swift
+      - path: Source/Audio/NativeSpeechAudioWriter.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.prof18.feedflow.dev.AudioPlaybackTests
+        GENERATE_INFOPLIST_FILE: "YES"
+        INFOPLIST_PREPROCESS: "NO"
+        INFOPLIST_PREFIX_HEADER: ""
+        TEST_HOST: ""
+
   CloudSyncTests:
     type: bundle.unit-test
     platform: iOS
     sources:
       - path: Tests/CloudSync
+      - path: Tests/Widget
+        excludes:
+          - WidgetRefreshCoordinatorTests.swift
+      - path: Widget/WidgetContentLogoLoader.swift
       - path: Source/Accounts/Dropbox/Data
       - path: Source/Accounts/GoogleDrive/Data
     settings:
@@ -430,6 +479,7 @@ targets:
       - target: FeedFlowKitBuilder
         embed: false
         link: false
+      - package: Nuke
       - package: SwiftyDropbox
       - package: GoogleSignIn
       - package: Firebase
@@ -438,6 +488,24 @@ targets:
         product: GoogleAPIClientForREST_Drive
 
 schemes:
+  WidgetTests:
+    build:
+      targets:
+        WidgetTests: all
+    test:
+      config: Debug
+      targets:
+        - WidgetTests
+
+  AudioPlaybackTests:
+    build:
+      targets:
+        AudioPlaybackTests: all
+    test:
+      config: Debug
+      targets:
+        - AudioPlaybackTests
+
   FeedFlow:
     build:
       parallelizeBuild: true
@@ -499,10 +567,12 @@ schemes:
       buildImplicitDependencies: true
       targets:
         CloudSyncTests: all
+        AudioPlaybackTests: all
     test:
       config: Debug
       targets:
         - CloudSyncTests
+        - AudioPlaybackTests
 
   ShareExtension:
     build:

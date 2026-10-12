@@ -17,6 +17,7 @@ struct FeedFlowApp: App {
     private var scenePhase: ScenePhase
     @State private var appState: AppState = .init()
     @State private var browserSelector: BrowserSelector
+    @State private var audioPlayback: AudioPlaybackController
 
     private var feedSyncTimer: FeedSyncTimer = .init()
 
@@ -25,6 +26,14 @@ struct FeedFlowApp: App {
         RevenueCatSupport.configure()
         setupTelemetry()
         _browserSelector = State(initialValue: BrowserSelector())
+        _audioPlayback = State(initialValue: AudioPlaybackController(
+            positionStore: RepositoryAudioPlaybackPositionStore(
+                repository: Deps.shared.getAudioPlaybackPositionRepository()
+            ),
+            speechText: { title, content in
+                try await Deps.shared.getReaderSpeechText().segments(title: title, content: content)
+            }
+        ))
 
         if let path = Bundle.main.path(forResource: "Info", ofType: "plist") {
             if let keys = NSDictionary(contentsOfFile: path) {
@@ -61,7 +70,7 @@ struct FeedFlowApp: App {
 
                 // Phase 1: Fetch feeds (expensive, may be interrupted)
                 do {
-                    try await repo.fetchFeeds()
+                    try await repo.fetchFeeds(forceRefresh: false)
                     fetchSucceeded = true
                 } catch is CancellationError {
                     // System cancelled — items carry over to next run
@@ -107,6 +116,7 @@ struct FeedFlowApp: App {
             ContentView()
                 .environment(appState)
                 .environment(browserSelector)
+                .environment(audioPlayback)
                 .toggleStyle(BlueToggleStyle())
                 .preferredColorScheme(appState.colorScheme)
                 .onOpenURL { url in
@@ -144,6 +154,7 @@ struct FeedFlowApp: App {
                         feedSyncTimer.scheduleTimer()
                         Deps.shared.getContentPrefetchManager().startBackgroundFetching()
                     case .background:
+                        audioPlayback.savePosition()
                         feedSyncTimer.invalidate()
                         // Stop prefetch DB writes before suspension: a SQLite lock held on the
                         // app-group container while suspended gets the app killed (0xdead10cc).
@@ -188,10 +199,14 @@ struct FeedFlowApp: App {
                 .value
             // iOS truncates opened URLs to 2047 characters, so a full subscription list does not fit
             // in the link: the restore script copies it into Documents instead.
+            let audioUrl = components?.queryItems?
+                .first { $0.name == "audioUrl" }?
+                .value
             let developmentOpml = components?.queryItems?
                 .first { $0.name == "opml" }?
                 .value
                 .flatMap(decodeDevelopmentOPML) ?? readDevelopmentOPMLFile()
+            audioPlayback.stop()
             appState.e2eSeedMessage = nil
             Task {
                 do {
@@ -199,7 +214,8 @@ struct FeedFlowApp: App {
                         action: action,
                         profileName: profileName,
                         accountName: accountName,
-                        developmentOpml: developmentOpml
+                        developmentOpml: developmentOpml,
+                        audioUrl: audioUrl
                     )
                     await MainActor.run {
                         if let seedError {

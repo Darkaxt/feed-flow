@@ -27,6 +27,7 @@ import com.prof18.feedflow.shared.data.SettingsRepository
 import com.prof18.feedflow.shared.domain.DateFormatterImpl
 import com.prof18.feedflow.shared.domain.HtmlRetriever
 import com.prof18.feedflow.shared.domain.KsoupHtmlParser
+import com.prof18.feedflow.shared.domain.audio.AudioPlaybackPositionRepository
 import com.prof18.feedflow.shared.domain.contentprefetch.ContentPrefetchRepository
 import com.prof18.feedflow.shared.domain.contentprefetch.ContentPrefetchRepositoryImpl
 import com.prof18.feedflow.shared.domain.contentprefetch.ContentPrefetcher
@@ -53,6 +54,7 @@ import com.prof18.feedflow.shared.domain.feedsync.PendingCloudChangesManager
 import com.prof18.feedflow.shared.domain.mappers.RssChannelMapper
 import com.prof18.feedflow.shared.domain.parser.KleadArticleContentParser
 import com.prof18.feedflow.shared.domain.parser.readerContentFormat
+import com.prof18.feedflow.shared.domain.tts.ReaderSpeechText
 import com.prof18.feedflow.shared.e2e.E2eSeedRunner
 import com.prof18.feedflow.shared.presentation.AboutAndSupportSettingsViewModel
 import com.prof18.feedflow.shared.presentation.AccountsViewModel
@@ -317,6 +319,8 @@ private fun getCoreModule(appConfig: AppConfig) = module {
         )
     }
 
+    single { AudioPlaybackPositionRepository(settings = get()) }
+
     single {
         FeedAppearanceSettingsRepository(
             settings = get(),
@@ -442,6 +446,8 @@ private fun getCoreModule(appConfig: AppConfig) = module {
             databaseHelper = get(),
         )
     }
+
+    single { ReaderSpeechText(dispatcherProvider = get()) }
 
     factory {
         FeedUrlRetriever(
@@ -628,6 +634,7 @@ private fun getCoreModule(appConfig: AppConfig) = module {
             googleDriveSettings = get(),
             icloudSettings = get(),
             networkSettings = get(),
+            audioPositions = get(),
         )
     }
 

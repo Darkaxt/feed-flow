@@ -12,6 +12,7 @@
     <string name="refresh_feeds">Refresh feeds</string>
     <string name="no_feeds_found_message">No feeds found. Please add a new feed!</string>
     <string name="loading_feed_message">Loading feeds %s</string>
+    <string name="widget_refreshing">Refreshing…</string>
     <string name="app_name" translatable="false">FeedFlow</string>
     <string name="mark_all_read_button">Mark all as read</string>
     <string name="clear_old_articles_button">Delete week-old articles</string>
@@ -112,6 +113,22 @@
     <string name="mark_all_below_as_read_confirmation_title">Mark all below as read?</string>
     <string name="mark_all_below_as_read_confirmation_message">All articles below this one will be marked as read.</string>
     <string name="menu_open_comments">Open comments</string>
+    <string name="audio_episode_badge_content_description">Audio episode</string>
+    <string name="audio_episode_label">Audio</string>
+    <string name="menu_open_audio">Open audio</string>
+    <string name="audio_episode_untitled">Audio episode</string>
+    <string name="audio_open_failed">Could not open the audio link.</string>
+    <string name="audio_play">Play audio</string>
+    <string name="audio_pause">Pause audio</string>
+    <string name="audio_close_player">Close player</string>
+    <string name="audio_seek">Playback position</string>
+    <string name="audio_playback_failed">Could not play this audio. Try opening it in another app.</string>
+    <string name="audio_open_external">Open in another app</string>
+    <string name="audio_loading">Loading audio</string>
+    <string name="audio_playback_speed">Playback speed</string>
+    <string name="audio_now_playing">Now playing</string>
+    <string name="audio_paused">Paused</string>
+    <string name="audio_return_to_episode">Return to episode</string>
     <string name="menu_share">Share</string>
     <string name="menu_share_comments">Share comments</string>
     <string name="menu_copy_link">Copy link</string>
@@ -300,6 +317,7 @@
     <string name="widget_article_age_last_3_days">Last 3 days</string>
     <string name="widget_article_age_last_7_days">Last 7 days</string>
     <string name="widget_show_header_title">Show header title</string>
+    <string name="widget_show_refresh_button">Show refresh button</string>
     <string name="widget_background_color_title">Background color</string>
     <string name="widget_background_color_default">System</string>
     <string name="widget_background_color_preview">Background preview</string>
@@ -334,7 +352,21 @@
     <string name="widget_text_color_dark">Dark</string>
     <string name="widget_preview_note">Preview colors may look different on your actual home screen because wallpaper, theme, and launcher background can affect the final result.</string>
     <string name="widget_preview_toggle_background">Toggle preview background</string>
+    <string name="widget_preview_info">About this preview</string>
+    <string name="widget_sync_disabled">Automatic updates off</string>
+    <string name="widget_enable_sync">Enable sync</string>
+    <string name="widget_sync_settings_action">Change</string>
     <string name="widget_font_size_title">Font size</string>
+    <string name="widget_content_section_title">Content</string>
+    <string name="widget_content_choose">Choose content</string>
+    <string name="widget_content_timeline_description">Unread articles from all feeds</string>
+    <string name="widget_content_bookmarks_description">Your saved articles</string>
+    <string name="widget_content_no_categories">No categories yet. Create one in FeedFlow to use it here.</string>
+    <string name="widget_content_category">Category</string>
+    <string name="widget_content_feed_source">Feed source</string>
+    <string name="widget_list_item_title">Widget %s</string>
+    <string name="widget_list_item_description">Widget %s · %s</string>
+    <string name="widget_list_empty">No widgets added yet. Add a FeedFlow widget from your launcher.</string>
     <string name="file_menu">File</string>
     <string name="exit_menu">Exit</string>
     <string name="menu_view">View</string>
@@ -451,4 +483,8 @@
     <string name="settings_notification_mode_category">By category</string>
     <string name="settings_notification_mode_grouped">All combined</string>
     <string name="sort_and_filter_button">Sort &amp; filter</string>
+    <string name="reader_mode_tts_listen">Listen to article</string>
+    <string name="reader_mode_tts_stop">Stop listening</string>
+    <string name="reader_mode_tts_error">Unable to read this article aloud. Try again.</string>
+    <string name="reader_mode_tts_preparing">Preparing article audio…</string>
 </resources>

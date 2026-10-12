@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -37,6 +36,7 @@ import com.github.skydoves.colorpicker.compose.BrightnessSlider
 import com.github.skydoves.colorpicker.compose.HsvColorPicker
 import com.github.skydoves.colorpicker.compose.rememberColorPickerController
 import com.prof18.feedflow.android.settings.SettingsE2eIds
+import com.prof18.feedflow.core.model.WidgetContentFilter
 import com.prof18.feedflow.core.model.WidgetFeedLayout
 import com.prof18.feedflow.shared.domain.model.SyncPeriod
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
@@ -57,21 +57,22 @@ import kotlin.math.roundToInt
 fun WidgetSettingsContent(
     settingsState: WidgetSettingsState,
     onFeedLayoutSelected: (WidgetFeedLayout) -> Unit,
-    onWidgetFreshnessSelected: (WidgetFreshness) -> Unit,
     onShowHeaderSelected: (Boolean) -> Unit,
+    onShowRefreshButtonSelected: (Boolean) -> Unit,
     onFontScaleSelected: (Int) -> Unit,
     onBackgroundColorSelected: (Int?) -> Unit,
     onBackgroundOpacitySelected: (Int) -> Unit,
     onTextColorModeSelected: (WidgetTextColorMode) -> Unit,
     onHideImagesSelected: (Boolean) -> Unit,
+    onWidgetFreshnessSelected: (WidgetFreshness) -> Unit,
     onCardSurfaceColorSelected: (Int?) -> Unit,
     onCardSurfaceOpacitySelected: (Int) -> Unit,
     onCardCornerRadiusSelected: (Int) -> Unit,
     onCardItemSeparationSelected: (WidgetCardItemSeparation) -> Unit,
     onCardDividerOpacitySelected: (Int) -> Unit,
     onCardImageSizingSelected: (WidgetCardImageSizing) -> Unit,
-    showConfirmButton: Boolean,
-    onConfirm: () -> Unit,
+    onContentFilterSelected: (WidgetContentFilter) -> Unit,
+    onManageSync: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val strings = LocalFeedFlowStrings.current
@@ -80,30 +81,19 @@ fun WidgetSettingsContent(
     val resolvedBackgroundColor = settingsState.backgroundColor?.let(::widgetColorFromArgb) ?: defaultBackgroundColor
     val backgroundLabel = settingsState.backgroundColor?.let(::formatWidgetColorHex)
         ?: strings.widgetBackgroundColorDefault
-    var showBackgroundColorPicker by remember { mutableStateOf(false) }
+    var showColorPicker by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier,
     ) {
-        Text(
-            modifier = Modifier.padding(horizontal = Spacing.regular),
-            text = strings.widgetConfigurationDescription,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-
-        if (settingsState.syncPeriod == SyncPeriod.NEVER) {
-            Text(
-                modifier = Modifier.padding(horizontal = Spacing.regular, vertical = Spacing.small),
-                text = strings.widgetBackgroundSyncDisabledWarning,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
+        WidgetPreviewSection(settingsState = settingsState, modifier = Modifier.fillMaxWidth())
+        WidgetContentSelector(settingsState, onContentFilterSelected, modifier = Modifier.fillMaxWidth())
 
         Text(
             text = strings.widgetAppearanceTitle,
             modifier = Modifier.padding(horizontal = Spacing.regular, vertical = Spacing.small),
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
         )
 
         WidgetFeedLayoutSelector(
@@ -142,6 +132,12 @@ fun WidgetSettingsContent(
         )
 
         SettingSwitchItem(
+            title = strings.widgetShowRefreshButton,
+            isChecked = settingsState.showRefreshButton,
+            onCheckedChange = onShowRefreshButtonSelected,
+        )
+
+        SettingSwitchItem(
             title = strings.settingsHideImages,
             isChecked = settingsState.hideImages,
             onCheckedChange = onHideImagesSelected,
@@ -163,7 +159,7 @@ fun WidgetSettingsContent(
             title = strings.widgetBackgroundColorTitle,
             currentValueLabel = backgroundLabel,
             color = resolvedBackgroundColor,
-            onClick = { showBackgroundColorPicker = true },
+            onClick = { showColorPicker = true },
         )
 
         Text(
@@ -198,20 +194,16 @@ fun WidgetSettingsContent(
             steps = MAX_WIDGET_FONT_SCALE - MIN_WIDGET_FONT_SCALE,
         )
 
-        if (showConfirmButton) {
-            Button(
-                onClick = onConfirm,
-                modifier = Modifier
-                    .padding(horizontal = Spacing.regular)
-                    .fillMaxWidth()
-                    .padding(vertical = Spacing.medium),
-            ) {
-                Text(text = strings.widgetConfigurationConfirm)
-            }
-        }
+        WidgetSyncStatus(
+            syncPeriod = settingsState.syncPeriod,
+            onManageSync = onManageSync,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.regular),
+        )
     }
 
-    if (showBackgroundColorPicker) {
+    if (showColorPicker) {
         WidgetColorPickerDialog(
             initialColor = resolvedBackgroundColor,
             labels = WidgetColorPickerLabels(
@@ -223,14 +215,14 @@ fun WidgetSettingsContent(
                 hexError = strings.widgetBackgroundColorHexError,
                 resetToDefault = strings.widgetBackgroundColorReset,
             ),
-            onDismiss = { showBackgroundColorPicker = false },
+            onDismiss = { showColorPicker = false },
             onConfirm = { color ->
                 onBackgroundColorSelected(widgetColorToOpaqueArgb(color))
-                showBackgroundColorPicker = false
+                showColorPicker = false
             },
             onReset = {
                 onBackgroundColorSelected(null)
-                showBackgroundColorPicker = false
+                showColorPicker = false
             },
         )
     }
@@ -400,19 +392,10 @@ private fun WidgetFeedLayoutSelector(
         title = strings.feedLayoutTitle,
         currentValue = feedLayout,
         options = persistentListOf(
-            SettingDropdownOption(
-                WidgetFeedLayout.LIST,
-                strings.settingsFeedLayoutList,
-                e2eId = SettingsE2eIds.WIDGET_FEED_LAYOUT_LIST,
-            ),
-            SettingDropdownOption(
-                WidgetFeedLayout.CARD,
-                strings.settingsFeedLayoutCard,
-                e2eId = SettingsE2eIds.WIDGET_FEED_LAYOUT_CARD,
-            ),
+            SettingDropdownOption(WidgetFeedLayout.LIST, strings.settingsFeedLayoutList),
+            SettingDropdownOption(WidgetFeedLayout.CARD, strings.settingsFeedLayoutCard),
         ),
         onOptionSelected = onFeedLayoutSelected,
-        modifier = Modifier.testTag(SettingsE2eIds.WIDGET_FEED_LAYOUT),
     )
 }
 
@@ -608,21 +591,22 @@ private fun WidgetSettingsContentPreview() {
                     backgroundOpacityPercent = 80,
                 ),
                 onFeedLayoutSelected = {},
-                onWidgetFreshnessSelected = {},
                 onShowHeaderSelected = {},
+                onShowRefreshButtonSelected = {},
                 onFontScaleSelected = {},
                 onBackgroundColorSelected = {},
                 onBackgroundOpacitySelected = {},
                 onTextColorModeSelected = {},
                 onHideImagesSelected = {},
+                onWidgetFreshnessSelected = {},
                 onCardSurfaceColorSelected = {},
                 onCardSurfaceOpacitySelected = {},
                 onCardCornerRadiusSelected = {},
                 onCardItemSeparationSelected = {},
                 onCardDividerOpacitySelected = {},
                 onCardImageSizingSelected = {},
-                showConfirmButton = true,
-                onConfirm = {},
+                onContentFilterSelected = {},
+                onManageSync = {},
             )
         }
     }

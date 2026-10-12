@@ -1,12 +1,14 @@
 package com.prof18.feedflow.shared.domain.feed
 
 import co.touchlab.kermit.Logger
+import co.touchlab.skie.configuration.annotations.SuspendInterop
 import com.prof18.feedflow.core.domain.DateFormatter
 import com.prof18.feedflow.core.model.FeedSource
 import com.prof18.feedflow.core.model.FeedSourceCacheInfo
 import com.prof18.feedflow.core.model.FeedSourceToNotify
 import com.prof18.feedflow.core.model.StartedFeedUpdateStatus
 import com.prof18.feedflow.core.utils.DispatcherProvider
+import com.prof18.feedflow.core.utils.withSuspensionGuard
 import com.prof18.feedflow.database.DatabaseHelper
 import com.prof18.feedflow.feedsync.feedbin.domain.FeedbinRepository
 import com.prof18.feedflow.feedsync.greader.domain.GReaderRepository
@@ -17,6 +19,7 @@ import com.prof18.feedflow.shared.domain.feed.httpcache.FeedSourceCacheInfoFacto
 import com.prof18.feedflow.shared.domain.feedsync.FeedSyncRepository
 import com.prof18.feedflow.shared.domain.mappers.RssChannelMapper
 import com.prof18.rssparser.exception.HttpException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -45,18 +48,21 @@ class SerialFeedFetcherRepository internal constructor(
     suspend fun markItemsAsNotified() =
         databaseHelper.markFeedItemsAsNotified()
 
-    suspend fun fetchFeeds() {
+    @SuspendInterop.Enabled
+    suspend fun fetchFeeds(forceRefresh: Boolean = false) {
         return withContext(dispatcherProvider.io) {
-            feedStateRepository.emitUpdateStatus(StartedFeedUpdateStatus)
-            when {
-                gReaderRepository.isAccountSet() -> {
-                    fetchFeedsWithGReader()
-                }
-                feedbinRepository.isAccountSet() -> {
-                    fetchFeedsWithFeedbin()
-                }
-                else -> {
-                    fetchFeedsWithRssParser()
+            withSuspensionGuard("FeedFlow serial feed fetch") {
+                feedStateRepository.emitUpdateStatus(StartedFeedUpdateStatus)
+                when {
+                    gReaderRepository.isAccountSet() -> {
+                        fetchFeedsWithGReader()
+                    }
+                    feedbinRepository.isAccountSet() -> {
+                        fetchFeedsWithFeedbin()
+                    }
+                    else -> {
+                        fetchFeedsWithRssParser(forceRefresh = forceRefresh)
+                    }
                 }
             }
         }
@@ -72,11 +78,11 @@ class SerialFeedFetcherRepository internal constructor(
         feedStateRepository.getFeeds()
     }
 
-    private suspend fun fetchFeedsWithRssParser() {
+    private suspend fun fetchFeedsWithRssParser(forceRefresh: Boolean) {
         feedSyncRepository.syncFeedSources()
 
         val feedSourceUrls = databaseHelper.getFeedSources()
-        parseFeedsSerially(feedSourceUrls = feedSourceUrls)
+        parseFeedsSerially(feedSourceUrls = feedSourceUrls, forceRefresh = forceRefresh)
         feedSyncRepository.syncFeedItems()
         feedStateRepository.getFeeds()
     }
@@ -85,6 +91,7 @@ class SerialFeedFetcherRepository internal constructor(
         feedSource: FeedSource,
         cacheInfo: FeedSourceCacheInfo?,
         currentTime: Long,
+        forceRefresh: Boolean,
     ): Boolean {
         val backoffTimestamp = cacheInfo?.backoffTimestamp
         if (backoffTimestamp != null && currentTime < backoffTimestamp) {
@@ -93,6 +100,10 @@ class SerialFeedFetcherRepository internal constructor(
                 "Skipping ${feedSource.url}: Retry-After backoff active for another $minutes min"
             }
             return false
+        }
+
+        if (forceRefresh) {
+            return true
         }
 
         val nextFetchTimestamp = cacheInfo?.nextFetchTimestamp
@@ -113,6 +124,7 @@ class SerialFeedFetcherRepository internal constructor(
 
     private suspend fun parseFeedsSerially(
         feedSourceUrls: List<FeedSource>,
+        forceRefresh: Boolean,
     ) {
         val currentTime = dateFormatter.currentTimeMillis()
         val cacheInfoById = databaseHelper.getFeedSourcesCacheInfo().associateBy { it.feedSourceId }
@@ -147,6 +159,7 @@ class SerialFeedFetcherRepository internal constructor(
                 feedSource = feedSource,
                 cacheInfo = cacheInfoById[feedSource.id],
                 currentTime = currentTime,
+                forceRefresh = forceRefresh,
             )
             if (shouldRefresh) {
                 feedSource
@@ -154,8 +167,6 @@ class SerialFeedFetcherRepository internal constructor(
                 null
             }
         }
-
-        val updatedCacheInfo = mutableListOf<FeedSourceCacheInfo>()
 
         // Process feeds one at a time
         for (feedSource in feedsToProcess) {
@@ -186,25 +197,25 @@ class SerialFeedFetcherRepository internal constructor(
                 } else {
                     logger.d { "Error, skip: ${feedSource.url}. Error: $e" }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Throwable) {
                 logger.d { "Error, skip: ${feedSource.url}. Error: $e" }
             }
-            updatedCacheInfo.add(
-                FeedSourceCacheInfoFactory.create(
-                    store = feedHttpCacheStore,
-                    feedSourceId = feedSource.id,
-                    feedUrl = feedSource.url,
-                    fetchSucceeded = fetchSucceeded,
-                    refreshValidatorsTimestamp = receivedFullResponse,
-                    previousCacheInfo = cacheInfoById[feedSource.id],
-                    now = dateFormatter.currentTimeMillis(),
-                    logger = logger,
+            databaseHelper.updateFeedSourcesCacheInfo(
+                listOf(
+                    FeedSourceCacheInfoFactory.create(
+                        store = feedHttpCacheStore,
+                        feedSourceId = feedSource.id,
+                        feedUrl = feedSource.url,
+                        fetchSucceeded = fetchSucceeded,
+                        refreshValidatorsTimestamp = receivedFullResponse,
+                        previousCacheInfo = cacheInfoById[feedSource.id],
+                        now = dateFormatter.currentTimeMillis(),
+                        logger = logger,
+                    ),
                 ),
             )
-        }
-
-        if (updatedCacheInfo.isNotEmpty()) {
-            databaseHelper.updateFeedSourcesCacheInfo(updatedCacheInfo)
         }
     }
 

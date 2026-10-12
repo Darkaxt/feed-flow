@@ -69,6 +69,26 @@ Supported profiles:
 - `reorder-drag`
 - `feed-content`
 - `rtl-content`
+- `audio-episode`
+
+`audio-episode` adds an audio episode and a plain control article above the existing content-rich items.
+Both open from stored feed content. Feed source and unread indicators are hidden so the flow exercises
+the independent audio badge. REG-173 uses the seed's inert enclosure URL; REG-174 and REG-176 use the
+local WAV URL supplied by `e2e/scripts/run-audio-playback.sh`. REG-176 generates speech from the
+seeded article and uses the podcast player to check visible duration, pause/seek/speed, source switching,
+position retention, background/foreground return, and close behavior.
+
+The focused playback runner starts `e2e/scripts/serve-audio-fixture.py` on an ephemeral port and
+passes the URL to Maestro as `AUDIO_URL`. The local server supports HTTP byte ranges for native
+players. On Android, the runner targets the first device from `adb devices` and maps its localhost
+to the host server with `adb reverse`. iOS Simulator reaches the server at `127.0.0.1`. Runner logs
+remain under `.tmp/audio-playback/` for diagnostics.
+
+`e2e/scripts/run-audio-playback.sh android 175-now-playing-navigation` (or `ios`) runs
+the focused compact-player navigation flow with the same local fixture and development-feed restoration.
+Use `e2e/scripts/run-audio-playback.sh android 176-reader-speech-playback` or the corresponding `ios`
+command for speech playback coverage. Android uses the first connected device by default; set
+`ANDROID_SERIAL=<device-serial>` to target a specific connected device.
 
 Seed deep links:
 
@@ -86,6 +106,9 @@ The stable completion marker is:
 - visible text: `E2E seed complete`
 - accessibility id: `e2e_seed_complete`
 
+On iOS, tap the completion marker after asserting it when testing bottom controls. This dismisses
+the debug-only status banner so it cannot intercept playback-indicator taps.
+
 ## Seeding In Flows
 
 Android uses a debug-only seed activity. After seeding, tap `e2e_open_app` to return to the real app.
@@ -99,6 +122,12 @@ appId: com.prof18.feedflow.debug
 - tapOn:
     id: e2e_open_app
 ```
+
+The Android `android-widget` profile also exposes `e2e_open_widget_settings`, which opens the widget configuration screen with test widget ID 1. REG-177 uses this entry point to exercise settings and the preview without requiring a launcher host; the seed resets that per-widget configuration before each run. It does not validate the home-screen widget refresh action.
+
+REG-177 defaults to an English UI. For a localized device, pass `-e WIDGET_HEADER_TITLE="<localized Show header title label>"` to Maestro.
+
+The fork's REG-178 uses the same `e2e_open_widget_settings` entry point for configurable Card surfaces and freshness. It was renumbered from REG-173 to avoid the upstream podcast flow collision. It is maintained as source coverage; no device execution is permitted during the weekly upstream synchronization.
 
 iOS handles the seed link inside the app. The simulator may show a system confirmation dialog for custom schemes, so keep the `Open` tap optional.
 

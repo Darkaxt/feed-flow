@@ -54,7 +54,7 @@ Optional live-store checks:
    - Store listing screenshot images changed: store screenshots may need upload.
    - Website screenshot assets changed: website screenshot gallery/hero may need deploy.
 6. If live store checking is requested or this is the weekly automation, compare against current store state when credentials are available.
-   - Google Play: do not use Gradle Play Publisher bootstrap for the recurring audit until its graphics download hang is fixed. Report Google Play live state as unavailable when no other reliable read-only path exists, and continue with checked-in listing output/source-copy checks.
+   - Google Play: read live state with `.scripts/pull-google-play-listing.py` (see Live Store Checks), never with Gradle Play Publisher bootstrap. If the script's config is unavailable, report the live check as unavailable and continue with checked-in listing output/source-copy checks.
    - App Store: pull metadata/screenshots into a temp directory and compare against FeedFlow's source store/screenshot copy where mapping is clear.
    - Microsoft Store: read the live listing with `pcenter listing show` and compare against `assets/storecopy/<locale>/`.
 7. Add follow-up TODOs to the FeedFlow Obsidian board when the audit finds actionable store release work.
@@ -64,7 +64,7 @@ Optional live-store checks:
    - Keep TODO text short and concrete, but include the exact thing to change: store, locale, and field or asset type. Examples:
      - `- [ ] Sync App Store Russian subtitle, keywords, and promotional text`
      - `- [ ] Generate Google Play Latvian listing text output`
-     - `- [ ] Upload App Store Latvian metadata`
+     - `- [ ] Upload App Store Finnish metadata`
      - `- [ ] Regenerate App Store Russian iPhone/iPad screenshots`
      - `- [ ] Update checked-in Google Play Russian title, short description, and full description from live/source`
    - Do not add TODOs just because a translation was created or changed. Add TODOs only after verifying the relevant source copy is complete in the repo: store metadata cards require complete `assets/storecopy/<locale>/` content; screenshot cards require complete `assets/screenshotcopy/<locale>/` content.
@@ -96,7 +96,7 @@ release notes. Never run any `publish*` task during this audit.
 
 - `Google Play live check: unavailable - FEEDFLOW_PLAY_CONFIG_JSON is unavailable or invalid`
 
-Latvian source store copy is currently incomplete, so report it without creating store or screenshot follow-up. Reassess supported App Store locales only after the source is complete.
+Latvian (`lv`) is supported by Google Play but is not a supported App Store Connect metadata locale. Exclude Latvian from App Store metadata, field-limit, and screenshot checks and follow-up cards; Latvia uses English (U.K.). Audit Latvian Play copy and screenshots according to their own source completeness. Verify Apple locale support before flagging a missing App Store localization.
 
 Still compare local source and checked-in generated Play output:
 
@@ -191,7 +191,7 @@ Three things will produce false findings unless you handle them:
    an **untranslated placeholder**. Never create a sync card for one — pushing it would
    replace a correctly translated live listing with English.
 3. **Titles are per-locale and optional.** Some locales carry a `title` and some return
-   `""` — as of 2026-08-11, 9 of 25 did. An empty title is normal and must not be reported
+   `""`. An empty title is normal and must not be reported
    as drift, and neither must a locale whose title differs from the repo: the Microsoft Store
    title is a *reserved product name* chosen in Partner Center, not free text, so a
    difference is something to confirm with the user rather than a field to sync. (A locale

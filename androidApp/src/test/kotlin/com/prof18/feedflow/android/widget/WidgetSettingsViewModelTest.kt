@@ -1,6 +1,5 @@
 package com.prof18.feedflow.android.widget
 
-import com.prof18.feedflow.android.settings.widget.WidgetSettingsViewModel
 import com.prof18.feedflow.shared.data.SettingsRepository
 import com.prof18.feedflow.shared.data.WidgetSettingsRepository
 import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
@@ -13,7 +12,6 @@ import com.russhwolf.settings.Settings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -24,7 +22,12 @@ import org.junit.Before
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(sdk = [30], application = android.app.Application::class)
 class WidgetSettingsViewModelTest {
+    private val viewModels = androidx.lifecycle.ViewModelStore()
+    private val drivers = mutableListOf<app.cash.sqldelight.db.SqlDriver>()
+
     private val dispatcher = StandardTestDispatcher()
 
     @Before
@@ -34,6 +37,8 @@ class WidgetSettingsViewModelTest {
 
     @After
     fun tearDown() {
+        viewModels.clear()
+        drivers.forEach { it.close() }
         Dispatchers.resetMain()
     }
 
@@ -42,7 +47,7 @@ class WidgetSettingsViewModelTest {
         val settings = CountingWidgetSettings()
         val repository = WidgetSettingsRepository(settings)
         val widgetUpdater = FakeWidgetUpdater()
-        val viewModel = WidgetSettingsViewModel(
+        val viewModel = newViewModel(
             settingsRepository = SettingsRepository(MapSettings()),
             widgetSettingsRepository = repository,
             widgetUpdater = widgetUpdater,
@@ -52,7 +57,7 @@ class WidgetSettingsViewModelTest {
         viewModel.updateWidgetFreshness(WidgetFreshness.LAST_24_HOURS)
 
         assertEquals(WidgetFreshness.LAST_24_HOURS, viewModel.settingsState.value.freshness)
-        assertEquals(WidgetFreshness.LAST_24_HOURS, repository.getWidgetFreshness())
+        assertEquals(WidgetFreshness.LAST_24_HOURS, repository.getWidgetConfiguration(WIDGET_ID).freshness)
         assertEquals(1, settings.freshnessWriteCount)
         assertEquals(0, widgetUpdater.updateCount)
 
@@ -66,7 +71,7 @@ class WidgetSettingsViewModelTest {
         val settings = CountingWidgetSettings()
         val repository = WidgetSettingsRepository(settings)
         val widgetUpdater = FakeWidgetUpdater()
-        val viewModel = WidgetSettingsViewModel(
+        val viewModel = newViewModel(
             settingsRepository = SettingsRepository(MapSettings()),
             widgetSettingsRepository = repository,
             widgetUpdater = widgetUpdater,
@@ -86,7 +91,7 @@ class WidgetSettingsViewModelTest {
         val settings = CountingWidgetSettings()
         val repository = WidgetSettingsRepository(settings)
         val widgetUpdater = FakeWidgetUpdater()
-        val viewModel = WidgetSettingsViewModel(
+        val viewModel = newViewModel(
             settingsRepository = SettingsRepository(MapSettings()),
             widgetSettingsRepository = repository,
             widgetUpdater = widgetUpdater,
@@ -96,7 +101,7 @@ class WidgetSettingsViewModelTest {
         viewModel.updateWidgetFreshness(WidgetFreshness.LAST_7_DAYS)
         viewModel.updateWidgetFreshness(WidgetFreshness.LAST_7_DAYS)
 
-        assertEquals(WidgetFreshness.LAST_7_DAYS, repository.widgetFreshness.value)
+        assertEquals(WidgetFreshness.LAST_7_DAYS, repository.getWidgetConfiguration(WIDGET_ID).freshness)
         assertEquals(WidgetFreshness.LAST_7_DAYS, viewModel.settingsState.value.freshness)
         assertEquals(1, settings.freshnessWriteCount)
 
@@ -109,7 +114,7 @@ class WidgetSettingsViewModelTest {
     fun `card appearance callbacks persist optimistic state and update widget once each`() = runTest(dispatcher) {
         val repository = WidgetSettingsRepository(MapSettings())
         val widgetUpdater = FakeWidgetUpdater()
-        val viewModel = WidgetSettingsViewModel(
+        val viewModel = newViewModel(
             settingsRepository = SettingsRepository(MapSettings()),
             widgetSettingsRepository = repository,
             widgetUpdater = widgetUpdater,
@@ -117,7 +122,7 @@ class WidgetSettingsViewModelTest {
         advanceUntilIdle()
 
         var expectedAppearance = WidgetCardAppearance()
-        val updates = listOf<(WidgetSettingsViewModel) -> WidgetCardAppearance>(
+        val updates = listOf<(WidgetInstanceSettingsViewModel) -> WidgetCardAppearance>(
             { currentViewModel ->
                 currentViewModel.updateCardSurfaceColor(CUSTOM_COLOR_WITHOUT_ALPHA)
                 expectedAppearance.copy(surfaceColor = CUSTOM_COLOR)
@@ -148,7 +153,7 @@ class WidgetSettingsViewModelTest {
             expectedAppearance = update(viewModel)
 
             assertEquals(expectedAppearance, viewModel.settingsState.value.cardAppearance)
-            assertEquals(expectedAppearance, repository.getWidgetCardAppearance())
+            assertEquals(expectedAppearance, repository.getWidgetConfiguration(WIDGET_ID).cardAppearance)
             assertEquals(index, widgetUpdater.updateCount)
 
             advanceUntilIdle()
@@ -164,10 +169,10 @@ class WidgetSettingsViewModelTest {
             dividerOpacityPercent = MAX_PERCENT,
         )
         val repository = WidgetSettingsRepository(MapSettings()).apply {
-            setWidgetCardAppearance(initialAppearance)
+            setWidgetCardAppearance(WIDGET_ID, initialAppearance)
         }
         val widgetUpdater = FakeWidgetUpdater()
-        val viewModel = WidgetSettingsViewModel(
+        val viewModel = newViewModel(
             settingsRepository = SettingsRepository(MapSettings()),
             widgetSettingsRepository = repository,
             widgetUpdater = widgetUpdater,
@@ -183,8 +188,51 @@ class WidgetSettingsViewModelTest {
         advanceUntilIdle()
 
         assertEquals(initialAppearance, viewModel.settingsState.value.cardAppearance)
-        assertEquals(initialAppearance, repository.getWidgetCardAppearance())
+        assertEquals(initialAppearance, repository.getWidgetConfiguration(WIDGET_ID).cardAppearance)
         assertEquals(0, widgetUpdater.updateCount)
+    }
+
+    private fun newViewModel(
+        settingsRepository: SettingsRepository,
+        widgetSettingsRepository: WidgetSettingsRepository,
+        widgetUpdater: WidgetUpdater,
+    ): WidgetInstanceSettingsViewModel {
+        val driver = app.cash.sqldelight.driver.android.AndroidSqliteDriver(
+            schema = com.prof18.feedflow.db.FeedFlowDB.Schema,
+            context = androidx.test.core.app.ApplicationProvider.getApplicationContext(),
+            name = null,
+        )
+        drivers.add(driver)
+        val logger = co.touchlab.kermit.Logger
+        val database = com.prof18.feedflow.database.DatabaseHelper(driver, dispatcher, logger)
+        val constructor = com.prof18.feedflow.shared.domain.feed.FeedWidgetRepository::class.java.declaredConstructors
+            .single()
+        constructor.isAccessible = true
+        val feeds = constructor.newInstance(
+            database,
+            com.prof18.feedflow.shared.domain.DateFormatterImpl(logger, kotlin.time.Clock.System),
+            com.prof18.feedflow.shared.data.FeedAppearanceSettingsRepository(MapSettings()),
+        ) as com.prof18.feedflow.shared.domain.feed.FeedWidgetRepository
+        return WidgetInstanceSettingsViewModel(
+            appWidgetId = WIDGET_ID,
+            settingsRepository = settingsRepository,
+            widgetSettingsRepository = widgetSettingsRepository,
+            feedWidgetRepository = feeds,
+            widgetUpdater = widgetUpdater,
+        ).also { viewModels.put("widget-" + drivers.size, it) }
+    }
+
+    @Test
+    fun `reopening configuration preserves appearance without affecting another widget`() = runTest(dispatcher) {
+        val repository = WidgetSettingsRepository(MapSettings())
+        val viewModel = newViewModel(SettingsRepository(MapSettings()), repository, FakeWidgetUpdater())
+        viewModel.updateCardSurfaceOpacityPercent(0)
+        viewModel.updateWidgetFreshness(WidgetFreshness.LAST_7_DAYS)
+        viewModel.reloadWidgetConfiguration()
+        assertEquals(0, viewModel.settingsState.value.cardAppearance.surfaceOpacityPercent)
+        assertEquals(WidgetFreshness.LAST_7_DAYS, viewModel.settingsState.value.freshness)
+        assertEquals(WidgetCardAppearance(), repository.getWidgetConfiguration(84).cardAppearance)
+        advanceUntilIdle()
     }
 
     private class FakeWidgetUpdater : WidgetUpdater {
@@ -194,113 +242,6 @@ class WidgetSettingsViewModelTest {
         override suspend fun update() {
             updateCount += 1
         }
-    }
-}
-
-@OptIn(ExperimentalCoroutinesApi::class)
-class WidgetConfigurationViewModelTest {
-    private val dispatcher: TestDispatcher = StandardTestDispatcher()
-
-    @Before
-    fun setUp() {
-        Dispatchers.setMain(dispatcher)
-    }
-
-    @After
-    fun tearDown() {
-        Dispatchers.resetMain()
-    }
-
-    @Test
-    fun `configuration freshness change persists without widget updater behavior`() = runTest(dispatcher) {
-        val settings = CountingWidgetSettings()
-        val repository = WidgetSettingsRepository(settings)
-        val viewModel = WidgetConfigurationViewModel(
-            settingsRepository = SettingsRepository(MapSettings()),
-            widgetSettingsRepository = repository,
-        )
-        advanceUntilIdle()
-
-        viewModel.updateWidgetFreshness(WidgetFreshness.LAST_7_DAYS)
-        advanceUntilIdle()
-
-        assertEquals(WidgetFreshness.LAST_7_DAYS, repository.getWidgetFreshness())
-        assertEquals(WidgetFreshness.LAST_7_DAYS, viewModel.settingsState.value.freshness)
-        assertEquals(1, settings.freshnessWriteCount)
-    }
-
-    @Test
-    fun `configuration ignores unchanged freshness input`() = runTest(dispatcher) {
-        val settings = CountingWidgetSettings()
-        val repository = WidgetSettingsRepository(settings)
-        val viewModel = WidgetConfigurationViewModel(
-            settingsRepository = SettingsRepository(MapSettings()),
-            widgetSettingsRepository = repository,
-        )
-        advanceUntilIdle()
-
-        viewModel.updateWidgetFreshness(WidgetFreshness.LAST_3_DAYS)
-        advanceUntilIdle()
-
-        assertEquals(WidgetFreshness.LAST_3_DAYS, viewModel.settingsState.value.freshness)
-        assertEquals(0, settings.freshnessWriteCount)
-    }
-
-    @Test
-    fun `card appearance callbacks persist all six settings without an updater`() = runTest(dispatcher) {
-        val repository = WidgetSettingsRepository(MapSettings())
-        val viewModel = WidgetConfigurationViewModel(
-            settingsRepository = SettingsRepository(MapSettings()),
-            widgetSettingsRepository = repository,
-        )
-        advanceUntilIdle()
-
-        viewModel.updateCardSurfaceColor(CUSTOM_COLOR_WITHOUT_ALPHA)
-        viewModel.updateCardSurfaceOpacityPercent(CUSTOM_OPACITY_PERCENT)
-        viewModel.updateCardCornerRadiusDp(ODD_CORNER_RADIUS_DP)
-        viewModel.updateCardItemSeparation(WidgetCardItemSeparation.DIVIDER)
-        viewModel.updateCardDividerOpacityPercent(CUSTOM_DIVIDER_OPACITY_PERCENT)
-        viewModel.updateCardImageSizing(WidgetCardImageSizing.FILL_ROW_HEIGHT)
-        viewModel.enqueueWorker()
-        advanceUntilIdle()
-
-        val expectedAppearance = WidgetCardAppearance(
-            surfaceColor = CUSTOM_COLOR,
-            surfaceOpacityPercent = CUSTOM_OPACITY_PERCENT,
-            cornerRadiusDp = NORMALIZED_CORNER_RADIUS_DP,
-            itemSeparation = WidgetCardItemSeparation.DIVIDER,
-            dividerOpacityPercent = CUSTOM_DIVIDER_OPACITY_PERCENT,
-            imageSizing = WidgetCardImageSizing.FILL_ROW_HEIGHT,
-        )
-        assertEquals(expectedAppearance, repository.getWidgetCardAppearance())
-        assertEquals(expectedAppearance, viewModel.settingsState.value.cardAppearance)
-    }
-
-    @Test
-    fun `configuration callbacks ignore normalized equivalent card appearance values`() = runTest(dispatcher) {
-        val initialAppearance = WidgetCardAppearance(
-            surfaceColor = CUSTOM_COLOR,
-            dividerOpacityPercent = MAX_PERCENT,
-        )
-        val repository = WidgetSettingsRepository(MapSettings()).apply {
-            setWidgetCardAppearance(initialAppearance)
-        }
-        val viewModel = WidgetConfigurationViewModel(
-            settingsRepository = SettingsRepository(MapSettings()),
-            widgetSettingsRepository = repository,
-        )
-        advanceUntilIdle()
-
-        viewModel.updateCardSurfaceColor(CUSTOM_COLOR_WITHOUT_ALPHA)
-        viewModel.updateCardSurfaceOpacityPercent(ABOVE_MAX_PERCENT)
-        viewModel.updateCardCornerRadiusDp(ODD_DEFAULT_CORNER_RADIUS_DP)
-        viewModel.updateCardItemSeparation(WidgetCardItemSeparation.SPACING)
-        viewModel.updateCardDividerOpacityPercent(ABOVE_MAX_PERCENT)
-        viewModel.updateCardImageSizing(WidgetCardImageSizing.THUMBNAIL)
-        advanceUntilIdle()
-
-        assertEquals(initialAppearance, repository.getWidgetCardAppearance())
-        assertEquals(initialAppearance, viewModel.settingsState.value.cardAppearance)
     }
 }
 
@@ -318,7 +259,8 @@ private class CountingWidgetSettings(
     }
 }
 
-private const val WIDGET_FRESHNESS_KEY = "WIDGET_FRESHNESS"
+private const val WIDGET_ID = 42
+private const val WIDGET_FRESHNESS_KEY = "WIDGET_FRESHNESS_42"
 private const val CUSTOM_COLOR_WITHOUT_ALPHA = 0x00123456
 private const val CUSTOM_COLOR = 0xFF123456.toInt()
 private const val CUSTOM_OPACITY_PERCENT = 72

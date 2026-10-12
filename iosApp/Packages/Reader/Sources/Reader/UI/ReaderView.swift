@@ -13,6 +13,9 @@ public struct ReaderViewActions {
     public let onNavigateToNext: (() -> Void)?
     public let onNavigateToPrevious: (() -> Void)?
     public let onToggleContentSource: (() -> Void)?
+    public let onToggleSpeech: (() -> Void)?
+    public let isPreparingSpeech: Bool
+    public let isSpeechPlaying: Bool
     public let isShowingFeedContent: Bool
     public let hasUrl: Bool
 
@@ -28,6 +31,9 @@ public struct ReaderViewActions {
         onNavigateToNext: (() -> Void)? = nil,
         onNavigateToPrevious: (() -> Void)? = nil,
         onToggleContentSource: (() -> Void)? = nil,
+        onToggleSpeech: (() -> Void)? = nil,
+        isPreparingSpeech: Bool = false,
+        isSpeechPlaying: Bool = false,
         isShowingFeedContent: Bool = false,
         hasUrl: Bool = true
     ) {
@@ -42,12 +48,15 @@ public struct ReaderViewActions {
         self.onNavigateToNext = onNavigateToNext
         self.onNavigateToPrevious = onNavigateToPrevious
         self.onToggleContentSource = onToggleContentSource
+        self.onToggleSpeech = onToggleSpeech
+        self.isPreparingSpeech = isPreparingSpeech
+        self.isSpeechPlaying = isSpeechPlaying
         self.isShowingFeedContent = isShowingFeedContent
         self.hasUrl = hasUrl
     }
 }
 
-public struct ReaderView: View {
+public struct ReaderView<BottomAccessory: View>: View {
     @Binding var readerStatus: ReaderStatus
     var options: ReaderViewOptions
     var themeColors: ReaderThemeColors
@@ -60,6 +69,8 @@ public struct ReaderView: View {
     var defaultLineHeight: Double
     @Binding var showFontSizeMenu: Bool
     var openInBrowser: (URL) -> Void
+    var bottomAccessory: BottomAccessory
+    var isBottomAccessoryVisible: Bool
 
     @State private var webContent: WebContent?
 
@@ -75,9 +86,11 @@ public struct ReaderView: View {
         defaultFontSize: Double,
         defaultLineHeight: Double,
         showFontSizeMenu: Binding<Bool>,
-        openInBrowser: @escaping (URL) -> Void
+        openInBrowser: @escaping (URL) -> Void,
+        isBottomAccessoryVisible: Bool = true,
+        @ViewBuilder bottomAccessory: () -> BottomAccessory
     ) {
-        self._readerStatus = readerStatus
+        _readerStatus = readerStatus
         self.options = options
         self.themeColors = themeColors
         self.scripts = scripts
@@ -87,24 +100,42 @@ public struct ReaderView: View {
         self.lineHeight = lineHeight
         self.defaultFontSize = defaultFontSize
         self.defaultLineHeight = defaultLineHeight
-        self._showFontSizeMenu = showFontSizeMenu
+        _showFontSizeMenu = showFontSizeMenu
         self.openInBrowser = openInBrowser
+        self.bottomAccessory = bottomAccessory()
+        self.isBottomAccessoryVisible = isBottomAccessoryVisible
     }
 
     public var body: some View {
+        if #available(iOS 26, *) {
+            readerBody
+                .modifier(ReaderBottomAccessoryModifier(accessory: bottomAccessory, isVisible: isBottomAccessoryVisible))
+        } else {
+            readerBody
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    VStack(spacing: 10) {
+                        if isBottomAccessoryVisible {
+                            bottomAccessory
+                        }
+                        compactNavigationToolbar
+                    }
+                }
+        }
+    }
+
+    private var readerBody: some View {
         ZStack {
             Color(ReaderTheme.background)
                 .overlay(content)
+                .ignoresSafeArea(edges: isiOS26OrLater() ? .bottom : [])
                 .overlay(loader)
                 .navigationBarTitleDisplayMode(.inline)
                 .onChange(of: themeColors) { _, newValue in
                     applyThemeWithJS(newValue)
                 }
-                .toolbar {
-                    if isiOS26OrLater() {
-                        makeIOS26ToolbarContent()
-                    } else {
-                        makeLegacyToolbarContent()
+                .onChange(of: scripts.stateUpdate) { _, script in
+                    if let webContent {
+                        applyStateUpdate(script, to: webContent)
                     }
                 }
                 .sheet(isPresented: $showFontSizeMenu) {
@@ -112,12 +143,12 @@ public struct ReaderView: View {
                         .presentationDetents([.medium])
                         .presentationBackground(Color(.secondarySystemBackground))
                 }
-
-            if !isiOS26OrLater() {
-                VStack {
-                    Spacer()
-                    compactNavigationToolbar
-                }
+        }
+        .toolbar {
+            if isiOS26OrLater() {
+                makeIOS26ToolbarContent()
+            } else {
+                makeLegacyToolbarContent()
             }
         }
     }
@@ -143,12 +174,13 @@ public struct ReaderView: View {
                 onWebContentReady: { content in
                     webContent = content
                     applyThemeWithJS(themeColors)
+                    applyStateUpdate(scripts.stateUpdate, to: content)
                 }
             )
         }
     }
 
-    @ViewBuilder private var contentUnavailableView: some View {
+    private var contentUnavailableView: some View {
         VStack(spacing: 8) {
             Text(actions.strings.contentUnavailableTitle)
                 .font(.headline)
@@ -163,7 +195,7 @@ public struct ReaderView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    @ViewBuilder private var loader: some View {
+    private var loader: some View {
         ReaderPlaceholder()
             .opacity(readerStatus == .fetching ? 1 : 0)
             .animation(.default, value: readerStatus == .fetching)
@@ -182,6 +214,17 @@ public struct ReaderView: View {
             document.documentElement.style.setProperty("--reader-border", "\(colors.borderColor)");
         """
         webContent.evaluateJavaScript(script)
+    }
+
+    private func applyStateUpdate(_ script: String?, to content: WebContent) {
+        content.onContentReady = { [weak content] in
+            if let script {
+                content?.evaluateJavaScript(script)
+            }
+        }
+        if let script {
+            content.evaluateJavaScript(script)
+        }
     }
 
     @ToolbarContentBuilder
@@ -262,7 +305,8 @@ public struct ReaderView: View {
                 }
 
                 if case .extractedContent = readerStatus,
-                   let onComments = actions.onComments {
+                   let onComments = actions.onComments
+                {
                     Button {
                         onComments()
                     } label: {
@@ -271,6 +315,19 @@ public struct ReaderView: View {
                 }
 
                 if case .extractedContent = readerStatus {
+                    if let onToggleSpeech = actions.onToggleSpeech {
+                        Button {
+                            onToggleSpeech()
+                        } label: {
+                            Label(
+                                speechActionTitle,
+                                systemImage: actions.isSpeechPlaying ? "pause.fill" : "headphones"
+                            )
+                        }
+                        .disabled(actions.isPreparingSpeech)
+                        .accessibilityIdentifier(ReaderAccessibilityIdentifiers.ttsButton)
+                    }
+
                     Button {
                         actions.onFontSizeMenuToggle()
                     } label: {
@@ -280,7 +337,8 @@ public struct ReaderView: View {
                 }
 
                 if case .extractedContent = readerStatus,
-                   let onToggleContentSource = actions.onToggleContentSource {
+                   let onToggleContentSource = actions.onToggleContentSource
+                {
                     contentSourceMenuToggle(onToggle: onToggleContentSource)
                 }
             } label: {
@@ -327,7 +385,8 @@ public struct ReaderView: View {
                 }
 
                 if case .extractedContent = readerStatus,
-                   let onComments = actions.onComments {
+                   let onComments = actions.onComments
+                {
                     Button {
                         onComments()
                     } label: {
@@ -336,6 +395,19 @@ public struct ReaderView: View {
                 }
 
                 if case .extractedContent = readerStatus {
+                    if let onToggleSpeech = actions.onToggleSpeech {
+                        Button {
+                            onToggleSpeech()
+                        } label: {
+                            Label(
+                                speechActionTitle,
+                                systemImage: actions.isSpeechPlaying ? "pause.fill" : "headphones"
+                            )
+                        }
+                        .disabled(actions.isPreparingSpeech)
+                        .accessibilityIdentifier(ReaderAccessibilityIdentifiers.ttsButton)
+                    }
+
                     Button {
                         actions.onFontSizeMenuToggle()
                     } label: {
@@ -345,7 +417,8 @@ public struct ReaderView: View {
                 }
 
                 if case .extractedContent = readerStatus,
-                   let onToggleContentSource = actions.onToggleContentSource {
+                   let onToggleContentSource = actions.onToggleContentSource
+                {
                     contentSourceMenuToggle(onToggle: onToggleContentSource)
                 }
             } label: {
@@ -373,10 +446,18 @@ public struct ReaderView: View {
         )
     }
 
+    private var speechActionTitle: String {
+        if actions.isPreparingSpeech {
+            return actions.strings.ttsPreparing
+        }
+        return actions.isSpeechPlaying ? actions.strings.ttsStop : actions.strings.ttsListen
+    }
+
     @ViewBuilder
     private var contentSourceMenuIcon: some View {
         if let image = UIImage(systemName: "dot.radiowaves.up.forward")?
-            .withTintColor(.label, renderingMode: .alwaysOriginal) {
+            .withTintColor(.label, renderingMode: .alwaysOriginal)
+        {
             Image(uiImage: image)
         } else {
             Image(systemName: "dot.radiowaves.up.forward")
@@ -384,7 +465,6 @@ public struct ReaderView: View {
         }
     }
 
-    @ViewBuilder
     private var fontSizeSheet: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -460,7 +540,6 @@ public struct ReaderView: View {
         .accessibilityIdentifier(ReaderAccessibilityIdentifiers.textSettingsResetButton)
     }
 
-    @ViewBuilder
     private func textSettingSliderRow(
         title: String,
         valueLabel: String,
@@ -520,7 +599,6 @@ public struct ReaderView: View {
         webContent.evaluateJavaScript(scripts.lineHeight(Int(lineHeight)))
     }
 
-    @ViewBuilder
     private var compactNavigationToolbar: some View {
         HStack(spacing: 0) {
             // Open in browser - left edge
@@ -571,5 +649,39 @@ public struct ReaderView: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
+    }
+}
+
+public extension ReaderView where BottomAccessory == EmptyView {
+    init(
+        readerStatus: Binding<ReaderStatus>,
+        options: ReaderViewOptions,
+        themeColors: ReaderThemeColors,
+        scripts: ReaderViewScripts,
+        actions: ReaderViewActions,
+        isBookmarked: Bool,
+        fontSize: Double,
+        lineHeight: Double,
+        defaultFontSize: Double,
+        defaultLineHeight: Double,
+        showFontSizeMenu: Binding<Bool>,
+        openInBrowser: @escaping (URL) -> Void
+    ) {
+        self.init(
+            readerStatus: readerStatus,
+            options: options,
+            themeColors: themeColors,
+            scripts: scripts,
+            actions: actions,
+            isBookmarked: isBookmarked,
+            fontSize: fontSize,
+            lineHeight: lineHeight,
+            defaultFontSize: defaultFontSize,
+            defaultLineHeight: defaultLineHeight,
+            showFontSizeMenu: showFontSizeMenu,
+            openInBrowser: openInBrowser,
+            isBottomAccessoryVisible: false,
+            bottomAccessory: { EmptyView() }
+        )
     }
 }

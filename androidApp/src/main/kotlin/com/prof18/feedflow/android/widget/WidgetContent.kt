@@ -6,6 +6,7 @@ import android.content.Intent
 import android.widget.RemoteViews
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceModifier
@@ -14,6 +15,7 @@ import androidx.glance.LocalContext
 import androidx.glance.action.Action
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.AndroidRemoteViews
+import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.components.Scaffold
 import androidx.glance.appwidget.lazy.LazyColumn
@@ -22,11 +24,13 @@ import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
+import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
+import androidx.glance.layout.size
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
@@ -37,6 +41,7 @@ import com.prof18.feedflow.android.R
 import com.prof18.feedflow.android.widget.components.WidgetFeedItemCard
 import com.prof18.feedflow.android.widget.components.WidgetFeedItemList
 import com.prof18.feedflow.core.model.FeedItem
+import com.prof18.feedflow.core.model.WidgetContentFilter
 import com.prof18.feedflow.core.model.WidgetFeedLayout
 import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
@@ -57,6 +62,10 @@ internal fun WidgetContent(
     feedLayout: WidgetFeedLayout,
     browserManager: BrowserManager,
     showHeader: Boolean,
+    showRefreshButton: Boolean,
+    isRefreshing: Boolean,
+    headerTitle: String?,
+    filter: WidgetContentFilter,
     fontScale: Int,
     backgroundColor: Int?,
     backgroundOpacityPercent: Int,
@@ -115,23 +124,12 @@ internal fun WidgetContent(
     } else {
         ColorProvider(resolvedCardAppearance.textColors.secondary)
     }
-    val textColors = when {
-        backgroundColor != null -> {
-            val effectiveBackgroundColor = widgetEffectiveBackgroundColor(
-                backgroundColor = widgetColorFromArgb(backgroundColor),
-                backgroundOpacity = backgroundOpacity,
-                underlayColor = themedWidgetUnderlayColor,
-            )
-            widgetTextColorsForMode(textColorMode, effectiveBackgroundColor)
-        }
-        textColorMode != WidgetTextColorMode.AUTOMATIC -> {
-            widgetTextColorsForMode(
-                textColorMode = textColorMode,
-                backgroundColor = themedWidgetUnderlayColor,
-            )
-        }
-        else -> null
-    }
+    val textColors = resolveWidgetOuterTextColors(
+        backgroundColor = backgroundColor,
+        backgroundOpacity = backgroundOpacity,
+        textColorMode = textColorMode,
+        themedWidgetUnderlayColor = themedWidgetUnderlayColor,
+    )
     val primaryTextColor = textColors?.primary?.let(::ColorProvider) ?: GlanceTheme.colors.onSurface
     val secondaryTextColor = textColors?.secondary?.let(::ColorProvider) ?: GlanceTheme.colors.onSurface
     val cardLayout = resolveWidgetCardLayout(
@@ -147,21 +145,16 @@ internal fun WidgetContent(
         .coerceAtLeast(1)
 
     Scaffold(
-        titleBar = if (showHeader) {
+        titleBar = if (showHeader || showRefreshButton) {
             {
-                Text(
-                    modifier = GlanceModifier
-                        .padding(top = Spacing.regular)
-                        .padding(bottom = Spacing.small)
-                        .padding(horizontal = Spacing.medium)
-                        .fillMaxWidth()
-                        .clickable(openAppAction),
-                    text = LocalFeedFlowStrings.current.widgetLatestItems,
-                    style = TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = fontSizes.header.sp,
-                        color = primaryTextColor,
-                    ),
+                WidgetHeader(
+                    showHeader = showHeader,
+                    showRefreshButton = showRefreshButton,
+                    isRefreshing = isRefreshing,
+                    headerTitle = headerTitle ?: defaultWidgetHeaderTitle(filter),
+                    headerFontSize = fontSizes.header,
+                    textColor = primaryTextColor,
+                    openAppAction = openAppAction,
                 )
             }
         } else {
@@ -172,42 +165,20 @@ internal fun WidgetContent(
         modifier = GlanceModifier.fillMaxSize(),
     ) {
         if (feedItems.isEmpty()) {
-            val emptyStateModifier = if (showHeader) {
-                GlanceModifier
-            } else {
-                GlanceModifier
-                    .fillMaxSize()
-                    .clickable(openAppAction)
-            }
-            Column(
-                modifier = emptyStateModifier,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = LocalFeedFlowStrings.current.emptyFeedMessage,
-                    style = TextStyle(
-                        fontWeight = FontWeight.Normal,
-                        fontSize = fontSizes.empty.sp,
-                        color = primaryTextColor,
-                    ),
-                )
-
-                Text(
-                    modifier = GlanceModifier.padding(top = Spacing.small),
-                    text = LocalFeedFlowStrings.current.widgetCheckFeedSources,
-                    style = TextStyle(
-                        fontWeight = FontWeight.Normal,
-                        fontSize = fontSizes.empty.sp,
-                        color = secondaryTextColor,
-                    ),
-                )
-            }
+            WidgetEmptyState(
+                showHeader = showHeader,
+                filter = filter,
+                fontSizes = fontSizes,
+                primaryTextColor = primaryTextColor,
+                secondaryTextColor = secondaryTextColor,
+                openAppAction = openAppAction,
+            )
         } else {
             WidgetFeedItems(
                 feedItems = feedItems,
                 feedLayout = feedLayout,
                 browserManager = browserManager,
-                showHeader = showHeader,
+                showHeader = showHeader || showRefreshButton,
                 fontSizes = fontSizes,
                 hideImages = hideImages,
                 primaryTextColor = primaryTextColor,
@@ -225,6 +196,52 @@ internal fun WidgetContent(
                 cardImageTargetPx = cardImageTargetPx,
             )
         }
+    }
+}
+
+@SuppressLint("RestrictedApi")
+@Composable
+private fun WidgetEmptyState(
+    showHeader: Boolean,
+    filter: WidgetContentFilter,
+    fontSizes: WidgetFontSizes,
+    primaryTextColor: ColorProvider,
+    secondaryTextColor: ColorProvider,
+    openAppAction: Action,
+) {
+    val emptyStateModifier = if (showHeader) {
+        GlanceModifier
+    } else {
+        GlanceModifier
+            .fillMaxSize()
+            .clickable(openAppAction)
+    }
+    Column(
+        modifier = emptyStateModifier,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = if (filter is WidgetContentFilter.Bookmarks) {
+                LocalFeedFlowStrings.current.bookmarkedArticlesEmptyScreenMessage
+            } else {
+                LocalFeedFlowStrings.current.emptyFeedMessage
+            },
+            style = TextStyle(
+                fontWeight = FontWeight.Normal,
+                fontSize = fontSizes.empty.sp,
+                color = primaryTextColor,
+            ),
+        )
+
+        Text(
+            modifier = GlanceModifier.padding(top = Spacing.small),
+            text = LocalFeedFlowStrings.current.widgetCheckFeedSources,
+            style = TextStyle(
+                fontWeight = FontWeight.Normal,
+                fontSize = fontSizes.empty.sp,
+                color = secondaryTextColor,
+            ),
+        )
     }
 }
 
@@ -367,6 +384,73 @@ internal fun resolveWidgetCardDividerLayout(
     null
 }
 
+@Composable
+private fun defaultWidgetHeaderTitle(filter: WidgetContentFilter): String = when (filter) {
+    WidgetContentFilter.Bookmarks -> LocalFeedFlowStrings.current.drawerTitleBookmarks
+    else -> LocalFeedFlowStrings.current.widgetLatestItems
+}
+
+@SuppressLint("RestrictedApi")
+@Composable
+private fun WidgetHeader(
+    showHeader: Boolean,
+    headerTitle: String,
+    showRefreshButton: Boolean,
+    isRefreshing: Boolean,
+    headerFontSize: Int,
+    textColor: ColorProvider,
+    openAppAction: Action,
+) {
+    Row(
+        modifier = GlanceModifier.fillMaxWidth()
+            .padding(horizontal = Spacing.medium),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (showHeader) {
+            Text(
+                modifier = GlanceModifier.defaultWeight()
+                    .padding(top = Spacing.regular, bottom = Spacing.small)
+                    .clickable(openAppAction),
+                text = headerTitle,
+                style = TextStyle(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = headerFontSize.sp,
+                    color = textColor,
+                ),
+                maxLines = 1,
+            )
+        } else {
+            Spacer(modifier = GlanceModifier.defaultWeight())
+        }
+        if (showRefreshButton) {
+            val refreshModifier = if (isRefreshing) {
+                GlanceModifier
+            } else {
+                GlanceModifier.clickable(
+                    actionRunCallback<RefreshFeedsAction>(),
+                    rippleOverride = R.drawable.widget_refresh_ripple,
+                )
+            }
+            Box(
+                modifier = GlanceModifier.size(width = 48.dp, height = 48.dp)
+                    .then(refreshModifier),
+                contentAlignment = Alignment.Center,
+            ) {
+                val context = LocalContext.current
+                AndroidRemoteViews(
+                    remoteViews = widgetRefreshButtonViews(
+                        context = context,
+                        textColor = textColor.getColor(context).toArgb(),
+                        contentDescription = LocalFeedFlowStrings.current.refreshFeeds,
+                        isRefreshing = isRefreshing,
+                    ),
+                    modifier = GlanceModifier.size(width = 48.dp, height = 48.dp),
+                )
+            }
+        }
+    }
+}
+
 @SuppressLint("RestrictedApi")
 @Composable
 private fun resolveWidgetBackgroundColor(
@@ -400,3 +484,26 @@ internal data class WidgetCardDividerLayout(
     val horizontalInsetDp: Int,
     val thicknessDp: Int,
 )
+
+private fun resolveWidgetOuterTextColors(
+    backgroundColor: Int?,
+    backgroundOpacity: Float,
+    textColorMode: WidgetTextColorMode,
+    themedWidgetUnderlayColor: Color,
+): WidgetTextColors? = when {
+    backgroundColor != null -> {
+        val effectiveBackgroundColor = widgetEffectiveBackgroundColor(
+            backgroundColor = widgetColorFromArgb(backgroundColor),
+            backgroundOpacity = backgroundOpacity,
+            underlayColor = themedWidgetUnderlayColor,
+        )
+        widgetTextColorsForMode(textColorMode, effectiveBackgroundColor)
+    }
+    textColorMode != WidgetTextColorMode.AUTOMATIC -> {
+        widgetTextColorsForMode(
+            textColorMode = textColorMode,
+            backgroundColor = themedWidgetUnderlayColor,
+        )
+    }
+    else -> null
+}

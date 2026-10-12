@@ -13,9 +13,11 @@ import com.prof18.feedflow.core.model.ReaderModeDefaults
 import com.prof18.feedflow.core.model.ReaderModeState
 import com.prof18.feedflow.core.model.SearchState
 import com.prof18.feedflow.core.model.ShownContentSource
+import com.prof18.feedflow.core.model.resolveArticleOpenMode
 import com.prof18.feedflow.database.DatabaseHelper
 import com.prof18.feedflow.shared.data.SettingsRepository
 import com.prof18.feedflow.shared.data.SettingsRepository.Companion.DEFAULT_READER_MODE_FONT_SIZE
+import com.prof18.feedflow.shared.domain.ReaderContentLanguage
 import com.prof18.feedflow.shared.domain.feed.ArticleNavigationRepository
 import com.prof18.feedflow.shared.domain.feed.ArticlePosition
 import com.prof18.feedflow.shared.domain.feed.FeedStateRepository
@@ -49,6 +51,34 @@ import kotlin.time.Duration.Companion.minutes
 
 class ReaderModeViewModelTest : KoinTestBase() {
 
+    @Test
+    fun `feed content reader carries language prepared by the parser`() = runTest {
+        preparedFeedLanguage = "it-IT"
+        val item = seedItemWithContent(
+            id = "italian-feed",
+            url = "https://example.com/italian-feed",
+            content = "<div lang='it-IT'><p>$SUBSTANTIAL_CONTENT</p></div>",
+        )
+        viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FEED_CONTENT))
+        advanceUntilIdle()
+        val data = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value).readerModeData
+        assertEquals("it-IT", data.languageTag)
+    }
+
+    @Test
+    fun `cached web content carries persisted Klead language without detecting body declarations`() = runTest {
+        val item = seedItemWithContent("cached-italian", "https://example.com/italian", content = null)
+        val content = ReaderContentLanguage.preserve("<article lang='fr'>$SUBSTANTIAL_CONTENT</article>", "it-IT")
+        feedItemContentFileHandler.saveFeedItemContentToFile(item.id, content)
+
+        viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
+        advanceUntilIdle()
+
+        val data = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value).readerModeData
+        assertEquals("it-IT", data.languageTag)
+        assertEquals(content, data.content)
+    }
+
     private val viewModel: ReaderModeViewModel by inject()
     private val databaseHelper: DatabaseHelper by inject()
     private val feedStateRepository: FeedStateRepository by inject()
@@ -56,6 +86,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
     private val feedItemContentFileHandler: FeedItemContentFileHandler by inject()
     private val settingsRepository: SettingsRepository by inject()
     private var parserBehavior: ParserBehavior = ParserBehavior.Success
+    private var preparedFeedLanguage: String? = null
 
     override fun getTestModules(): List<Module> = super.getTestModules() + module {
         single<ArticleContentParser> {
@@ -65,6 +96,10 @@ class ReaderModeViewModelTest : KoinTestBase() {
                         ParserBehavior.Success -> "Content"
                         ParserBehavior.HtmlBlank -> "   "
                         ParserBehavior.Error -> null
+                        ParserBehavior.DelayedError -> {
+                            delay(100)
+                            null
+                        }
                         is ParserBehavior.DelayedSuccessByUrlPath -> {
                             val pathSegment = url.substringAfterLast('/')
                             delay(currentParserBehavior.delaysByUrlPathSegment[pathSegment] ?: 0)
@@ -72,7 +107,8 @@ class ReaderModeViewModelTest : KoinTestBase() {
                         }
                     }
 
-                override suspend fun prepareFeedContent(html: String, baseUrl: String?): String = html
+                override suspend fun prepareFeedContent(html: String, baseUrl: String?): String =
+                    ReaderContentLanguage.preserve(html, preparedFeedLanguage)
             }
         }
     }
@@ -80,6 +116,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
     @BeforeTest
     fun resetParserBehavior() {
         parserBehavior = ParserBehavior.Success
+        preparedFeedLanguage = null
     }
 
     @Test
@@ -972,6 +1009,151 @@ class ReaderModeViewModelTest : KoinTestBase() {
         assertEquals(next, viewModel.canNavigateToNextState.value)
     }
 
+    @Test
+    fun `feed reader retrieves audio by item id without navigation metadata`() = runTest {
+        val item = seedItemWithContent(
+            id = "audio-feed",
+            url = "https://example.com/audio-notes",
+            content = SUBSTANTIAL_CONTENT,
+            audioUrl = AUDIO_URL,
+        )
+        viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FEED_CONTENT))
+        advanceUntilIdle()
+        val data = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value).readerModeData
+        assertEquals(AUDIO_URL, data.audioUrl)
+        assertEquals(item.imageUrl ?: item.feedSource.logoUrl, data.audioImageUrl)
+        assertEquals(ShownContentSource.FEED, data.shownContentSource)
+    }
+
+    @Test
+    fun `audio return retrieves stored reader metadata without changing selection or read state`() = runTest {
+        val item = seedItemWithContent("audio-return", "", SUBSTANTIAL_CONTENT, audioUrl = AUDIO_URL)
+        settingsRepository.setArticleOpenMode(ArticleOpenMode.PREFERRED_BROWSER)
+        val info = viewModel.getAudioEpisodeReaderInfo(FeedItemId(item.id))
+        assertEquals(item.id, info?.id)
+        assertEquals(ArticleOpenMode.DEFAULT, info?.articleOpenMode)
+        assertEquals(
+            ArticleOpenMode.FEED_CONTENT,
+            requireNotNull(info).resolveArticleOpenMode(settingsRepository.getArticleOpenMode()),
+        )
+        assertEquals(item.isBookmarked, info?.isBookmarked)
+        assertNull(viewModel.currentArticleState.value)
+        assertEquals(item.isRead, databaseHelper.getAllFeedItemFlagsForCloud().single { it.id == item.id }.isRead)
+
+        viewModel.loadReaderContent(requireNotNull(info))
+        advanceUntilIdle()
+        val data = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value).readerModeData
+        assertEquals(item.id, data.id.id)
+        assertEquals(AUDIO_URL, data.audioUrl)
+        assertEquals(ShownContentSource.FEED, data.shownContentSource)
+    }
+
+    @Test
+    fun `audio return respects the global mode and per-feed overrides`() = runTest {
+        val item = seedItemWithContent("audio-return-preferences", "https://example.com/audio", SUBSTANTIAL_CONTENT)
+        settingsRepository.setArticleOpenMode(ArticleOpenMode.PREFERRED_BROWSER)
+        val defaultInfo = requireNotNull(viewModel.getAudioEpisodeReaderInfo(FeedItemId(item.id)))
+        assertEquals(
+            ArticleOpenMode.PREFERRED_BROWSER,
+            defaultInfo.resolveArticleOpenMode(settingsRepository.getArticleOpenMode()),
+        )
+
+        ArticleOpenMode.entries.forEach { mode ->
+            databaseHelper.insertFeedSourcePreference(
+                feedSourceId = item.feedSource.id,
+                articleOpenMode = mode,
+                isHidden = false,
+                isPinned = false,
+                isNotificationEnabled = false,
+                isHideImagesEnabled = false,
+            )
+            val info = requireNotNull(viewModel.getAudioEpisodeReaderInfo(FeedItemId(item.id)))
+            assertEquals(mode, info.articleOpenMode)
+            val expected = if (mode == ArticleOpenMode.DEFAULT) ArticleOpenMode.PREFERRED_BROWSER else mode
+            assertEquals(expected, info.resolveArticleOpenMode(settingsRepository.getArticleOpenMode()))
+        }
+    }
+
+    @Test
+    fun `audio return for a removed episode keeps the current article`() = runTest {
+        val item = seedItemWithContent("other-reader", "https://example.com/notes", SUBSTANTIAL_CONTENT)
+        viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FEED_CONTENT))
+        advanceUntilIdle()
+        val currentState = viewModel.readerModeState.value
+        assertNull(viewModel.getAudioEpisodeReaderInfo(FeedItemId("removed-audio")))
+        assertEquals(currentState, viewModel.readerModeState.value)
+        assertEquals(item.id, viewModel.currentArticleState.value?.id)
+    }
+
+    @Test
+    fun `cached web content and source toggles retain stored audio`() = runTest {
+        val item = seedItemWithContent(
+            id = "audio-cache",
+            url = "https://example.com/audio-notes",
+            content = SUBSTANTIAL_CONTENT,
+            audioUrl = AUDIO_URL,
+        )
+        feedItemContentFileHandler.saveFeedItemContentToFile(item.id, "Cached show notes")
+        viewModel.loadReaderContent(item.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
+        advanceUntilIdle()
+        val cached = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value).readerModeData
+        assertEquals("Cached show notes", cached.content)
+        assertEquals(AUDIO_URL, cached.audioUrl)
+        for (expectedSource in listOf(ShownContentSource.FEED, ShownContentSource.WEB)) {
+            viewModel.toggleContentSource()
+            advanceUntilIdle()
+            val data = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value).readerModeData
+            assertEquals(expectedSource, data.shownContentSource)
+            assertEquals(AUDIO_URL, data.audioUrl)
+        }
+    }
+
+    @Test
+    fun `paging to plain article clears audio metadata`() = runTest {
+        val items = seedFeedItems(item2AudioUrl = AUDIO_URL)
+        viewModel.loadReaderContent(items[1].toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
+        advanceUntilIdle()
+        assertEquals(
+            AUDIO_URL,
+            assertIs<ReaderModeState.Success>(viewModel.readerModeState.value).readerModeData.audioUrl,
+        )
+        viewModel.navigateToNextArticle()
+        advanceUntilIdle()
+        val next = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value).readerModeData
+        assertEquals(items[2].id, next.id.id)
+        assertNull(next.audioUrl)
+    }
+
+    @Test
+    fun `failed and stale loads cannot expose previous audio`() = runTest {
+        val audio = seedItemWithContent(
+            id = "audio-slow",
+            url = "https://example.com/a/slow",
+            content = SUBSTANTIAL_CONTENT,
+            audioUrl = AUDIO_URL,
+        )
+        val plain = seedItemWithContent("audio-plain", "https://example.com/a/fast", content = null)
+        viewModel.loadReaderContent(audio.toUrlInfo(ArticleOpenMode.FEED_CONTENT))
+        advanceUntilIdle()
+        assertEquals(
+            AUDIO_URL,
+            assertIs<ReaderModeState.Success>(viewModel.readerModeState.value).readerModeData.audioUrl,
+        )
+        parserBehavior = ParserBehavior.DelayedError
+        viewModel.loadReaderContent(plain.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
+        assertEquals(ReaderModeState.Loading, viewModel.readerModeState.value)
+        advanceUntilIdle()
+        assertIs<ReaderModeState.ContentNotAvailable>(viewModel.readerModeState.value)
+
+        parserBehavior = ParserBehavior.DelayedSuccessByUrlPath(mapOf("slow" to 300, "fast" to 10))
+        viewModel.loadReaderContent(audio.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
+        viewModel.loadReaderContent(plain.toUrlInfo(ArticleOpenMode.FULL_ARTICLE))
+        advanceUntilIdle()
+        val latest = assertIs<ReaderModeState.Success>(viewModel.readerModeState.value).readerModeData
+        assertEquals(plain.id, latest.id.id)
+        assertNull(latest.audioUrl)
+    }
+
     private suspend fun seedFeedItems(
         item1Url: String = "https://example.com/articles/1",
         item2Url: String = "https://example.com/articles/2",
@@ -980,6 +1162,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         item3Content: String? = null,
         item1Title: String = "Article 1",
         item3Title: String = "Article 3",
+        item2AudioUrl: String? = null,
     ): List<FeedItem> {
         val feedSource = FeedSource(
             id = "source-1",
@@ -1024,7 +1207,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
                 title = "Article 2",
                 pubDateMillis = 2000,
                 feedSource = feedSource,
-            ),
+            ).copy(audioUrl = item2AudioUrl),
             createFeedItem(
                 id = "item-3",
                 url = item3Url,
@@ -1078,6 +1261,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
         id: String,
         url: String,
         content: String?,
+        audioUrl: String? = null,
     ): FeedItem {
         val feedSource = FeedSource(
             id = "content-source-$id",
@@ -1112,7 +1296,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
             title = "Title $id",
             pubDateMillis = 1000,
             feedSource = feedSource,
-        ).copy(content = content)
+        ).copy(content = content, audioUrl = audioUrl)
         databaseHelper.insertFeedItems(listOf(item), lastSyncTimestamp = 0)
         feedStateRepository.getFeeds()
         return item
@@ -1122,12 +1306,15 @@ class ReaderModeViewModelTest : KoinTestBase() {
         data object Success : ParserBehavior
         data object HtmlBlank : ParserBehavior
         data object Error : ParserBehavior
+        data object DelayedError : ParserBehavior
         data class DelayedSuccessByUrlPath(
             val delaysByUrlPathSegment: Map<String, Long>,
         ) : ParserBehavior
     }
 
     private companion object {
+        const val AUDIO_URL = "https://example.com/episode.mp3?token=a%2Bb&part=1"
+
         // Longer than the ViewModel's ~200 char "substantial text" threshold.
         private val SUBSTANTIAL_CONTENT = "<p>${"This is a full feed article body. ".repeat(10)}</p>"
     }

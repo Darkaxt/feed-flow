@@ -1,310 +1,341 @@
 package com.prof18.feedflow.shared.data
 
 import app.cash.turbine.test
-import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
-import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
-import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
-import com.prof18.feedflow.shared.domain.model.WidgetFreshness
+import com.prof18.feedflow.core.model.WidgetContentFilter
+import com.prof18.feedflow.core.model.WidgetFeedLayout
+import com.prof18.feedflow.shared.domain.model.WidgetTextColorMode
+import com.prof18.feedflow.shared.test.KoinTestBase
+import com.prof18.feedflow.shared.test.TestDispatcherProvider.testDispatcher
 import com.russhwolf.settings.MapSettings
-import com.russhwolf.settings.Settings
 import com.russhwolf.settings.set
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
-import org.junit.Test
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
+import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
-class WidgetSettingsRepositoryTest {
-
-    @Test
-    fun `absent freshness setting uses last three days default`() {
-        val repository = WidgetSettingsRepository(MapSettings())
-
-        assertEquals(WidgetFreshness.LAST_3_DAYS, repository.getWidgetFreshness())
-        assertEquals(WidgetFreshness.LAST_3_DAYS, repository.widgetFreshness.value)
-    }
+class WidgetSettingsRepositoryTest : KoinTestBase() {
 
     @Test
-    fun `freshness round trips and emits the update`() = runTest {
-        val repository = WidgetSettingsRepository(MapSettings())
-
-        repository.widgetFreshness.test {
-            assertEquals(WidgetFreshness.LAST_3_DAYS, awaitItem())
-
-            repository.setWidgetFreshness(WidgetFreshness.LAST_7_DAYS)
-
-            assertEquals(WidgetFreshness.LAST_7_DAYS, awaitItem())
-            assertEquals(WidgetFreshness.LAST_7_DAYS, repository.getWidgetFreshness())
-            cancelAndIgnoreRemainingEvents()
+    fun `per-widget values take precedence over legacy defaults`() {
+        val settings = MapSettings().apply {
+            this["FEED_WIDGET_LAYOUT"] = WidgetFeedLayout.LIST.name
         }
+        val repository = WidgetSettingsRepository(settings)
+
+        repository.setWidgetFeedLayout(WIDGET_ID, WidgetFeedLayout.CARD)
+
+        assertEquals(WidgetFeedLayout.CARD, repository.getWidgetConfiguration(WIDGET_ID).feedLayout)
     }
 
     @Test
-    fun `freshness falls back safely for unknown and wrong type stored values`() {
-        val unknownName = WidgetSettingsRepository(
-            MapSettings().apply { this[WIDGET_FRESHNESS_KEY] = "LAST_30_DAYS" },
-        )
-        val wrongType = WidgetSettingsRepository(
-            MapSettings().apply { this[WIDGET_FRESHNESS_KEY] = 3 },
-        )
-
-        assertEquals(WidgetFreshness.LAST_3_DAYS, unknownName.getWidgetFreshness())
-        assertEquals(WidgetFreshness.LAST_3_DAYS, unknownName.widgetFreshness.value)
-        assertEquals(WidgetFreshness.LAST_3_DAYS, wrongType.getWidgetFreshness())
-        assertEquals(WidgetFreshness.LAST_3_DAYS, wrongType.widgetFreshness.value)
-    }
-
-    @Test
-    fun `absent card appearance settings use defaults`() {
-        val repository = WidgetSettingsRepository(MapSettings())
-
-        assertEquals(WidgetCardAppearance(), repository.getWidgetCardAppearance())
-        assertEquals(WidgetCardAppearance(), repository.widgetCardAppearance.value)
-    }
-
-    @Test
-    fun `card appearance round trips every field and emits the update`() = runTest {
-        val repository = WidgetSettingsRepository(MapSettings())
-        val appearance = WidgetCardAppearance(
-            surfaceColor = 0xFF123456.toInt(),
-            surfaceOpacityPercent = 70,
-            cornerRadiusDp = 24,
-            itemSeparation = WidgetCardItemSeparation.DIVIDER,
-            dividerOpacityPercent = 45,
-            imageSizing = WidgetCardImageSizing.FILL_ROW_HEIGHT,
-        )
-
-        repository.widgetCardAppearance.test {
-            assertEquals(WidgetCardAppearance(), awaitItem())
-
-            repository.setWidgetCardAppearance(appearance)
-
-            assertEquals(appearance, awaitItem())
-            assertEquals(appearance, repository.getWidgetCardAppearance())
-            cancelAndIgnoreRemainingEvents()
+    fun `missing per-widget values fall back to legacy defaults`() {
+        val settings = MapSettings().apply {
+            this["FEED_WIDGET_LAYOUT"] = WidgetFeedLayout.CARD.name
+            this["WIDGET_TEXT_COLOR_MODE"] = WidgetTextColorMode.DARK.name
+            this["WIDGET_SHOW_REFRESH_BUTTON"] = true
         }
+
+        val configuration = WidgetSettingsRepository(settings).getWidgetConfiguration(WIDGET_ID)
+
+        assertEquals(WidgetFeedLayout.CARD, configuration.feedLayout)
+        assertEquals(WidgetTextColorMode.DARK, configuration.textColorMode)
+        assertEquals(true, configuration.showRefreshButton)
     }
 
     @Test
-    fun `null surface color removes the stored custom color`() {
-        val settings = MapSettings()
-        val repository = WidgetSettingsRepository(settings)
-        repository.setWidgetCardAppearance(
-            WidgetCardAppearance(surfaceColor = 0xFF123456.toInt()),
-        )
-
-        repository.setWidgetCardAppearance(WidgetCardAppearance(surfaceColor = null))
-
-        assertNull(settings.getIntOrNull(WIDGET_CARD_SURFACE_COLOR_KEY))
-        assertNull(repository.getWidgetCardAppearance().surfaceColor)
-        assertNull(repository.widgetCardAppearance.value.surfaceColor)
-    }
-
-    @Test
-    fun `custom surface color is stored as opaque RGB`() {
+    fun `refresh button is disabled by default and per-widget setting overrides legacy value`() {
         val settings = MapSettings()
         val repository = WidgetSettingsRepository(settings)
 
-        repository.setWidgetCardAppearance(
-            WidgetCardAppearance(surfaceColor = 0x12123456),
-        )
+        assertEquals(false, repository.getWidgetConfiguration(WIDGET_ID).showRefreshButton)
 
-        assertEquals(0xFF123456.toInt(), settings.getIntOrNull(WIDGET_CARD_SURFACE_COLOR_KEY))
-        assertEquals(0xFF123456.toInt(), repository.getWidgetCardAppearance().surfaceColor)
-        assertEquals(0xFF123456.toInt(), repository.widgetCardAppearance.value.surfaceColor)
+        settings["WIDGET_SHOW_REFRESH_BUTTON"] = true
+        assertEquals(true, repository.getWidgetConfiguration(WIDGET_ID).showRefreshButton)
+
+        repository.setWidgetShowRefreshButton(WIDGET_ID, false)
+
+        assertEquals(false, repository.getWidgetConfiguration(WIDGET_ID).showRefreshButton)
+        assertEquals(true, repository.getWidgetConfiguration(OTHER_WIDGET_ID).showRefreshButton)
     }
 
     @Test
-    fun `card appearance clamps opacities and rounds odd radius upward`() {
-        val settings = MapSettings()
+    fun `per-widget default background clears legacy color`() {
+        val settings = MapSettings().apply {
+            this["WIDGET_BACKGROUND_COLOR"] = 123456
+        }
         val repository = WidgetSettingsRepository(settings)
 
-        repository.setWidgetCardAppearance(
-            WidgetCardAppearance(
-                surfaceOpacityPercent = 101,
-                cornerRadiusDp = 17,
-                dividerOpacityPercent = -1,
-            ),
-        )
+        repository.setWidgetBackgroundColor(WIDGET_ID, null)
 
-        val expected = WidgetCardAppearance(
-            surfaceOpacityPercent = 100,
-            cornerRadiusDp = 18,
-            dividerOpacityPercent = 0,
-        )
-        assertEquals(100, settings.getInt(WIDGET_CARD_SURFACE_OPACITY_PERCENT_KEY, -1))
-        assertEquals(18, settings.getInt(WIDGET_CARD_CORNER_RADIUS_DP_KEY, -1))
-        assertEquals(0, settings.getInt(WIDGET_CARD_DIVIDER_OPACITY_PERCENT_KEY, -1))
-        assertEquals(expected, repository.getWidgetCardAppearance())
-        assertEquals(expected, repository.widgetCardAppearance.value)
+        assertNull(repository.getWidgetConfiguration(WIDGET_ID).backgroundColor)
     }
 
     @Test
-    fun `card appearance clamps radius and opacity at both boundaries`() {
+    fun `clearing widget configuration restores legacy defaults`() {
+        val settings = MapSettings().apply {
+            this["FEED_WIDGET_LAYOUT"] = WidgetFeedLayout.LIST.name
+        }
+        val repository = WidgetSettingsRepository(settings)
+        repository.setWidgetFeedLayout(WIDGET_ID, WidgetFeedLayout.CARD)
+
+        repository.clearWidgetConfiguration(WIDGET_ID)
+
+        assertEquals(WidgetFeedLayout.LIST, repository.getWidgetConfiguration(WIDGET_ID).feedLayout)
+    }
+
+    @Test
+    fun `restoring widget configurations snapshots overlapping IDs and preserves unrelated widgets`() {
+        val settings = MapSettings().apply {
+            this["FEED_WIDGET_LAYOUT"] = WidgetFeedLayout.LIST.name
+        }
+        val repository = WidgetSettingsRepository(settings)
+        val firstConfiguration = WidgetConfiguration(
+            contentFilter = WidgetContentFilter.Category("technology"),
+            feedLayout = WidgetFeedLayout.CARD,
+            showHeader = false,
+            showRefreshButton = true,
+            fontScale = 3,
+            backgroundColor = 0xFF112233.toInt(),
+            backgroundOpacityPercent = 65,
+            textColorMode = WidgetTextColorMode.LIGHT,
+            hideImages = true,
+        )
+        val secondConfiguration = WidgetConfiguration(
+            contentFilter = WidgetContentFilter.Bookmarks,
+            feedLayout = WidgetFeedLayout.LIST,
+            showHeader = true,
+            showRefreshButton = false,
+            fontScale = 1,
+            backgroundColor = null,
+            backgroundOpacityPercent = 90,
+            textColorMode = WidgetTextColorMode.DARK,
+            hideImages = false,
+        )
+        val unrelatedConfiguration = secondConfiguration.copy(feedLayout = WidgetFeedLayout.CARD)
+        setConfiguration(repository, OLD_WIDGET_ID, firstConfiguration)
+        setConfiguration(repository, OVERLAPPING_WIDGET_ID, secondConfiguration)
+        setConfiguration(repository, UNRELATED_WIDGET_ID, unrelatedConfiguration)
+
+        repository.restoreWidgetConfigurations(
+            oldWidgetIds = intArrayOf(OLD_WIDGET_ID, OVERLAPPING_WIDGET_ID),
+            newWidgetIds = intArrayOf(OVERLAPPING_WIDGET_ID, NEW_WIDGET_ID),
+        )
+
+        assertEquals(firstConfiguration, repository.getWidgetConfiguration(OVERLAPPING_WIDGET_ID))
+        assertEquals(secondConfiguration, repository.getWidgetConfiguration(NEW_WIDGET_ID))
+        assertEquals(unrelatedConfiguration, repository.getWidgetConfiguration(UNRELATED_WIDGET_ID))
+        assertNull(settings.getStringOrNull("FEED_WIDGET_LAYOUT_$OLD_WIDGET_ID"))
+        assertNull(settings.getStringOrNull("WIDGET_CONTENT_FILTER_$OLD_WIDGET_ID"))
+        assertEquals(WidgetFeedLayout.LIST, repository.getWidgetConfiguration(OLD_WIDGET_ID).feedLayout)
+    }
+
+    @Test
+    fun `restoring widget configuration snapshots legacy fallback values`() {
+        val settings = MapSettings().apply {
+            this["FEED_WIDGET_LAYOUT"] = WidgetFeedLayout.CARD.name
+            this["WIDGET_SHOW_HEADER"] = false
+            this["WIDGET_SHOW_REFRESH_BUTTON"] = true
+            this["WIDGET_FONT_SCALE_FACTOR"] = 4
+            this["WIDGET_BACKGROUND_COLOR"] = 0xFF345678.toInt()
+            this["WIDGET_BACKGROUND_OPACITY_PERCENT"] = 72
+            this["WIDGET_TEXT_COLOR_MODE"] = WidgetTextColorMode.LIGHT.name
+            this["WIDGET_HIDE_IMAGES"] = true
+        }
+        val repository = WidgetSettingsRepository(settings)
+        val expectedConfiguration = repository.getWidgetConfiguration(OLD_WIDGET_ID)
+
+        repository.restoreWidgetConfigurations(
+            oldWidgetIds = intArrayOf(OLD_WIDGET_ID),
+            newWidgetIds = intArrayOf(NEW_WIDGET_ID),
+        )
+
+        settings["FEED_WIDGET_LAYOUT"] = WidgetFeedLayout.LIST.name
+        settings["WIDGET_SHOW_HEADER"] = true
+        settings["WIDGET_SHOW_REFRESH_BUTTON"] = false
+        settings["WIDGET_FONT_SCALE_FACTOR"] = 0
+        settings.remove("WIDGET_BACKGROUND_COLOR")
+        settings["WIDGET_BACKGROUND_OPACITY_PERCENT"] = 100
+        settings["WIDGET_TEXT_COLOR_MODE"] = WidgetTextColorMode.AUTOMATIC.name
+        settings["WIDGET_HIDE_IMAGES"] = false
+
+        assertEquals(expectedConfiguration, repository.getWidgetConfiguration(NEW_WIDGET_ID))
+    }
+
+    @Test
+    fun `configuration observer emits the complete restored configuration`() = runTest(testDispatcher) {
         val repository = WidgetSettingsRepository(MapSettings())
-
-        repository.setWidgetCardAppearance(
-            WidgetCardAppearance(
-                surfaceOpacityPercent = -1,
-                cornerRadiusDp = -1,
-                dividerOpacityPercent = 101,
-            ),
+        val configuration = WidgetConfiguration(
+            contentFilter = WidgetContentFilter.Bookmarks,
+            feedLayout = WidgetFeedLayout.CARD,
+            showHeader = false,
+            fontScale = 2,
+            backgroundColor = 0xFFABCDEF.toInt(),
+            backgroundOpacityPercent = 80,
+            textColorMode = WidgetTextColorMode.LIGHT,
+            hideImages = true,
         )
-        assertEquals(0, repository.getWidgetCardAppearance().surfaceOpacityPercent)
-        assertEquals(0, repository.getWidgetCardAppearance().cornerRadiusDp)
-        assertEquals(100, repository.getWidgetCardAppearance().dividerOpacityPercent)
+        setConfiguration(repository, OLD_WIDGET_ID, configuration)
 
-        repository.setWidgetCardAppearance(WidgetCardAppearance(cornerRadiusDp = 33))
-        assertEquals(32, repository.getWidgetCardAppearance().cornerRadiusDp)
-    }
+        repository.observeWidgetConfiguration(NEW_WIDGET_ID).test {
+            awaitItem()
 
-    @Test
-    fun `preloaded card appearance values are normalized on read and initial emission`() {
-        val normalizedRadiusByStoredValue = mapOf(
-            17 to 18,
-            -1 to 0,
-            33 to 32,
-        )
-
-        normalizedRadiusByStoredValue.forEach { (storedRadius, normalizedRadius) ->
-            val settings = MapSettings().apply {
-                this[WIDGET_CARD_SURFACE_COLOR_KEY] = 0x12123456
-                this[WIDGET_CARD_SURFACE_OPACITY_PERCENT_KEY] = 101
-                this[WIDGET_CARD_CORNER_RADIUS_DP_KEY] = storedRadius
-                this[WIDGET_CARD_DIVIDER_OPACITY_PERCENT_KEY] = -1
-            }
-            val repository = WidgetSettingsRepository(settings)
-            val expected = WidgetCardAppearance(
-                surfaceColor = 0xFF123456.toInt(),
-                surfaceOpacityPercent = 100,
-                cornerRadiusDp = normalizedRadius,
-                dividerOpacityPercent = 0,
+            repository.restoreWidgetConfigurations(
+                oldWidgetIds = intArrayOf(OLD_WIDGET_ID),
+                newWidgetIds = intArrayOf(NEW_WIDGET_ID),
             )
 
-            assertEquals(expected, repository.getWidgetCardAppearance())
-            assertEquals(expected, repository.widgetCardAppearance.value)
+            assertEquals(configuration, awaitItem())
+            expectNoEvents()
         }
     }
 
     @Test
-    fun `competing card appearance writes keep persisted and emitted snapshots coherent`() = runTest {
-        val firstAppearance = WidgetCardAppearance(
-            surfaceColor = 0xFF112233.toInt(),
-            surfaceOpacityPercent = 20,
-            cornerRadiusDp = 10,
-            itemSeparation = WidgetCardItemSeparation.SPACING,
-            dividerOpacityPercent = 30,
-            imageSizing = WidgetCardImageSizing.THUMBNAIL,
-        )
-        val secondAppearance = WidgetCardAppearance(
-            surfaceColor = 0xFF445566.toInt(),
-            surfaceOpacityPercent = 80,
-            cornerRadiusDp = 28,
-            itemSeparation = WidgetCardItemSeparation.NONE,
-            dividerOpacityPercent = 70,
-            imageSizing = WidgetCardImageSizing.FILL_ROW_HEIGHT,
-        )
-        val settings = CoordinatedSettings(
-            firstWriterColor = firstAppearance.surfaceColor,
-            secondWriterImageSizing = secondAppearance.imageSizing.name,
-        )
-        val repository = WidgetSettingsRepository(settings)
+    fun `restoring empty and unchanged widget ID mappings is safe`() {
+        val repository = WidgetSettingsRepository(MapSettings())
+        repository.setWidgetFeedLayout(WIDGET_ID, WidgetFeedLayout.CARD)
 
-        val firstWriter = launch(Dispatchers.Default) {
-            repository.setWidgetCardAppearance(firstAppearance)
-        }
-        assertTrue(settings.awaitFirstWriterColor())
+        repository.restoreWidgetConfigurations(intArrayOf(), intArrayOf())
+        repository.restoreWidgetConfigurations(intArrayOf(WIDGET_ID), intArrayOf(WIDGET_ID))
 
-        val secondWriter = launch(Dispatchers.Default) {
-            repository.setWidgetCardAppearance(secondAppearance)
-        }
-        val secondWriterInterleaved = settings.awaitSecondWriterFinalWrite(
-            timeout = 1,
-            unit = TimeUnit.SECONDS,
-        )
-        if (secondWriterInterleaved) {
-            settings.releaseSecondWriter()
-            secondWriter.join()
-            settings.releaseFirstWriter()
-        } else {
-            settings.releaseFirstWriter()
-            firstWriter.join()
-            assertTrue(settings.awaitSecondWriterFinalWrite())
-            settings.releaseSecondWriter()
-        }
-        firstWriter.join()
-        secondWriter.join()
-
-        assertEquals(repository.getWidgetCardAppearance(), repository.widgetCardAppearance.value)
+        assertEquals(WidgetFeedLayout.CARD, repository.getWidgetConfiguration(WIDGET_ID).feedLayout)
     }
 
     @Test
-    fun `malformed card appearance enums fall back to defaults`() {
+    fun `content filter round trips through repository`() {
+        val repository = WidgetSettingsRepository(MapSettings())
+        val filter = WidgetContentFilter.Category("technology")
+
+        repository.setWidgetContentFilter(WIDGET_ID, filter)
+
+        assertEquals(filter, repository.getWidgetConfiguration(WIDGET_ID).contentFilter)
+    }
+
+    @Test
+    fun `widget configurations remain isolated when one is cleared`() {
         val settings = MapSettings().apply {
-            this[WIDGET_CARD_ITEM_SEPARATION_KEY] = "malformed"
-            this[WIDGET_CARD_IMAGE_SIZING_KEY] = "malformed"
+            this["FEED_WIDGET_LAYOUT"] = WidgetFeedLayout.LIST.name
         }
-
         val repository = WidgetSettingsRepository(settings)
+        repository.setWidgetFeedLayout(WIDGET_ID, WidgetFeedLayout.CARD)
+        repository.setWidgetContentFilter(WIDGET_ID, WidgetContentFilter.Category("technology"))
+        repository.setWidgetFeedLayout(OTHER_WIDGET_ID, WidgetFeedLayout.LIST)
+        repository.setWidgetContentFilter(OTHER_WIDGET_ID, WidgetContentFilter.Bookmarks)
+        repository.setWidgetHideImages(OTHER_WIDGET_ID, true)
 
-        assertEquals(WidgetCardItemSeparation.SPACING, repository.getWidgetCardAppearance().itemSeparation)
-        assertEquals(WidgetCardImageSizing.THUMBNAIL, repository.getWidgetCardAppearance().imageSizing)
+        assertEquals(WidgetFeedLayout.CARD, repository.getWidgetConfiguration(WIDGET_ID).feedLayout)
+        assertEquals(
+            WidgetContentFilter.Category("technology"),
+            repository.getWidgetConfiguration(WIDGET_ID).contentFilter,
+        )
+        assertEquals(
+            WidgetContentFilter.Bookmarks,
+            repository.getWidgetConfiguration(OTHER_WIDGET_ID).contentFilter,
+        )
+
+        repository.clearWidgetConfiguration(WIDGET_ID)
+
+        assertEquals(WidgetFeedLayout.LIST, repository.getWidgetConfiguration(WIDGET_ID).feedLayout)
+        assertEquals(WidgetContentFilter.Timeline, repository.getWidgetConfiguration(WIDGET_ID).contentFilter)
+        assertEquals(
+            WidgetContentFilter.Bookmarks,
+            repository.getWidgetConfiguration(OTHER_WIDGET_ID).contentFilter,
+        )
+        assertEquals(true, repository.getWidgetConfiguration(OTHER_WIDGET_ID).hideImages)
     }
 
-    private class CoordinatedSettings(
-        private val firstWriterColor: Int?,
-        private val secondWriterImageSizing: String,
-        private val delegate: Settings = MapSettings(),
-    ) : Settings by delegate {
-        private val firstWriterColorStored = CountDownLatch(1)
-        private val releaseFirstWriterLatch = CountDownLatch(1)
-        private val secondWriterFinalWriteStored = CountDownLatch(1)
-        private val releaseSecondWriterLatch = CountDownLatch(1)
+    @Test
+    fun `configuration observer emits initial state and every setting update`() = runTest(testDispatcher) {
+        val repository = WidgetSettingsRepository(MapSettings())
 
-        override fun putInt(key: String, value: Int) {
-            delegate.putInt(key, value)
-            if (key == WIDGET_CARD_SURFACE_COLOR_KEY && value == firstWriterColor) {
-                firstWriterColorStored.countDown()
-                check(releaseFirstWriterLatch.await(5, TimeUnit.SECONDS))
-            }
+        repository.observeWidgetConfiguration(WIDGET_ID).test {
+            assertEquals(repository.getWidgetConfiguration(WIDGET_ID), awaitItem())
+
+            repository.setWidgetContentFilter(WIDGET_ID, WidgetContentFilter.Bookmarks)
+            assertEquals(WidgetContentFilter.Bookmarks, awaitItem().contentFilter)
+
+            repository.setWidgetFeedLayout(WIDGET_ID, WidgetFeedLayout.CARD)
+            assertEquals(WidgetFeedLayout.CARD, awaitItem().feedLayout)
+
+            repository.setWidgetShowHeader(WIDGET_ID, false)
+            assertEquals(false, awaitItem().showHeader)
+
+            repository.setWidgetShowRefreshButton(WIDGET_ID, true)
+            assertEquals(true, awaitItem().showRefreshButton)
+
+            repository.setWidgetFontScaleFactor(WIDGET_ID, 2)
+            assertEquals(2, awaitItem().fontScale)
+
+            repository.setWidgetBackgroundColor(WIDGET_ID, 123456)
+            assertEquals(123456, awaitItem().backgroundColor)
+
+            repository.setWidgetBackgroundOpacityPercent(WIDGET_ID, 70)
+            assertEquals(70, awaitItem().backgroundOpacityPercent)
+
+            repository.setWidgetTextColorMode(WIDGET_ID, WidgetTextColorMode.DARK)
+            assertEquals(WidgetTextColorMode.DARK, awaitItem().textColorMode)
+
+            repository.setWidgetHideImages(WIDGET_ID, true)
+            assertEquals(true, awaitItem().hideImages)
+
+            repository.clearWidgetConfiguration(WIDGET_ID)
+            val clearedConfiguration = awaitItem()
+            assertEquals(WidgetContentFilter.Timeline, clearedConfiguration.contentFilter)
+            assertEquals(WidgetFeedLayout.LIST, clearedConfiguration.feedLayout)
+            assertEquals(true, clearedConfiguration.showHeader)
+            assertEquals(false, clearedConfiguration.showRefreshButton)
+            assertEquals(0, clearedConfiguration.fontScale)
+            assertNull(clearedConfiguration.backgroundColor)
+            assertEquals(100, clearedConfiguration.backgroundOpacityPercent)
+            assertEquals(WidgetTextColorMode.AUTOMATIC, clearedConfiguration.textColorMode)
+            assertEquals(false, clearedConfiguration.hideImages)
         }
+    }
 
-        override fun putString(key: String, value: String) {
-            delegate.putString(key, value)
-            if (key == WIDGET_CARD_IMAGE_SIZING_KEY && value == secondWriterImageSizing) {
-                secondWriterFinalWriteStored.countDown()
-                check(releaseSecondWriterLatch.await(5, TimeUnit.SECONDS))
-            }
+    @Test
+    fun `configuration observer ignores updates for other widgets`() = runTest(testDispatcher) {
+        val repository = WidgetSettingsRepository(MapSettings())
+
+        repository.observeWidgetConfiguration(WIDGET_ID).test {
+            awaitItem()
+
+            repository.setWidgetHideImages(OTHER_WIDGET_ID, true)
+
+            expectNoEvents()
         }
+    }
 
-        fun awaitFirstWriterColor(): Boolean =
-            firstWriterColorStored.await(5, TimeUnit.SECONDS)
+    @Test
+    fun `configuration observer reads latest persisted state when collection starts`() = runTest(testDispatcher) {
+        val repository = WidgetSettingsRepository(MapSettings())
+        repository.setWidgetFeedLayout(WIDGET_ID, WidgetFeedLayout.CARD)
 
-        fun awaitSecondWriterFinalWrite(
-            timeout: Long = 5,
-            unit: TimeUnit = TimeUnit.SECONDS,
-        ): Boolean = secondWriterFinalWriteStored.await(timeout, unit)
-
-        fun releaseFirstWriter() {
-            releaseFirstWriterLatch.countDown()
-        }
-
-        fun releaseSecondWriter() {
-            releaseSecondWriterLatch.countDown()
+        repository.observeWidgetConfiguration(WIDGET_ID).test {
+            assertEquals(WidgetFeedLayout.CARD, awaitItem().feedLayout)
         }
     }
 
     private companion object {
-        const val WIDGET_FRESHNESS_KEY = "WIDGET_FRESHNESS"
-        const val WIDGET_CARD_SURFACE_COLOR_KEY = "WIDGET_CARD_SURFACE_COLOR"
-        const val WIDGET_CARD_SURFACE_OPACITY_PERCENT_KEY = "WIDGET_CARD_SURFACE_OPACITY_PERCENT"
-        const val WIDGET_CARD_CORNER_RADIUS_DP_KEY = "WIDGET_CARD_CORNER_RADIUS_DP"
-        const val WIDGET_CARD_ITEM_SEPARATION_KEY = "WIDGET_CARD_ITEM_SEPARATION"
-        const val WIDGET_CARD_DIVIDER_OPACITY_PERCENT_KEY = "WIDGET_CARD_DIVIDER_OPACITY_PERCENT"
-        const val WIDGET_CARD_IMAGE_SIZING_KEY = "WIDGET_CARD_IMAGE_SIZING"
+        const val WIDGET_ID = 42
+        const val OTHER_WIDGET_ID = 84
+        const val OLD_WIDGET_ID = 100
+        const val OVERLAPPING_WIDGET_ID = 101
+        const val NEW_WIDGET_ID = 102
+        const val UNRELATED_WIDGET_ID = 103
+    }
+
+    private fun setConfiguration(
+        repository: WidgetSettingsRepository,
+        widgetId: Int,
+        configuration: WidgetConfiguration,
+    ) {
+        repository.setWidgetContentFilter(widgetId, configuration.contentFilter)
+        repository.setWidgetFeedLayout(widgetId, configuration.feedLayout)
+        repository.setWidgetShowHeader(widgetId, configuration.showHeader)
+        repository.setWidgetShowRefreshButton(widgetId, configuration.showRefreshButton)
+        repository.setWidgetFontScaleFactor(widgetId, configuration.fontScale)
+        repository.setWidgetBackgroundColor(widgetId, configuration.backgroundColor)
+        repository.setWidgetBackgroundOpacityPercent(widgetId, configuration.backgroundOpacityPercent)
+        repository.setWidgetTextColorMode(widgetId, configuration.textColorMode)
+        repository.setWidgetHideImages(widgetId, configuration.hideImages)
     }
 }

@@ -10,19 +10,24 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +40,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -60,24 +67,8 @@ internal fun WidgetPreviewSection(
     modifier: Modifier = Modifier,
 ) {
     var previewBackdropMode by rememberSaveable { mutableStateOf(WidgetPreviewBackdropMode.LIGHT) }
-
-    WidgetPreviewSectionContent(
-        settingsState = settingsState,
-        backdropMode = previewBackdropMode,
-        onToggleBackdropMode = {
-            previewBackdropMode = previewBackdropMode.next()
-        },
-        modifier = modifier,
-    )
-}
-
-@Composable
-private fun WidgetPreviewSectionContent(
-    settingsState: WidgetSettingsState,
-    backdropMode: WidgetPreviewBackdropMode,
-    onToggleBackdropMode: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+    var showPreviewNote by rememberSaveable { mutableStateOf(false) }
+    val strings = LocalFeedFlowStrings.current
     val previewAppearance = resolveWidgetPreviewAppearance(
         settingsState = settingsState,
         themedWidgetUnderlayColor = MaterialTheme.colorScheme.surface,
@@ -85,22 +76,75 @@ private fun WidgetPreviewSectionContent(
         themedOnSurfaceColor = MaterialTheme.colorScheme.onSurface,
     )
 
-    WidgetPreviewWallpaper(
-        feedLayout = settingsState.feedLayout,
-        freshness = settingsState.freshness,
-        showWidgetHeader = settingsState.showHeader,
-        hideImages = settingsState.hideImages,
-        fontSizes = widgetFontSizes(settingsState.fontScale),
-        outerSurfaceColor = previewAppearance.outerSurfaceColor,
-        outerTextColors = previewAppearance.outerTextColors,
-        cardAppearance = previewAppearance.cardAppearance,
-        resolvedCardAppearance = previewAppearance.card,
-        backdropMode = backdropMode,
-        onToggleBackdropMode = onToggleBackdropMode,
-        modifier = modifier
-            .testTag(SettingsE2eIds.WIDGET_PREVIEW)
-            .padding(vertical = Spacing.small),
-    )
+    Column(
+        modifier = modifier.testTag("widget_preview"),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.regular),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = strings.widgetBackgroundColorPreview,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(
+                onClick = { showPreviewNote = true },
+                modifier = Modifier.testTag("widget_preview_info"),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Info,
+                    contentDescription = strings.widgetPreviewInfo,
+                )
+            }
+            PreviewBackdropToggleButton(
+                backdropMode = previewBackdropMode,
+                onClick = { previewBackdropMode = previewBackdropMode.next() },
+                modifier = Modifier.testTag("widget_preview_toggle_background"),
+            )
+        }
+        WidgetPreviewWallpaper(
+            headerTitle = settingsState.widgetContentTitle(),
+            feedLayout = settingsState.feedLayout,
+            showWidgetHeader = settingsState.showHeader,
+            showRefreshButton = settingsState.showRefreshButton,
+            hideImages = settingsState.hideImages,
+            fontSizes = widgetFontSizes(settingsState.fontScale),
+            freshness = settingsState.freshness,
+            outerSurfaceColor = previewAppearance.outerSurfaceColor,
+            outerTextColors = previewAppearance.outerTextColors,
+            cardAppearance = previewAppearance.cardAppearance,
+            resolvedCardAppearance = previewAppearance.card,
+            backdropMode = previewBackdropMode,
+            modifier = Modifier
+                .testTag(SettingsE2eIds.WIDGET_PREVIEW)
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.regular)
+                .padding(bottom = Spacing.xsmall)
+                .heightIn(min = 148.dp),
+        )
+    }
+
+    if (showPreviewNote) {
+        AlertDialog(
+            onDismissRequest = { showPreviewNote = false },
+            modifier = Modifier
+                .testTag("widget_preview_note_dialog")
+                .semantics { testTagsAsResourceId = true },
+            title = { Text(text = strings.widgetPreviewInfo) },
+            text = { Text(text = strings.widgetPreviewNote) },
+            confirmButton = {
+                TextButton(
+                    onClick = { showPreviewNote = false },
+                ) {
+                    Text(text = strings.closeButtonContentDescription)
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -115,7 +159,8 @@ private fun WidgetPreviewWallpaper(
     cardAppearance: WidgetCardAppearance,
     resolvedCardAppearance: ResolvedWidgetCardAppearance,
     backdropMode: WidgetPreviewBackdropMode,
-    onToggleBackdropMode: () -> Unit,
+    headerTitle: String,
+    showRefreshButton: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val wallpaperShape = RoundedCornerShape(24.dp)
@@ -132,6 +177,8 @@ private fun WidgetPreviewWallpaper(
         contentAlignment = Alignment.Center,
     ) {
         WidgetPreview(
+            headerTitle = headerTitle,
+            showRefreshButton = showRefreshButton,
             feedLayout = feedLayout,
             freshness = freshness,
             showWidgetHeader = showWidgetHeader,
@@ -142,12 +189,6 @@ private fun WidgetPreviewWallpaper(
             cardAppearance = cardAppearance,
             resolvedCardAppearance = resolvedCardAppearance,
             modifier = Modifier.fillMaxWidth(),
-        )
-
-        PreviewBackdropToggleButton(
-            backdropMode = backdropMode,
-            onClick = onToggleBackdropMode,
-            modifier = Modifier.align(Alignment.TopEnd),
         )
     }
 }
@@ -192,6 +233,8 @@ private fun PreviewBackdropToggleButton(
 
 @Composable
 private fun WidgetPreview(
+    headerTitle: String,
+    showRefreshButton: Boolean,
     feedLayout: WidgetFeedLayout,
     freshness: WidgetFreshness,
     showWidgetHeader: Boolean,
@@ -212,20 +255,37 @@ private fun WidgetPreview(
         color = outerSurfaceColor,
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            if (showWidgetHeader) {
-                Text(
-                    text = strings.widgetLatestItems,
-                    modifier = Modifier.padding(
-                        start = Spacing.medium,
-                        top = Spacing.regular,
-                        end = Spacing.medium,
-                        bottom = Spacing.small,
-                    ),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontSize = fontSizes.header.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = outerTextColors.primary,
-                )
+            if (showWidgetHeader || showRefreshButton) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.medium, vertical = Spacing.regular),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (showWidgetHeader) {
+                        Text(
+                            text = headerTitle,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontSize = fontSizes.header.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = outerTextColors.primary,
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                    if (showRefreshButton) {
+                        Icon(
+                            imageVector = Icons.Outlined.Refresh,
+                            contentDescription = strings.refreshFeeds,
+                            tint = outerTextColors.primary,
+                            modifier = Modifier.size(width = 24.dp, height = 24.dp),
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(Spacing.xsmall))
             } else {
                 Spacer(modifier = Modifier.height(Spacing.small))
             }
@@ -716,10 +776,25 @@ private fun WidgetPreviewToolingSurface(
 ) {
     FeedFlowTheme {
         Surface(color = MaterialTheme.colorScheme.background) {
-            WidgetPreviewSectionContent(
+            val appearance = resolveWidgetPreviewAppearance(
                 settingsState = settingsState,
+                themedWidgetUnderlayColor = MaterialTheme.colorScheme.surface,
+                themedCardSurfaceColor = MaterialTheme.colorScheme.secondaryContainer,
+                themedOnSurfaceColor = MaterialTheme.colorScheme.onSurface,
+            )
+            WidgetPreviewWallpaper(
+                headerTitle = settingsState.widgetContentTitle(),
+                feedLayout = settingsState.feedLayout,
+                freshness = settingsState.freshness,
+                showWidgetHeader = settingsState.showHeader,
+                showRefreshButton = settingsState.showRefreshButton,
+                hideImages = settingsState.hideImages,
+                fontSizes = widgetFontSizes(settingsState.fontScale),
+                outerSurfaceColor = appearance.outerSurfaceColor,
+                outerTextColors = appearance.outerTextColors,
+                cardAppearance = appearance.cardAppearance,
+                resolvedCardAppearance = appearance.card,
                 backdropMode = backdropMode,
-                onToggleBackdropMode = {},
             )
         }
     }

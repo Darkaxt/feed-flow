@@ -11,6 +11,7 @@ import app.cash.sqldelight.db.SqlDriver
 import co.touchlab.kermit.Logger
 import com.prof18.feedflow.core.model.ArticleExportFilter
 import com.prof18.feedflow.core.model.ArticleOpenMode
+import com.prof18.feedflow.core.model.AudioEnclosure
 import com.prof18.feedflow.core.model.CategoryWithUnreadCount
 import com.prof18.feedflow.core.model.CloudFeedAndCategorySnapshot
 import com.prof18.feedflow.core.model.CloudFeedOrCategoryEntity
@@ -31,6 +32,7 @@ import com.prof18.feedflow.core.model.FeedSourceWithUnreadCount
 import com.prof18.feedflow.core.model.ParsedFeedSource
 import com.prof18.feedflow.core.model.PrefetchQueueItem
 import com.prof18.feedflow.core.model.SyncedFeedItem
+import com.prof18.feedflow.core.model.WidgetContentFilter
 import com.prof18.feedflow.core.model.applyCloudFeedAndCategoryChanges
 import com.prof18.feedflow.core.utils.withSuspensionGuard
 import com.prof18.feedflow.db.Cloud_pending_article_flag
@@ -173,16 +175,17 @@ class DatabaseHelper(
 
     fun getFeedWidgetItems(
         pageSize: Long,
+        filter: WidgetContentFilter = WidgetContentFilter.Timeline,
     ): Flow<List<SelectFeeds>> =
         dbRef.feedItemQueries
             .selectFeeds(
                 sortOrder = "DESC", // Default for widget, or make it configurable if needed
-                feedSourceId = null,
-                feedSourceCategoryId = null,
-                isRead = false,
-                isBookmarked = null,
+                feedSourceId = (filter as? WidgetContentFilter.Source)?.feedSourceId,
+                feedSourceCategoryId = (filter as? WidgetContentFilter.Category)?.categoryId,
+                isRead = if (filter is WidgetContentFilter.Bookmarks) null else false,
+                isBookmarked = if (filter is WidgetContentFilter.Bookmarks) true else null,
                 isUncategorized = null,
-                isHidden = 0,
+                isHidden = if (filter is WidgetContentFilter.Timeline) 0 else null,
                 lastUrlHash = null,
                 lastPubDate = null,
                 pageSize = pageSize,
@@ -278,6 +281,7 @@ class DatabaseHelper(
                     val isDeleted = dbRef.deletedFeedItemsQueries.isItemDeleted(id).executeAsOne()
 
                     if (!isDeleted) {
+                        val validatedAudioUrl = AudioEnclosure.validatedUrl(audioUrl)
                         dbRef.feedItemQueries.insertFeedItem(
                             url_hash = id,
                             url = url,
@@ -288,7 +292,16 @@ class DatabaseHelper(
                             feed_source_id = feedSource.id,
                             pub_date = pubDateMillis,
                             comments_url = commentsUrl,
+                            audio_url = validatedAudioUrl,
                         )
+                        // INSERT OR IGNORE leaves existing items untouched; enrich or rotate their audio URL.
+                        validatedAudioUrl?.let {
+                            dbRef.feedItemQueries.updateFeedItemAudioUrl(
+                                audioUrl = validatedAudioUrl,
+                                urlHash = id,
+                                feedSourceId = feedSource.id,
+                            )
+                        }
                     }
                 }
             }
@@ -306,6 +319,17 @@ class DatabaseHelper(
 
     suspend fun getFeedItemContent(urlHash: String): String? = withContext(backgroundDispatcher) {
         dbRef.feedItemQueries.selectFeedItemContent(urlHash).executeAsOneOrNull()?.content
+    }
+
+    suspend fun getFeedItemAudioUrl(feedId: String): String? = withContext(backgroundDispatcher) {
+        AudioEnclosure.validatedUrl(
+            dbRef.feedItemQueries.selectFeedItemAudioUrl(feedId).executeAsOneOrNull()?.audio_url,
+        )
+    }
+
+    suspend fun getFeedItemAudioArtwork(feedId: String): String? = withContext(backgroundDispatcher) {
+        val artwork = dbRef.feedItemQueries.selectFeedItemAudioArtwork(feedId).executeAsOneOrNull()
+        AudioEnclosure.validatedUrl(artwork?.image_url) ?: AudioEnclosure.validatedUrl(artwork?.logo_url)
     }
 
     suspend fun getMissingFeedItemIds(feedItemIds: List<String>): Set<String> =
@@ -341,7 +365,7 @@ class DatabaseHelper(
         isRead: Boolean,
         cloudSessionId: String? = null,
         withCurrentSession: (() -> Unit) -> Unit = { it() },
-    ) = cloudMutation(withCurrentSession) {
+    ) = cloudMutation(withCurrentSession, suspensionGuardReason = "Updating read status") {
         dbRef.feedItemQueries.updateAllReadStatus(urlHash = feedItemId.map { it.id }, isRead = isRead)
         recordCloudPendingArticleFlags(cloudSessionId, feedItemId.map { it.id }, CloudArticleFlag.READ, isRead)
     }
@@ -413,7 +437,7 @@ class DatabaseHelper(
         snapshot: CloudFeedAndCategorySnapshot,
         sessionId: String,
         withCurrentSession: (() -> Unit) -> Unit = { it() },
-    ) = dbRef.transactionWithContext(backgroundDispatcher) {
+    ) = dbRef.transactionWithContext(backgroundDispatcher, suspensionGuardReason = "Applying cloud feed changes") {
         val merged = snapshot.applyCloudFeedAndCategoryChanges(selectCloudPendingFeedAndCategoryChanges(sessionId))
         withCurrentSession {
             reconcileCategories(merged.categories)
@@ -482,7 +506,7 @@ class DatabaseHelper(
         feedItemIds: List<FeedItemId>,
         isRead: Boolean,
         syncAccount: String,
-    ) = dbRef.transactionWithContext(backgroundDispatcher) {
+    ) = dbRef.transactionWithContext(backgroundDispatcher, suspensionGuardReason = "Saving pending read status") {
         feedItemIds.forEach { feedItemId ->
             dbRef.readStatusPendingActionQueries.upsertReadStatusPendingAction(
                 feed_item_id = feedItemId.id,
@@ -525,7 +549,7 @@ class DatabaseHelper(
         feedFilter: FeedFilter,
         cloudSessionId: String? = null,
         withCurrentSession: (() -> Unit) -> Unit = { it() },
-    ) = cloudMutation(withCurrentSession) {
+    ) = cloudMutation(withCurrentSession, suspensionGuardReason = "Marking articles as read") {
         val affectedItemIds = when {
             cloudSessionId == null -> emptyList()
             feedFilter == FeedFilter.Read -> emptyList()
@@ -705,7 +729,7 @@ class DatabaseHelper(
 
     suspend fun cleanupOldDeletedItems(monthsToKeep: Int = 6) =
         try {
-            dbRef.transactionWithContext(backgroundDispatcher) {
+            dbRef.transactionWithContext(backgroundDispatcher, suspensionGuardReason = "Clearing deleted articles") {
                 val thresholdTime = Clock.System.now()
                     .minus(duration = (monthsToKeep * 30).days)
                     .toEpochMilliseconds()
@@ -761,7 +785,7 @@ class DatabaseHelper(
         feedSourceId: String,
         cloudSessionId: String? = null,
         withCurrentSession: (() -> Unit) -> Unit = { it() },
-    ) = cloudMutation(withCurrentSession) {
+    ) = cloudMutation(withCurrentSession, suspensionGuardReason = "Removing feed") {
         val exists = dbRef.feedSourceQueries.selectCloudFieldsById(feedSourceId).executeAsOneOrNull() != null
         dbRef.readStatusPendingActionQueries.deleteReadStatusPendingActionsForFeedSource(feedSourceId)
         dbRef.feedItemQueries.deleteAllWithFeedSource(feedSourceId)
@@ -1089,7 +1113,7 @@ class DatabaseHelper(
         feedItems: List<FeedItemImportData>,
         existingFeedSourceIds: Set<String>,
     ) {
-        dbRef.transactionWithContext(backgroundDispatcher) {
+        dbRef.transactionWithContext(backgroundDispatcher, suspensionGuardReason = "Importing articles") {
             feedItems.forEach { item ->
                 if (!existingFeedSourceIds.contains(item.feedSourceId)) {
                     logger.d { "Skipping feed item with title: ${item.title} due to missing feed source" }
@@ -1155,7 +1179,7 @@ class DatabaseHelper(
         cloudSessionId: String? = null,
         replaceAll: Boolean = false,
         withCurrentSession: (() -> Unit) -> Unit = { it() },
-    ) = cloudMutation(withCurrentSession) {
+    ) = cloudMutation(withCurrentSession, suspensionGuardReason = "Syncing article status") {
         if (replaceAll) {
             dbRef.feedItemQueries.resetAllFeedItemFlags()
         }
@@ -1216,7 +1240,7 @@ class DatabaseHelper(
 
     suspend fun updateFeedItemReadStatus(feedItemIds: List<String>) =
         try {
-            dbRef.transactionWithContext(backgroundDispatcher) {
+            dbRef.transactionWithContext(backgroundDispatcher, suspensionGuardReason = "Syncing read status") {
                 // in the feed item tables are set unread by default.
                 feedItemIds.forEach { feedItemId ->
                     dbRef.feedItemStatusQueries.insertFeedItemStatus(
@@ -1232,7 +1256,7 @@ class DatabaseHelper(
         }
 
     suspend fun updateFeedItemBookmarkStatus(feedItemIds: List<String>) =
-        dbRef.transactionWithContext(backgroundDispatcher) {
+        dbRef.transactionWithContext(backgroundDispatcher, suspensionGuardReason = "Syncing bookmarks") {
             feedItemIds.forEach { feedItemId ->
                 dbRef.feedItemStatusQueries.insertFeedItemStatus(
                     feed_item_id = feedItemId,
@@ -1246,7 +1270,7 @@ class DatabaseHelper(
     suspend fun deleteAllCloudSubscriptions(
         sessionId: String,
         withCurrentSession: (() -> Unit) -> Unit = { it() },
-    ) = cloudMutation(withCurrentSession) {
+    ) = cloudMutation(withCurrentSession, suspensionGuardReason = "Removing all feeds") {
         val sourceIds = dbRef.feedSourceQueries.selectAllUrlHashes().executeAsList()
         val categoryIds = dbRef.feedSourceCategoryQueries.selectAllIds().executeAsList()
         recordCloudFeedAndCategoryDeletions(
@@ -1261,7 +1285,10 @@ class DatabaseHelper(
         dbRef.feedSourceQueries.deleteAll()
     }
 
-    suspend fun deleteAll() = dbRef.transactionWithContext(backgroundDispatcher) {
+    suspend fun deleteAll() = dbRef.transactionWithContext(
+        coroutineContext = backgroundDispatcher,
+        suspensionGuardReason = "Removing all data",
+    ) {
         dbRef.readStatusPendingActionQueries.deleteAllReadStatusPendingActions()
         dbRef.cloudPendingArticleFlagQueries.deleteAllCloudPendingArticleFlags()
         dbRef.cloudPendingFeedOrCategoryChangeQueries.deleteAllCloudPendingFeedAndCategoryChanges()
@@ -1888,7 +1915,7 @@ class DatabaseHelper(
         }
 
     suspend fun insertPrefetchQueueItems(items: List<PrefetchQueueItem>, currentTimeMillis: Long) =
-        dbRef.transactionWithContext(backgroundDispatcher) {
+        dbRef.transactionWithContext(backgroundDispatcher, suspensionGuardReason = "Queueing article prefetch") {
             items.forEach { item ->
                 dbRef.contentPrefetchQueueQueries.insertQueueItem(
                     feed_item_id = item.feedItemId,

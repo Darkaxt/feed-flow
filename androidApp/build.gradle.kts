@@ -132,6 +132,10 @@ android {
         }
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
     packaging {
         resources {
             excludes += setOf(
@@ -191,6 +195,8 @@ dependencies {
 
     implementation(libs.bundles.about.libraries)
 
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.session)
     implementation(libs.androidx.browser)
     implementation(libs.compose.webview)
     implementation(libs.colorpicker.compose)
@@ -228,6 +234,8 @@ dependencies {
     debugImplementation(libs.compose.multiplatform.ui.tooling)
 
     testImplementation(libs.junit)
+    testImplementation(project(":database"))
+    testImplementation(libs.sqldelight.android.driver)
     testImplementation(libs.koin.test)
     testImplementation(libs.multiplatform.settings.test)
     testImplementation(libs.multiplatform.settings)

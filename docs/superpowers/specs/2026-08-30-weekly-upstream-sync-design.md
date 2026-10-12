@@ -66,7 +66,7 @@ The synchronized tree must pass:
 - Targeted widget tests covering settings persistence, surface rendering inputs, dividers, sizing, thumbnail payloads, freshness filtering, and row serialization.
 - Release artifact checks for expected filename/version, SHA-256 checksum, and signing certificate identity after GitHub Actions publishes the APK.
 
-`master` must remain untouched if a merge conflict is unresolved or any required gate fails. A failing run reports the exact conflicting files or commands and preserves only the minimum diagnostic state needed to resume safely.
+`master` must remain untouched while a merge conflict is unresolved or any required prepublication gate fails. Conflicts and verification failures are work to resolve, not stopping conditions. Diagnose and fix them within the authorized scope, then continue through verification and signed publication. Stop only for a concrete blocker that cannot be resolved with available tools, credentials, and authority; report exact evidence and preserve the minimum diagnostic state needed to resume. Never weaken a gate to publish.
 
 ## Weekly Codex Heartbeat
 
@@ -80,7 +80,7 @@ Each run will:
 4. When upstream is ahead, create a dated branch, perform the reviewed merge, and preserve all fork behavior listed above.
 5. Run the full validation gates.
 6. On success, update `origin/master` and publish a fork release only when the synchronized source version requires a new release tag.
-7. On conflict or failure, leave `origin/master`, tags, and releases unchanged and report actionable evidence in this task.
+7. Resolve conflicts and diagnose and fix verification failures, preserving both upstream behavior and fork contracts. Keep `origin/master`, tags, and releases unchanged until prepublication gates pass. Continue through signed release publication and independent artifact verification; stop only for a genuine unresolved external or authority blocker and report exact evidence and publication state.
 8. Clean the temporary checkout after a successful or no-op run.
 
 The heartbeat must not use force-pushes, silently discard fork commits, install to an Android device, or expose signing secrets.
@@ -96,4 +96,8 @@ The current synchronization is complete when:
 - The weekly Codex heartbeat is active.
 - Successful temporary work under `D:\Temp` has been removed.
 
-Future weekly runs meet the contract when they either complete those same gates or fail closed without changing the fork's protected state.
+Future weekly runs must complete those same gates when upstream commits are pending, or remain a no-op when none are pending. Ordinary conflicts, test failures, complexity, and elapsed time alone do not justify stopping. A genuine unresolved blocker must be reported without claiming completion.
+
+## Authorized execution clarification — 2026-10-12
+
+The user explicitly authorized conflict resolution and failure repair through signed release publication, replacing the former stop-on-conflict wording. Device operations remain prohibited and all verification and signing safeguards remain required.

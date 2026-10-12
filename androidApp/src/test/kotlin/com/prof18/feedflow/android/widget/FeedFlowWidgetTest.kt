@@ -22,6 +22,12 @@ class FeedFlowWidgetTest {
             widgetSettingsRepository = instanceWithoutConstructor(WidgetSettingsRepository::class.java),
             browserManager = instanceWithoutConstructor(BrowserManager::class.java),
             settingsRepository = instanceWithoutConstructor(SettingsRepository::class.java),
+            widgetRefreshState = instanceWithoutConstructor(
+                com.prof18.feedflow.shared.presentation.WidgetRefreshState::class.java,
+            ),
+            feedDownloadWorkerEnqueuer = instanceWithoutConstructor(
+                com.prof18.feedflow.shared.domain.FeedDownloadWorkerEnqueuer::class.java,
+            ),
         )
 
         assertEquals(SizeMode.Exact, widget.sizeMode)

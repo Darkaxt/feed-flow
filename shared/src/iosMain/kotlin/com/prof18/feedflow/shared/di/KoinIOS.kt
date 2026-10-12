@@ -23,6 +23,7 @@ import com.prof18.feedflow.i18n.feedFlowStrings
 import com.prof18.feedflow.shared.data.KeychainSettingsWrapper
 import com.prof18.feedflow.shared.data.SettingsRepository
 import com.prof18.feedflow.shared.domain.BackgroundSyncScheduler
+import com.prof18.feedflow.shared.domain.audio.AudioPlaybackPositionRepository
 import com.prof18.feedflow.shared.domain.contentprefetch.BackgroundPrefetchScheduler
 import com.prof18.feedflow.shared.domain.contentprefetch.ContentPrefetchRepository
 import com.prof18.feedflow.shared.domain.contentprefetch.CoroutineBackgroundPrefetchScheduler
@@ -43,6 +44,7 @@ import com.prof18.feedflow.shared.domain.opml.OpmlFeedHandler
 import com.prof18.feedflow.shared.domain.opml.OpmlFeedHandlerIos
 import com.prof18.feedflow.shared.domain.opml.OpmlInput
 import com.prof18.feedflow.shared.domain.parser.FeedItemContentFileHandlerIos
+import com.prof18.feedflow.shared.domain.tts.ReaderSpeechText
 import com.prof18.feedflow.shared.e2e.E2eSeedRunner
 import com.prof18.feedflow.shared.presentation.AboutAndSupportSettingsViewModel
 import com.prof18.feedflow.shared.presentation.AccountsViewModel
@@ -318,6 +320,7 @@ object Deps : KoinComponent {
     fun getFeedFlowStrings() = getKoin().get<FeedFlowStrings>()
     fun getStrings() = getKoin().get<FeedFlowStrings>()
     fun getSettingsRepository() = getKoin().get<SettingsRepository>()
+    fun getAudioPlaybackPositionRepository() = getKoin().get<AudioPlaybackPositionRepository>()
     fun getSearchViewModel() = getKoin().get<SearchViewModel>()
     fun getAccountsViewModel() = getKoin().get<AccountsViewModel>()
     fun getDropboxDataSource() = getKoin().get<DropboxDataSource>()
@@ -326,6 +329,7 @@ object Deps : KoinComponent {
     fun getFeedSyncRepository() = getKoin().get<FeedSyncRepository>()
     fun getICloudSyncViewModel() = getKoin().get<ICloudSyncViewModel>()
     fun getReaderModeViewModel() = getKoin().get<ReaderModeViewModel>()
+    fun getReaderSpeechText() = getKoin().get<ReaderSpeechText>()
     fun getEditFeedViewModel() = getKoin().get<EditFeedViewModel>()
     fun getFreshRssSyncViewModel() = getKoin().get<FreshRssSyncViewModel>()
     fun getMinifluxSyncViewModel() = getKoin().get<MinifluxSyncViewModel>()
@@ -347,6 +351,7 @@ object Deps : KoinComponent {
         profileName: String?,
         accountName: String?,
         developmentOpml: String?,
+        audioUrl: String? = null,
     ): String? =
         runCatching {
             if (action == ACTION_RESTORE_DEVELOPMENT) {
@@ -359,6 +364,7 @@ object Deps : KoinComponent {
                     action = action,
                     profileName = profileName,
                     accountName = accountName,
+                    audioUrl = audioUrl,
                 )
             }
         }.exceptionOrNull()?.message
