@@ -36,6 +36,13 @@ import com.github.skydoves.colorpicker.compose.BrightnessSlider
 import com.github.skydoves.colorpicker.compose.HsvColorPicker
 import com.github.skydoves.colorpicker.compose.rememberColorPickerController
 import com.prof18.feedflow.android.settings.SettingsE2eIds
+import com.prof18.feedflow.android.ui.readermode.SliderWithPlusMinus
+import com.prof18.feedflow.android.ui.settings.CompactSettingDropdownRow
+import com.prof18.feedflow.android.ui.settings.SettingDropdownOption
+import com.prof18.feedflow.android.ui.settings.SettingSwitchItem
+import com.prof18.feedflow.android.ui.style.Spacing
+import com.prof18.feedflow.android.ui.theme.FeedFlowTheme
+import com.prof18.feedflow.android.ui.utils.LocalFeedFlowStrings
 import com.prof18.feedflow.core.model.WidgetContentFilter
 import com.prof18.feedflow.core.model.WidgetFeedLayout
 import com.prof18.feedflow.shared.domain.model.SyncPeriod
@@ -43,13 +50,6 @@ import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
 import com.prof18.feedflow.shared.domain.model.WidgetFreshness
 import com.prof18.feedflow.shared.domain.model.WidgetTextColorMode
-import com.prof18.feedflow.shared.ui.readermode.SliderWithPlusMinus
-import com.prof18.feedflow.shared.ui.settings.CompactSettingDropdownRow
-import com.prof18.feedflow.shared.ui.settings.SettingDropdownOption
-import com.prof18.feedflow.shared.ui.settings.SettingSwitchItem
-import com.prof18.feedflow.shared.ui.style.Spacing
-import com.prof18.feedflow.shared.ui.theme.FeedFlowTheme
-import com.prof18.feedflow.shared.ui.utils.LocalFeedFlowStrings
 import kotlinx.collections.immutable.persistentListOf
 import kotlin.math.roundToInt
 

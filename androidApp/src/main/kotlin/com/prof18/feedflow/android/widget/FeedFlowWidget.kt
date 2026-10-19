@@ -15,6 +15,7 @@ import androidx.glance.appwidget.LocalAppWidgetOptions
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.provideContent
 import com.prof18.feedflow.android.BrowserManager
+import com.prof18.feedflow.android.ui.utils.ProvideFeedFlowStrings
 import com.prof18.feedflow.android.util.rememberAndroidFeedFlowStrings
 import com.prof18.feedflow.core.model.FeedItem
 import com.prof18.feedflow.shared.data.SettingsRepository
@@ -25,7 +26,6 @@ import com.prof18.feedflow.shared.domain.feed.FeedWidgetRepository
 import com.prof18.feedflow.shared.domain.feed.WidgetRenderState
 import com.prof18.feedflow.shared.domain.model.filterWidgetItemsByFreshness
 import com.prof18.feedflow.shared.presentation.WidgetRefreshState
-import com.prof18.feedflow.shared.ui.utils.ProvideFeedFlowStrings
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.first

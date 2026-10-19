@@ -32,6 +32,7 @@ import androidx.glance.unit.ColorProvider
 import com.prof18.feedflow.android.BrowserManager
 import com.prof18.feedflow.android.MainActivity
 import com.prof18.feedflow.android.R
+import com.prof18.feedflow.android.ui.style.Spacing
 import com.prof18.feedflow.android.widget.ResolvedWidgetCardLayout
 import com.prof18.feedflow.android.widget.ResolvedWidgetListImageLayout
 import com.prof18.feedflow.android.widget.WIDGET_THUMBNAIL_VIEWPORT_DP
@@ -47,7 +48,6 @@ import com.prof18.feedflow.core.model.resolveWith
 import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
 import com.prof18.feedflow.shared.domain.model.WidgetCardImageSizing
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
-import com.prof18.feedflow.shared.ui.style.Spacing
 
 private const val THUMBNAIL_CORNER_RADIUS_DP = 8
 

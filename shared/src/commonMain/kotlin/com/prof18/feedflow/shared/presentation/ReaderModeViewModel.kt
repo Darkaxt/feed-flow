@@ -3,10 +3,11 @@ package com.prof18.feedflow.shared.presentation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.prof18.feedflow.core.model.ArticleOpenMode
+import com.prof18.feedflow.core.model.ArticleReportMessage
+import com.prof18.feedflow.core.model.ArticleReportUiState
 import com.prof18.feedflow.core.model.FeedItem
 import com.prof18.feedflow.core.model.FeedItemId
 import com.prof18.feedflow.core.model.FeedItemUrlInfo
-import com.prof18.feedflow.core.model.ReaderFontSettings
 import com.prof18.feedflow.core.model.ReaderModeData
 import com.prof18.feedflow.core.model.ReaderModeState
 import com.prof18.feedflow.core.model.ShownContentSource
@@ -17,6 +18,7 @@ import com.prof18.feedflow.core.model.resolveWith
 import com.prof18.feedflow.database.DatabaseHelper
 import com.prof18.feedflow.shared.data.SettingsRepository
 import com.prof18.feedflow.shared.domain.ReaderContentLanguage
+import com.prof18.feedflow.shared.domain.articlereport.ArticleReporter
 import com.prof18.feedflow.shared.domain.feed.ArticleNavigationRepository
 import com.prof18.feedflow.shared.domain.feed.FeedActionsRepository
 import com.prof18.feedflow.shared.domain.feeditem.ArticleContentParser
@@ -25,7 +27,10 @@ import com.prof18.feedflow.shared.domain.feeditem.ReaderContentFetcher
 import io.ktor.http.Url
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -39,6 +44,7 @@ class ReaderModeViewModel internal constructor(
     private val feedItemContentFileHandler: FeedItemContentFileHandler,
     private val articleNavigationRepository: ArticleNavigationRepository,
     private val databaseHelper: DatabaseHelper,
+    private val articleReporter: ArticleReporter,
 ) : ViewModel() {
 
     private val readerModeMutableState: MutableStateFlow<ReaderModeState> = MutableStateFlow(
@@ -46,13 +52,7 @@ class ReaderModeViewModel internal constructor(
     )
     val readerModeState = readerModeMutableState.asStateFlow()
 
-    private val readerFontSettingsMutableState: MutableStateFlow<ReaderFontSettings> = MutableStateFlow(
-        ReaderFontSettings(
-            fontSize = settingsRepository.getReaderModeFontSize(),
-            lineHeight = settingsRepository.getReaderModeLineHeight(),
-        ),
-    )
-    val readerFontSettingsState = readerFontSettingsMutableState.asStateFlow()
+    val readerFontSettingsState = settingsRepository.readerFontSettingsState
 
     private val canNavigateToPreviousMutableState = MutableStateFlow(false)
     val canNavigateToPreviousState = canNavigateToPreviousMutableState.asStateFlow()
@@ -62,6 +62,54 @@ class ReaderModeViewModel internal constructor(
 
     private val currentArticleMutableState = MutableStateFlow<FeedItemUrlInfo?>(null)
     val currentArticleState = currentArticleMutableState.asStateFlow()
+    private val articleReportMutableState = MutableStateFlow(ArticleReportUiState())
+    val articleReportState = combine(currentArticleState, readerModeState, articleReportMutableState) {
+            article, state, report ->
+        report.copy(
+            canReport = article != null && article.url.isNotBlank() &&
+                state.isForArticle(article.id) && !report.sending,
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, ArticleReportUiState())
+
+    fun requestArticleReport() {
+        if (!articleReportState.value.canReport || articleReportMutableState.value.showDisclosure) return
+        articleReportMutableState.update { it.copy(showDisclosure = true) }
+    }
+
+    fun confirmArticleReport() {
+        val article = currentArticleState.value ?: return
+        val state = readerModeState.value
+        if (
+            !articleReportMutableState.value.showDisclosure || article.url.isBlank() ||
+            !state.isForArticle(article.id) || articleReportMutableState.value.sending
+        ) {
+            return
+        }
+        val source = (state as? ReaderModeState.Success)?.readerModeData?.shownContentSource?.name?.lowercase()
+            ?: "unavailable"
+        articleReportMutableState.update {
+            it.copy(showDisclosure = false, sending = true, message = ArticleReportMessage.SENDING)
+        }
+        articleReporter.submit(article.url, source) { sent ->
+            if (currentArticleState.value?.id == article.id) {
+                val result = if (sent) ArticleReportMessage.SENT else ArticleReportMessage.FAILED
+                articleReportMutableState.update { report ->
+                    report.copy(
+                        sending = false,
+                        message = result.takeIf { report.message != null },
+                    )
+                }
+            }
+        }
+    }
+
+    fun cancelArticleReport() {
+        articleReportMutableState.update { it.copy(showDisclosure = false) }
+    }
+
+    fun dismissArticleReportMessage() {
+        articleReportMutableState.update { it.copy(message = null) }
+    }
 
     private var loadReaderModeJob: Job? = null
     private var currentArticleId: String? = null
@@ -86,6 +134,7 @@ class ReaderModeViewModel internal constructor(
         databaseHelper.getFeedItemUrlInfo(feedItemId.id)
 
     fun clearSelection() {
+        articleReportMutableState.value = ArticleReportUiState()
         currentArticleMutableState.value = null
     }
 
@@ -245,12 +294,10 @@ class ReaderModeViewModel internal constructor(
 
     fun updateFontSize(newFontSize: Int) {
         settingsRepository.setReaderModeFontSize(newFontSize)
-        readerFontSettingsMutableState.update { it.copy(fontSize = newFontSize) }
     }
 
     fun updateLineHeight(newLineHeight: Int) {
         settingsRepository.setReaderModeLineHeight(newLineHeight)
-        readerFontSettingsMutableState.update { it.copy(lineHeight = newLineHeight) }
     }
 
     fun updateBookmarkStatus(feedItemId: FeedItemId, bookmarked: Boolean) {
@@ -268,6 +315,7 @@ class ReaderModeViewModel internal constructor(
 
     private fun selectArticle(urlInfo: FeedItemUrlInfo): Boolean {
         val isSameArticle = currentArticleId == urlInfo.id && readerModeMutableState.value.isForArticle(urlInfo.id)
+        if (currentArticleId != urlInfo.id) articleReportMutableState.value = ArticleReportUiState()
         currentArticleId = urlInfo.id
         currentArticleMutableState.value = urlInfo
         updateNavigationFlags()

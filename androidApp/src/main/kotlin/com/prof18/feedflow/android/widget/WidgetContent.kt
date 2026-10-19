@@ -38,6 +38,8 @@ import androidx.glance.unit.ColorProvider
 import com.prof18.feedflow.android.BrowserManager
 import com.prof18.feedflow.android.MainActivity
 import com.prof18.feedflow.android.R
+import com.prof18.feedflow.android.ui.style.Spacing
+import com.prof18.feedflow.android.ui.utils.LocalFeedFlowStrings
 import com.prof18.feedflow.android.widget.components.WidgetFeedItemCard
 import com.prof18.feedflow.android.widget.components.WidgetFeedItemList
 import com.prof18.feedflow.core.model.FeedItem
@@ -47,8 +49,6 @@ import com.prof18.feedflow.shared.domain.model.WidgetCardAppearance
 import com.prof18.feedflow.shared.domain.model.WidgetCardItemSeparation
 import com.prof18.feedflow.shared.domain.model.WidgetTextColorMode
 import com.prof18.feedflow.shared.domain.model.normalized
-import com.prof18.feedflow.shared.ui.style.Spacing
-import com.prof18.feedflow.shared.ui.utils.LocalFeedFlowStrings
 import kotlinx.collections.immutable.ImmutableList
 import kotlin.math.roundToInt
 

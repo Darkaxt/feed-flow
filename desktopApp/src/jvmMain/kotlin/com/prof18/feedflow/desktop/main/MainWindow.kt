@@ -13,15 +13,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -62,26 +53,34 @@ import com.prof18.feedflow.desktop.di.DI
 import com.prof18.feedflow.desktop.editfeed.EditFeedScreen
 import com.prof18.feedflow.desktop.feedsuggestions.FeedSuggestionsScreen
 import com.prof18.feedflow.desktop.home.DesktopHomeListStateStore
+import com.prof18.feedflow.desktop.home.DesktopWorkspaceCommand
 import com.prof18.feedflow.desktop.home.HomeScreen
+import com.prof18.feedflow.desktop.home.desktopWorkspaceAction
+import com.prof18.feedflow.desktop.home.desktopWorkspaceCommandAvailability
 import com.prof18.feedflow.desktop.home.menubar.FeedFlowMenuBar
 import com.prof18.feedflow.desktop.home.menubar.MenuBarActions
 import com.prof18.feedflow.desktop.home.menubar.MenuBarState
 import com.prof18.feedflow.desktop.home.rememberDesktopHomeListStateStore
-import com.prof18.feedflow.desktop.importexport.ImportExportScreen
 import com.prof18.feedflow.desktop.reaadermode.ReaderModeScreen
 import com.prof18.feedflow.desktop.settings.DesktopSettingsCategory
+import com.prof18.feedflow.desktop.settings.DesktopSettingsSection
 import com.prof18.feedflow.desktop.settings.SettingsWindow
-import com.prof18.feedflow.desktop.settings.blocked.BlockedWordsScreen
 import com.prof18.feedflow.desktop.toReaderMode
+import com.prof18.feedflow.desktop.ui.DesktopFeedbackState
+import com.prof18.feedflow.desktop.ui.LocalFeedFlowStrings
+import com.prof18.feedflow.desktop.ui.LocalReduceMotion
+import com.prof18.feedflow.desktop.ui.components.ConfirmationDialog
+import com.prof18.feedflow.desktop.ui.components.DesktopDesignTokens
+import com.prof18.feedflow.desktop.ui.components.FeedFlowTheme
+import com.prof18.feedflow.desktop.ui.components.SnackbarHost
 import com.prof18.feedflow.desktop.ui.components.scrollbarStyle
 import com.prof18.feedflow.shared.data.DesktopWindowSettingsRepository
 import com.prof18.feedflow.shared.domain.feedsync.FeedSyncRepository
 import com.prof18.feedflow.shared.presentation.HomeViewModel
-import com.prof18.feedflow.shared.ui.style.Spacing
-import com.prof18.feedflow.shared.ui.theme.FeedFlowTheme
-import com.prof18.feedflow.shared.ui.utils.LocalFeedFlowStrings
-import com.prof18.feedflow.shared.ui.utils.LocalReduceMotion
 import kotlinx.coroutines.launch
+import org.jetbrains.jewel.foundation.theme.JewelTheme
+import org.jetbrains.jewel.ui.component.CircularProgressIndicator
+import org.jetbrains.jewel.ui.component.Text
 import org.koin.compose.viewmodel.koinViewModel
 import java.awt.event.WindowEvent
 import java.awt.event.WindowFocusListener
@@ -96,7 +95,7 @@ internal fun FrameWindowScope.MainWindow(
     appConfig: DesktopConfig,
     showBackupLoader: Boolean,
 ) {
-    val snackbarHostState = remember { SnackbarHostState() }
+    val snackbarHostState = remember { DesktopFeedbackState() }
 
     MainWindowEffects(
         composeWindow = window,
@@ -126,20 +125,16 @@ private fun BackupInProgressScreen(
         darkTheme = isDarkTheme,
         useOledTheme = useOledTheme,
     ) {
-        Scaffold {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize(),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                CircularProgressIndicator()
-                Text(
-                    modifier = Modifier
-                        .padding(top = Spacing.regular),
-                    text = LocalFeedFlowStrings.current.feedSyncInProgress,
-                )
-            }
+        Column(
+            modifier = Modifier.fillMaxSize().background(JewelTheme.globalColors.panelBackground),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            CircularProgressIndicator()
+            Text(
+                modifier = Modifier.padding(top = DesktopDesignTokens.spaceSection),
+                text = LocalFeedFlowStrings.current.feedSyncInProgress,
+            )
         }
     }
 }
@@ -148,7 +143,7 @@ private fun BackupInProgressScreen(
 private fun MainWindowEffects(
     composeWindow: ComposeWindow,
     windowState: WindowState,
-    snackbarHostState: SnackbarHostState,
+    snackbarHostState: DesktopFeedbackState,
 ) {
     val scope = rememberCoroutineScope()
     val flowStrings = LocalFeedFlowStrings.current
@@ -179,6 +174,7 @@ private fun MainWindowEffects(
             with(composeWindow.rootPane) {
                 putClientProperty("apple.awt.transparentTitleBar", true)
                 putClientProperty("apple.awt.fullWindowContent", true)
+                putClientProperty("apple.awt.windowTitleVisible", false)
             }
         }
     }
@@ -227,11 +223,11 @@ private fun MainWindowEffects(
     LaunchedEffect(messageQueue) {
         messageQueue.userMessages.collect { message ->
             if (message is SyncResult.GoogleDriveNeedReAuth) {
-                snackbarHostState.showSnackbar(
+                snackbarHostState.showFeedback(
                     message = flowStrings.googleDriveAuthRetry,
                 )
             } else if (message is SyncResult.Error) {
-                snackbarHostState.showSnackbar(
+                snackbarHostState.showFeedback(
                     message = flowStrings.errorAccountSync(message.errorCode.code),
                 )
             }
@@ -241,7 +237,7 @@ private fun MainWindowEffects(
     LaunchedEffect(Unit) {
         DesktopDatabaseErrorState.errorState.collect { show ->
             if (show) {
-                snackbarHostState.showSnackbar(
+                snackbarHostState.showFeedback(
                     message = flowStrings.databaseErrorReset,
                 )
                 DesktopDatabaseErrorState.setError(false)
@@ -252,7 +248,7 @@ private fun MainWindowEffects(
 
 @Composable
 private fun FrameWindowScope.MainWindowContent(
-    snackbarHostState: SnackbarHostState,
+    snackbarHostState: DesktopFeedbackState,
     appConfig: DesktopConfig,
 ) {
     val homeViewModel = koinViewModel<HomeViewModel>()
@@ -262,45 +258,28 @@ private fun FrameWindowScope.MainWindowContent(
         homeViewModel.onAppLaunch()
     }
 
-    CompositionLocalProvider(LocalScrollbarStyle provides scrollbarStyle()) {
+    val menuCommands = remember { DesktopMenuCommands() }
+    CompositionLocalProvider(
+        LocalScrollbarStyle provides scrollbarStyle(),
+        LocalDesktopMenuCommands provides menuCommands,
+    ) {
         val reduceMotionEnabled = LocalReduceMotion.current
 
         var showMarkAllReadDialog by remember { mutableStateOf(false) }
-        var showClearOldArticlesDialog by remember { mutableStateOf(false) }
         val dialogWindowNavigator = rememberDesktopDialogWindowNavigator()
-        var initialSettingsCategory by remember { mutableStateOf(DesktopSettingsCategory.GENERAL) }
 
         MarkAllReadDialog(
             visible = showMarkAllReadDialog,
             onDismiss = { showMarkAllReadDialog = false },
             onConfirm = {
-                homeViewModel.markAllRead()
+                desktopWorkspaceAction(
+                    DesktopWorkspaceCommand.BulkAction,
+                    homeViewModel::desktopWorkspaceCommandAvailability,
+                    homeViewModel::markAllRead,
+                )()
                 showMarkAllReadDialog = false
             },
         )
-
-        ClearOldArticlesDialog(
-            visible = showClearOldArticlesDialog,
-            onDismiss = { showClearOldArticlesDialog = false },
-            onConfirm = {
-                homeViewModel.deleteOldFeedItems()
-                showClearOldArticlesDialog = false
-            },
-        )
-
-        if (dialogWindowNavigator.isOpen(DesktopDialogWindowDestination.BlockedWords)) {
-            BlockedWordsScreen(
-                onCloseRequest = { dialogWindowNavigator.close(DesktopDialogWindowDestination.BlockedWords) },
-            )
-        }
-
-        if (dialogWindowNavigator.isOpen(DesktopDialogWindowDestination.ImportExport)) {
-            ImportExportScreen(
-                composeWindow = window,
-                onCloseRequest = { dialogWindowNavigator.close(DesktopDialogWindowDestination.ImportExport) },
-                triggerFeedFetch = { homeViewModel.getNewFeeds() },
-            )
-        }
 
         if (dialogWindowNavigator.isOpen(DesktopDialogWindowDestination.AddFeed)) {
             AddFeedScreen(
@@ -327,15 +306,24 @@ private fun FrameWindowScope.MainWindowContent(
             )
         }
 
-        if (dialogWindowNavigator.isOpen(DesktopDialogWindowDestination.Settings)) {
-            SettingsWindow(
-                onCloseRequest = { dialogWindowNavigator.close(DesktopDialogWindowDestination.Settings) },
-                initialCategory = initialSettingsCategory,
-            )
-        }
-
         val currentFeedFilter by homeViewModel.currentFeedFilter.collectAsState()
         val isSyncUploadRequired by homeViewModel.isSyncUploadRequired.collectAsState()
+        val loadingState by homeViewModel.loadingState.collectAsState()
+        val feedOperation by homeViewModel.feedOperationState.collectAsState()
+        val commands = desktopWorkspaceCommandAvailability(loadingState, feedOperation)
+        if (dialogWindowNavigator.isOpen(DesktopDialogWindowDestination.Settings)) {
+            SettingsWindow(
+                navigator = dialogWindowNavigator,
+                onCloseRequest = { dialogWindowNavigator.close(DesktopDialogWindowDestination.Settings) },
+                triggerFeedFetch = homeViewModel::getNewFeeds,
+                onClearOldArticles = desktopWorkspaceAction(
+                    DesktopWorkspaceCommand.BulkAction,
+                    homeViewModel::desktopWorkspaceCommandAvailability,
+                    homeViewModel::deleteOldFeedItems,
+                ),
+                canClearOldArticles = commands.bulkActionsEnabled,
+            )
+        }
 
         val backStack = remember { mutableStateListOf<NavKey>(Home) }
         val navigateBack: () -> Unit = {
@@ -346,19 +334,15 @@ private fun FrameWindowScope.MainWindowContent(
         val shouldShowWindowSnackbarHost = backStack.lastOrNull() != Home
 
         CompositionLocalProvider(
+            LocalDesktopDialogWindowNavigator provides dialogWindowNavigator,
             LocalScrollbarStyle provides scrollbarStyle(),
         ) {
-            Surface(
-                modifier = Modifier
-                    .then(
-                        if (getDesktopOS().isMacOs()) {
-                            Modifier
-                                .background(MaterialTheme.colorScheme.background)
-                        } else {
-                            Modifier
-                        },
-                    ),
-            ) {
+            val onSearch: (() -> Unit)? = if (backStack.lastOrNull() == Home) {
+                { backStack.add(Search) }
+            } else {
+                null
+            }
+            MainWindowSurface(modifier = Modifier.fillMaxSize(), onSearch = onSearch) {
                 Box {
                     NavDisplay(
                         backStack = backStack,
@@ -388,8 +372,7 @@ private fun FrameWindowScope.MainWindowContent(
                                 snackbarHostState = snackbarHostState,
                                 dialogWindowNavigator = dialogWindowNavigator,
                                 onAccountsRequested = {
-                                    initialSettingsCategory = DesktopSettingsCategory.ACCOUNTS
-                                    dialogWindowNavigator.open(DesktopDialogWindowDestination.Settings)
+                                    dialogWindowNavigator.openSettings(DesktopSettingsCategory.ACCOUNTS)
                                 },
                                 onEditFeedRequested = { feedSource ->
                                     feedSourceToEdit = feedSource
@@ -400,14 +383,21 @@ private fun FrameWindowScope.MainWindowContent(
                     )
 
                     if (shouldShowWindowSnackbarHost) {
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Bottom,
-                        ) {
-                            SnackbarHost(snackbarHostState)
-                        }
+                        SnackbarHost(
+                            state = snackbarHostState,
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
                     }
+                }
+            }
+
+            if (getDesktopOS().isMacOs()) {
+                DisposableEffect(dialogWindowNavigator) {
+                    installMacOsAppMenuHandlers(
+                        onSettings = { dialogWindowNavigator.openSettings() },
+                        onAbout = { dialogWindowNavigator.openSettings(DesktopSettingsCategory.ABOUT) },
+                    )
+                    onDispose { uninstallMacOsAppMenuHandlers() }
                 }
             }
 
@@ -416,26 +406,35 @@ private fun FrameWindowScope.MainWindowContent(
                     showDebugMenu = appConfig.appEnvironment.isDebug(),
                     feedFilter = currentFeedFilter,
                     isSyncUploadRequired = isSyncUploadRequired,
+                    commands = commands,
                 ),
                 actions = MenuBarActions(
-                    onRefreshClick = {
-                        homeViewModel.refreshFeeds()
-                    },
+                    onRefreshClick = desktopWorkspaceAction(
+                        DesktopWorkspaceCommand.Refresh,
+                        homeViewModel::desktopWorkspaceCommandAvailability,
+                        homeViewModel::refreshFeeds,
+                    ),
                     onAddFeedClick = {
                         dialogWindowNavigator.open(DesktopDialogWindowDestination.AddFeed)
                     },
-                    onMarkAllReadClick = {
+                    onMarkAllReadClick = desktopWorkspaceAction(
+                        DesktopWorkspaceCommand.BulkAction,
+                        homeViewModel::desktopWorkspaceCommandAvailability,
+                    ) {
                         showMarkAllReadDialog = true
                     },
                     onImportExportClick = {
-                        dialogWindowNavigator.open(DesktopDialogWindowDestination.ImportExport)
-                    },
-                    onClearOldFeedClick = {
-                        showClearOldArticlesDialog = true
+                        dialogWindowNavigator.openSettings(
+                            DesktopSettingsCategory.SYNC_STORAGE,
+                            DesktopSettingsSection.IMPORT_EXPORT,
+                        )
                     },
                     onSettingsClick = {
-                        initialSettingsCategory = DesktopSettingsCategory.GENERAL
-                        dialogWindowNavigator.open(DesktopDialogWindowDestination.Settings)
+                        dialogWindowNavigator.openSettings()
+                    },
+                    onEditFeedClick = { source ->
+                        feedSourceToEdit = source
+                        dialogWindowNavigator.open(DesktopDialogWindowDestination.EditFeed)
                     },
                     deleteFeeds = {
                         homeViewModel.deleteAllFeeds()
@@ -446,10 +445,10 @@ private fun FrameWindowScope.MainWindowContent(
                     onExitClick = {
                         window.dispatchEvent(WindowEvent(window, WindowEvent.WINDOW_CLOSING))
                     },
+                    onFeedSuggestionsClick = {
+                        dialogWindowNavigator.open(DesktopDialogWindowDestination.FeedSuggestions)
+                    },
                 ),
-                onNavigateToBlockedWords = {
-                    dialogWindowNavigator.open(DesktopDialogWindowDestination.BlockedWords)
-                },
             )
         }
     }
@@ -462,45 +461,11 @@ private fun MarkAllReadDialog(
     onConfirm: () -> Unit,
 ) {
     if (visible) {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text(LocalFeedFlowStrings.current.markAllReadButton) },
-            text = { Text(LocalFeedFlowStrings.current.markAllReadDialogMessage) },
-            confirmButton = {
-                TextButton(onClick = onConfirm) {
-                    Text(LocalFeedFlowStrings.current.confirmButton)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismiss) {
-                    Text(LocalFeedFlowStrings.current.cancelButton)
-                }
-            },
-        )
-    }
-}
-
-@Composable
-private fun ClearOldArticlesDialog(
-    visible: Boolean,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
-) {
-    if (visible) {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text(LocalFeedFlowStrings.current.clearOldArticlesButton) },
-            text = { Text(LocalFeedFlowStrings.current.clearOldArticlesDialogMessage) },
-            confirmButton = {
-                TextButton(onClick = onConfirm) {
-                    Text(LocalFeedFlowStrings.current.confirmButton)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismiss) {
-                    Text(LocalFeedFlowStrings.current.cancelButton)
-                }
-            },
+        ConfirmationDialog(
+            title = LocalFeedFlowStrings.current.markAllReadButton,
+            message = LocalFeedFlowStrings.current.markAllReadDialogMessage,
+            onConfirm = onConfirm,
+            onDismiss = onDismiss,
         )
     }
 }
@@ -510,7 +475,7 @@ private fun EntryProviderScope<NavKey>.screens(
     navigateBack: () -> Unit,
     homeViewModel: HomeViewModel,
     homeListStateStore: DesktopHomeListStateStore,
-    snackbarHostState: SnackbarHostState,
+    snackbarHostState: DesktopFeedbackState,
     dialogWindowNavigator: DesktopDialogWindowNavigator,
     onAccountsRequested: () -> Unit,
     onEditFeedRequested: (FeedSource) -> Unit,
@@ -521,7 +486,10 @@ private fun EntryProviderScope<NavKey>.screens(
             listStateStore = homeListStateStore,
             snackbarHostState = snackbarHostState,
             onImportExportClick = {
-                dialogWindowNavigator.open(DesktopDialogWindowDestination.ImportExport)
+                dialogWindowNavigator.openSettings(
+                    DesktopSettingsCategory.SYNC_STORAGE,
+                    DesktopSettingsSection.IMPORT_EXPORT,
+                )
             },
             onSearchClick = { backStack.add(Search) },
             onAccountsClick = onAccountsRequested,
@@ -570,7 +538,7 @@ private fun EntryProviderScope<NavKey>.screens(
 
 @Composable
 private fun MacOsTitleBarPadding(content: @Composable () -> Unit) {
-    val topPadding = if (getDesktopOS().isMacOs()) Spacing.medium else 0.dp
+    val topPadding = if (getDesktopOS().isMacOs()) DesktopDesignTokens.spacePanel else 0.dp
     Box(modifier = Modifier.padding(top = topPadding)) {
         content()
     }

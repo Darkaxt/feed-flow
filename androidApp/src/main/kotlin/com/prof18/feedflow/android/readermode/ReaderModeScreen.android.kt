@@ -68,6 +68,8 @@ import com.prof18.feedflow.android.audio.AudioPlaybackState
 import com.prof18.feedflow.android.audio.isPlayingItem
 import com.prof18.feedflow.android.audio.readerAudioDockContent
 import com.prof18.feedflow.android.openShareSheet
+import com.prof18.feedflow.android.ui.readermode.ArticleReportDisclosure
+import com.prof18.feedflow.android.ui.utils.LocalFeedFlowStrings
 import com.prof18.feedflow.core.model.AudioEnclosure
 import com.prof18.feedflow.core.model.FeedItemId
 import com.prof18.feedflow.core.model.ReaderModeState
@@ -78,7 +80,7 @@ import com.prof18.feedflow.shared.domain.getReaderModeStyledHtml
 import com.prof18.feedflow.shared.domain.readerCodeBlockColors
 import com.prof18.feedflow.shared.domain.readerFontSizeJs
 import com.prof18.feedflow.shared.domain.readerLineHeightJs
-import com.prof18.feedflow.shared.ui.utils.LocalFeedFlowStrings
+import com.prof18.feedflow.shared.presentation.ReaderModeViewModel
 import com.prof18.feedflow.shared.utils.getArchiveISUrl
 import com.prof18.feedflow.shared.utils.isValidUrl
 import kotlinx.coroutines.Dispatchers
@@ -90,6 +92,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+import org.koin.compose.viewmodel.koinViewModel
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -112,6 +115,8 @@ internal fun ReaderModeScreen(
     onToggleDetailFullscreen: (() -> Unit)? = null,
     onOpenAudioEpisode: ((AudioEpisode) -> Unit)? = null,
 ) {
+    val readerModeViewModel = koinViewModel<ReaderModeViewModel>()
+    val articleReportState by readerModeViewModel.articleReportState.collectAsStateWithLifecycle()
     val browserManager = koinInject<BrowserManager>()
     val audioPlayer = koinInject<AndroidAudioPlayer>()
     val audioState by audioPlayer.state.collectAsStateWithLifecycle()
@@ -134,11 +139,12 @@ internal fun ReaderModeScreen(
             topBar = {
                 ReaderModeToolbar(
                     navigateBack = {
-                        if (readerModeState is ReaderModeState.ContentNotAvailable && navigator.canGoBack) {
-                            navigator.navigateBack()
-                        } else {
-                            navigateBack()
-                        }
+                        navigateReaderBack(
+                            state = readerModeState,
+                            canGoBack = navigator.canGoBack,
+                            navigateHistory = navigator::navigateBack,
+                            leaveReader = navigateBack,
+                        )
                     },
                     isDetailFullscreen = isDetailFullscreen,
                     onToggleDetailFullscreen = onToggleDetailFullscreen,
@@ -230,6 +236,8 @@ internal fun ReaderModeScreen(
                         canNavigateNext = canNavigateNext,
                         onNavigateToPrevious = onNavigateToPrevious,
                         onNavigateToNext = onNavigateToNext,
+                        articleReportState = articleReportState,
+                        onReportArticle = { readerModeViewModel.requestArticleReport() },
                     )
                 }
 
@@ -297,6 +305,16 @@ internal fun ReaderModeScreen(
                     }
                 }
             }
+
+            val measuredToolbarHeightPx by toolbarHeightPx.collectAsStateWithLifecycle()
+            ArticleReportDisclosure(
+                state = articleReportState,
+                onConfirm = { readerModeViewModel.confirmArticleReport() },
+                onCancel = { readerModeViewModel.cancelArticleReport() },
+                onDismissMessage = { readerModeViewModel.dismissArticleReportMessage() },
+                messageBottomPadding = (measuredToolbarHeightPx / LocalDensity.current.density).dp +
+                    contentPadding.calculateBottomPadding() + ScreenOffset,
+            )
         }
 
         fullscreenImageUrl?.let { imageUrl ->

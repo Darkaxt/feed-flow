@@ -4,7 +4,6 @@ import java.util.*
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.androidx.baselineprofile)
-    alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.triplet.play)
     alias(libs.plugins.about.libraries.android)
@@ -159,6 +158,9 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
             "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
             "-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi",
             "-opt-in=androidx.compose.animation.ExperimentalAnimationApi",
+            "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
+            "-opt-in=androidx.compose.foundation.layout.ExperimentalLayoutApi",
+            "-opt-in=kotlinx.coroutines.FlowPreview",
             "-opt-in=co.touchlab.kermit.ExperimentalKermitApi",
             "-opt-in=kotlin.ExperimentalStdlibApi",
         )
@@ -174,17 +176,24 @@ baselineProfile {
 
 dependencies {
     implementation(project(":shared"))
-    implementation(project(":sharedUI"))
+    implementation(project(":i18n"))
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.io.coil.compose)
+    implementation(libs.io.coil.network)
+    implementation(libs.lyricist)
+    implementation(libs.immutable.collections)
+    implementation(libs.saket.swipe)
+    implementation(libs.compose.unstyled.slider)
     implementation(libs.androidx.profileinstaller)
     "baselineProfile"(project(":benchmarks"))
  
-    implementation(libs.compose.multiplatform.runtime)
-    implementation(libs.compose.multiplatform.foundation)
+    implementation(libs.androidx.compose.runtime)
+    implementation(libs.androidx.compose.foundation)
     implementation(libs.compose.material3)
-    implementation(libs.compose.multiplatform.material.icons.extended)
-    implementation(libs.compose.multiplatform.ui)
-    implementation(libs.compose.multiplatform.ui.tooling)
-    implementation(libs.compose.multiplatform.material3.adaptive.navigationsuite)
+    implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.compose.material3.adaptive.navigationsuite)
  
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.viewModel.compose)
@@ -231,8 +240,9 @@ dependencies {
     "googlePlayImplementation"(libs.revenuecat.purchases)
     "googlePlayImplementation"(libs.revenuecat.purchases.ui)
 
-    debugImplementation(libs.compose.multiplatform.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.tooling)
 
+    testImplementation(platform(libs.androidx.compose.bom))
     testImplementation(libs.junit)
     testImplementation(project(":database"))
     testImplementation(libs.sqldelight.android.driver)
@@ -244,6 +254,7 @@ dependencies {
     testImplementation(libs.org.robolectric)
     testImplementation(libs.androidx.test.core.ktx)
     testImplementation(libs.kotlinx.coroutines.test)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
 }
 
 play {
