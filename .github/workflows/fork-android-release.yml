@@ -1,6 +1,7 @@
 name: Fork Android Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - '*-widget-card.*'
@@ -102,6 +103,10 @@ jobs:
           ./gradlew --quiet --console=plain
           detekt allTests :androidApp:assembleFDroidRelease
 
+      - name: Report failed Gradle tests
+        if: ${{ failure() }}
+        run: python3 .scripts/report-gradle-test-failures.py
+
       - name: Locate and checksum signed APK
         id: artifact
         run: |
@@ -168,6 +173,7 @@ jobs:
           fi
 
       - name: Publish GitHub release
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
         env:
           GH_TOKEN: ${{ github.token }}
           APK_PATH: ${{ steps.artifact.outputs.apk_path }}
