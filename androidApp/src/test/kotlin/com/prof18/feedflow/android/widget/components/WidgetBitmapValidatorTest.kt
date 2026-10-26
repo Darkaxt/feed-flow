@@ -177,9 +177,11 @@ class WidgetBitmapValidatorTest {
 
         assertTrue(
             result == null ||
-                result.config == Bitmap.Config.ARGB_8888 &&
-                result.config != Bitmap.Config.HARDWARE &&
-                result.allocationByteCount.toLong() <= 20L * 20L * 4L,
+                (
+                    result.config == Bitmap.Config.ARGB_8888 &&
+                        result.config != Bitmap.Config.HARDWARE &&
+                        result.allocationByteCount.toLong() <= 20L * 20L * 4L
+                    ),
         )
     }
 

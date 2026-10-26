@@ -20,6 +20,8 @@ struct SidebarDrawer: View {
 
     @Environment(\.openURL)
     var openURL
+    @Environment(\.horizontalSizeClass)
+    private var horizontalSizeClass
 
     @Binding var selectedSidebarItem: SidebarSelection?
 
@@ -31,9 +33,8 @@ struct SidebarDrawer: View {
     @State private var showClearOldArticlesDialog = false
     @State private var expandedCategoryIds: Set<String> = []
     @State private var showDeleteCategoryDialog = false
-    @State private var showEditCategoryDialog = false
     @State private var categoryToDelete: String?
-    @State private var categoryToEdit: String?
+    @State private var categoryToEdit: EditCategoryRequest?
     @State private var editedCategoryName: String = ""
     @State private var showChangeCategorySheet = false
     @State private var showFeedSuggestionsSheet = false
@@ -64,7 +65,7 @@ struct SidebarDrawer: View {
     let onReorderFeedSources: ([FeedSource]) -> Void
 
     var isCompactPhone: Bool {
-        UIDevice.current.userInterfaceIdiom == .phone
+        horizontalSizeClass == .compact
     }
 
     @ViewBuilder private var styledList: some View {
@@ -134,7 +135,7 @@ struct SidebarDrawer: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(
                         action: onShowSettingsClick,
-                        label: { Image(systemName: "gear") }
+                        label: { Label(feedFlowStrings.settingsTitle, systemImage: "gear") }
                     )
                     .accessibilityIdentifier(DrawerAccessibilityIdentifiers.settingsButton)
                 }
@@ -156,7 +157,7 @@ struct SidebarDrawer: View {
                                 label: { Label(feedFlowStrings.importFeedButton, systemImage: "square.and.arrow.down") }
                             )
                         },
-                        label: { Image(systemName: "plus") }
+                        label: { Label(feedFlowStrings.addFeed, systemImage: "plus") }
                     )
                     .accessibilityIdentifier(FeedSuggestionsIds.menuButton)
                 }
@@ -200,7 +201,6 @@ struct SidebarDrawer: View {
             )
             .background(
                 EditCategoryDialog(
-                    isPresented: $showEditCategoryDialog,
                     categoryToEdit: $categoryToEdit,
                     editedCategoryName: $editedCategoryName,
                     validateCategoryName: validateCategoryName,
@@ -241,8 +241,7 @@ struct SidebarDrawer: View {
 
     func requestCategoryEdit(_ category: FeedSourceCategory) {
         editedCategoryName = category.title
-        categoryToEdit = category.id
-        showEditCategoryDialog = true
+        categoryToEdit = EditCategoryRequest(id: category.id)
     }
 
     func requestAllFeedsDeletion(in categoryId: String) {

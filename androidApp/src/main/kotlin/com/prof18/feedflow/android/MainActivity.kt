@@ -27,7 +27,9 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +62,7 @@ import com.prof18.feedflow.android.editfeed.toEditFeed
 import com.prof18.feedflow.android.editfeed.toFeedSource
 import com.prof18.feedflow.android.feedsourcelist.FeedSourceListScreen
 import com.prof18.feedflow.android.feedsuggestions.FeedSuggestionsScreen
+import com.prof18.feedflow.android.feedverification.FeedVerificationScreen
 import com.prof18.feedflow.android.home.HomeScreen
 import com.prof18.feedflow.android.readermode.ReaderModeScreen
 import com.prof18.feedflow.android.search.SearchScreen
@@ -179,7 +182,7 @@ class MainActivity : BaseThemeActivity() {
 
         val deeplinkState by deeplinkViewModel.deeplinkFeedState.collectAsStateWithLifecycle()
 
-        LaunchedEffect(currentIntent) {
+        SideEffect(currentIntent) {
             currentIntent?.let { intent ->
                 if (intent.action == Intent.ACTION_VIEW && intent.data != null) {
                     val uri = intent.data
@@ -210,7 +213,7 @@ class MainActivity : BaseThemeActivity() {
             }
         }
 
-        LaunchedEffect(deeplinkState) {
+        SideEffect(deeplinkState) {
             handleDeepLinkState(
                 state = deeplinkState,
                 deeplinkViewModel = deeplinkViewModel,
@@ -272,6 +275,7 @@ class MainActivity : BaseThemeActivity() {
                 SnackbarHost(snackbarHostState)
             }
         }
+        FeedVerificationScreen()
     }
 
     private fun shouldShowNowPlaying(state: AudioPlaybackState, backStack: NavBackStack<NavKey>): Boolean =
@@ -339,7 +343,7 @@ class MainActivity : BaseThemeActivity() {
                 }
 
                 entry<Home> { route ->
-                    LaunchedEffect(Unit) {
+                    SideEffect(Unit) {
                         val feedId: String? = route.feedSourceId
                         if (!feedId.isNullOrEmpty()) {
                             homeViewModel.updateFeedSourceFilter(feedId)
@@ -489,6 +493,8 @@ class MainActivity : BaseThemeActivity() {
                 }
 
                 entry<ReaderMode> {
+                    val verificationState by readerModeViewModel.verificationState.collectAsStateWithLifecycle()
+                    DisposableEffect(Unit) { onDispose { readerModeViewModel.cancelVerification() } }
                     val readerModeState by readerModeViewModel.readerModeState.collectAsStateWithLifecycle()
                     val fontSettingsState by readerModeViewModel.readerFontSettingsState
                         .collectAsStateWithLifecycle()
@@ -502,6 +508,9 @@ class MainActivity : BaseThemeActivity() {
 
                     ReaderModeScreen(
                         onOpenAudioEpisode = onOpenAudioEpisode,
+                        verificationState = verificationState,
+                        verificationAvailable = readerModeViewModel.verificationAvailable,
+                        onVerifyWebsite = readerModeViewModel::verifyWebsite,
                         readerModeState = readerModeState,
                         fontSize = fontSettingsState.fontSize,
                         themeMode = themeState,
@@ -557,7 +566,7 @@ class MainActivity : BaseThemeActivity() {
                     val feedSource: FeedSource = route.toFeedSource()
                     val viewModel = koinViewModel<EditFeedViewModel>()
 
-                    LaunchedEffect(feedSource) {
+                    SideEffect(feedSource) {
                         viewModel.loadFeedToEdit(feedSource)
                     }
 

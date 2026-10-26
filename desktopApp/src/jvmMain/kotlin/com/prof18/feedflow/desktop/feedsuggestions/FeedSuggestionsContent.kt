@@ -27,6 +27,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -55,7 +56,6 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
-import com.composeunstyled.rememberScrollbarState
 import com.prof18.feedflow.core.model.FeedAddState
 import com.prof18.feedflow.core.model.SuggestedFeed
 import com.prof18.feedflow.core.model.SuggestedFeedCategory
@@ -224,7 +224,7 @@ private fun SuggestionFeedArea(
                 }
             }
             if (feedState.canScrollForward || feedState.canScrollBackward) {
-                FeedFlowVerticalScrollbar(rememberScrollbarState(feedState))
+                FeedFlowVerticalScrollbar(feedState)
             }
         }
     }
@@ -418,6 +418,7 @@ private fun FeedSuggestionOperationStatus?.isBusy(): Boolean =
     this == FeedSuggestionOperationStatus.Adding || this == FeedSuggestionOperationStatus.Refreshing
 
 @Composable
+@ReadOnlyComposable
 private fun suggestionActionHeight(): Dp =
     with(LocalDensity.current) { JewelTheme.defaultTextStyle.lineHeight.toDp() } + 16.dp
 

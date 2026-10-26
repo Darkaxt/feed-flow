@@ -223,8 +223,9 @@ private fun WidgetCardSlabRow(
     contentPaddingDp: Int? = null,
     content: @Composable RowScope.() -> Unit,
 ) {
-    var sizeModifier = modifier.fillMaxWidth()
-    rowHeightDp?.let { sizeModifier = sizeModifier.height(it.dp) }
+    val sizeModifier = modifier.fillMaxWidth().let { fullWidth ->
+        rowHeightDp?.let { fullWidth.height(it.dp) } ?: fullWidth
+    }
 
     if (usesResourceBackedWidgetCardSlab(Build.VERSION.SDK_INT)) {
         AndroidRemoteViews(
@@ -237,9 +238,11 @@ private fun WidgetCardSlabRow(
             containerViewId = R.id.widget_card_slab_content,
             modifier = sizeModifier.clickable(clickAction),
         ) {
-            var rowModifier = GlanceModifier.fillMaxWidth()
-            rowHeightDp?.let { rowModifier = rowModifier.height(it.dp) }
-            contentPaddingDp?.let { rowModifier = rowModifier.padding(it.dp) }
+            val rowModifier = GlanceModifier.fillMaxWidth().let { fullWidth ->
+                rowHeightDp?.let { fullWidth.height(it.dp) } ?: fullWidth
+            }.let { sized ->
+                contentPaddingDp?.let { sized.padding(it.dp) } ?: sized
+            }
             Row(
                 modifier = rowModifier,
                 verticalAlignment = Alignment.CenterVertically,
@@ -249,8 +252,9 @@ private fun WidgetCardSlabRow(
         return
     }
 
-    contentPaddingDp?.let { sizeModifier = sizeModifier.padding(it.dp) }
-    val slabModifier = sizeModifier.cornerRadius(cornerRadiusDp.dp)
+    val slabModifier = sizeModifier.let { sized ->
+        contentPaddingDp?.let { sized.padding(it.dp) } ?: sized
+    }.cornerRadius(cornerRadiusDp.dp)
         .background(slabFillColor ?: ColorProvider(Color.Transparent))
     Row(
         modifier = slabModifier.clickable(clickAction),

@@ -130,7 +130,6 @@ kotlin {
                 implementation(libs.kotlinx.serialization.json)
                 implementation(libs.kotlinx.date.time)
                 implementation(libs.flatlaf)
-                implementation(libs.compose.unstyled.scrollbars)
             }
         }
 
@@ -168,11 +167,6 @@ tasks.withType<Test>().configureEach {
         maxParallelForks = 1
         systemProperty("skiko.renderApi", "SOFTWARE")
     }
-}
-
-// Detekt 1.23's compiler cannot accept Java 25 as its analysis target.
-tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
-    jvmTarget = "21"
 }
 
 val isAppStoreRelease = project.property("macOsAppStoreRelease").toString().toBoolean()

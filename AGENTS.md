@@ -70,7 +70,7 @@ Use the [Android CLI](https://developer.android.com/tools/agents/android-cli) (`
 
 **Precondition — a device/emulator must be running.** Check with `adb devices`. Do not assume an emulator: use the first device returned by `adb devices` (real device or emulator — both are fine). If none is connected, default to the resizable emulator: `android emulator start Resizable_Experimental` (verify the exact AVD name with `android emulator list` if it fails).
 
-Devices are shared with other worktrees and agents, and every debug build installs over the same app. A build whose database schema is older than the installed one crashes on launch with `Can't downgrade database from version N to M`. If the user says a device is in use, pick another one. Before clearing the app's data to install an older-schema build, ask, then restore the development feeds afterwards.
+Devices are shared with other worktrees and agents, and every debug build installs over the same app. A build whose database schema is older than the installed one crashes on launch with `Can't downgrade database from version N to M`. If the user says a device is in use, pick another one. Before clearing the app's data to install an older-schema build, ask, then restore the development feeds afterwards. iOS simulators are shared the same way and can also hold preference values an older checkout can't parse; validate an older checkout in a dedicated simulator instead of wiping a shared one.
 
 **Resizable emulator display mode.** When testing with the resizable emulator and the task needs a specific form factor, set it before building/running:
 
@@ -174,7 +174,7 @@ Before handing off you must:
 1. Run `.scripts/refresh-translations.sh` before the Gradle checks if you changed translation resources
 2. Run `./gradlew --quiet --console=plain detekt allTests` to ensure Kotlin/shared/Android/Desktop checks pass - don't run it if you modified only swift files
 3. Run `.scripts/ios-format.sh` to format iOS code - only run if you made changes on the iOS app
-4. If you changed iOS code, run `xcodebuild -project iosApp/FeedFlow.xcodeproj -scheme FeedFlow -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build -quiet` before handoff; rerun without `-quiet` only if you need the full diagnostics
+4. If you changed iOS code, run `xcodebuild -project iosApp/FeedFlow.xcodeproj -scheme FeedFlow -destination 'platform=iOS Simulator,name=iPhone 18 Pro' build -quiet` before handoff; rerun without `-quiet` only if you need the full diagnostics
 5. Fix any issues found during the above steps
 
 ### Initial Setup (for building from scratch)
@@ -242,7 +242,9 @@ For Miniflux/GReader sync failures, compare FeedFlow's exact requests and header
 - Run Gradle tasks with `--quiet --console=plain`.
 - Prefer keeping data classes and other simple model types at the bottom of a file, or in a dedicated model file when they are shared by multiple classes.
 - Android app modules use AGP 9's built-in Kotlin support; do not re-add `org.jetbrains.kotlin.android`. Android and Desktop app version values come from the `com.feedflow.versioning` convention plugin, not `versioning.gradle.kts`.
-- Detekt is still on the `1.23.x` line, so keep `io.nlopez.compose.rules:detekt` on `0.4.x` unless the repo migrates to Detekt 2; `0.5.0+` is Detekt 2-only for this repo.
+- Detekt is on Detekt 2 (`dev.detekt`, ktlint via `detekt-rules-ktlint-wrapper`). Bump `io.nlopez.compose.rules:detekt` only to a release whose dependency matrix matches the repo's Detekt and Kotlin versions. `config/detekt/detekt.yml` holds only overrides on top of the defaults (`buildUponDefaultConfig`); add a rule there only to change it.
+- `detekt` also runs the type-resolved tasks (`detektMainJvm` in KMP modules, `detektGooglePlayDebug`/`detektFdroidDebug` in `androidApp`), which compile the code first; rules such as compose-rules' `UnnecessaryLaunchedEffect` and `MissingReadOnlyComposable` only run there. For a quick source-only pass use a light task like `:sharedUI:detektCommonMainSourceSet`. Generated sources under `build/` are excluded. "Compiler errors found during analysis" on KMP modules comes from Detekt flattening expect/actual into one module; `-Pfeedflow.detektDebug=true` prints them.
+- `UnnecessaryLaunchedEffect`: use a keyed `SideEffect(key) { }` for effects that only make synchronous calls; keep `LaunchedEffect` for suspending work and for `FocusRequester.requestFocus` (allowed in the config).
 - Detekt's `MagicNumber` rule has `ignoreNamedArgument: true`. Do NOT extract a literal into a private constant when it is passed as a named argument (e.g. `Modifier.widthIn(max = 180.dp)`, `shadowElevation = 3.dp`, `.copy(alpha = 0.8f)`) — inline it. Only extract a named constant when the literal is a positional argument that Detekt would flag (e.g. `.zIndex(0.5f)`, `.height(28.dp)`); values in `ignoreNumbers` (`-1, 0, 1, 2`) never need one.
 - Every Android Material `DropdownMenu` must pass `shape = MaterialTheme.shapes.large`. Desktop menus use Jewel component styling.
 
@@ -259,9 +261,9 @@ For Miniflux/GReader sync failures, compare FeedFlow's exact requests and header
 ### Git Commit Messages
 When creating commits:
 - Use simple, one-liner commit messages
-- DO NOT include phase numbers (e.g., "Phase 1", "Phase 2")
-- DO NOT add "Generated with Claude Code" attribution
-- DO NOT add "Co-Authored-By: Claude" attribution
+- Don't include phase numbers (e.g., "Phase 1", "Phase 2").
+- Don't add a "Generated with Claude Code" line.
+- Don't add a "Co-Authored-By: Claude" trailer.
 - Example: `git commit -m "Add foundation for unified article parsing system"`
 
 ### macOS Desktop Code Signing
@@ -271,8 +273,8 @@ When creating commits:
 
 ### iOS Development
 - Build iOS with `xcodebuild … -quiet`; rerun without `-quiet` only when you need the full diagnostics.
-- Direct xcodebuild alternative: `xcodebuild -project iosApp/FeedFlow.xcodeproj -scheme FeedFlow -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build -quiet`
-- The app builds against the iOS 26 SDK with a minimum deployment target of iOS 17 (`iosApp/project.yml`). Gate newer APIs with `#available` checks.
+- Direct xcodebuild alternative: `xcodebuild -project iosApp/FeedFlow.xcodeproj -scheme FeedFlow -destination 'platform=iOS Simulator,name=iPhone 18 Pro' build -quiet`
+- The app requires Xcode 27.1 or newer and builds against the iOS 27.1 SDK, with a minimum deployment target of iOS 17 (`iosApp/project.yml`). Gate newer APIs with `#available` checks; do not add `#if compiler(...)` guards for older Xcode versions.
 - Keep app-group database work that may outlive an iOS foreground interval inside `withSuspensionGuard`; it uses `NSProcessInfo` and also works in the widget and share extensions.
 - Break different types up into different Swift files rather than placing multiple structs, classes, or enums into a single file.
 - Keep accessibility identifier enums in separate `*AccessibilityIdentifiers.swift` files, not appended to view files.
@@ -301,8 +303,9 @@ When creating commits:
 - Run .scripts/refresh-translations.sh after adding a new translation, to re-generate the kotlin code
 - Store screenshots for **all** platforms (Android phone/tablet, iPhone, iPad, macOS, Windows) are rendered from repo code by `tools/screenshots/` (`node render.mjs --all`, then `node verify.mjs`), not Figma. Use the repo-local `render-store-screenshots` skill when translations change; it enforces the spacing/padding floors.
 - Use the repo-local `translation-release-audit` skill for weekly or release checks of app translations, store copy, generated Play listing files, live store metadata, and screenshot copy/assets. Do not upload store metadata/screenshots unless the user explicitly asks.
-- NEVER add hardcoded strings in the code. Always use the i18n resources.
-- NEVER try to translate other languages by yourself. Add only the English strings. The translations will be handled by professionals later.
+- Don't hardcode user-visible strings; put them in the i18n resources.
+- Add only the English strings and don't translate other languages yourself: professional translators handle them later.
+- Write English UI copy without a first-person "we": address the user or describe the state ("Couldn't connect to iCloud", not "We are unable to connect"). Match the tone of the existing strings.
 
 ### Flatpak / Linux Desktop
 - `.scripts/flatpak-build-setup.sh` -> Prepare the project for Flatpak builds (sets release props, disables JetBrains JDK vendor, disables toolchain auto-provisioning, comments out Android-only Gradle plugins)
@@ -313,7 +316,7 @@ When creating commits:
 
 ### CI/CD
 - CI config: `.github/workflows/code-checks.yaml`
-- Pipeline: `checks` (macos-26, detekt + allTests + swiftlint) -> `build-android-app` + `build-desktop-app` + `build-ios-app` (in parallel)
+- Pipeline: `checks` (macos-26, detekt + allTests + swiftlint) -> `build-android-app` + `build-desktop-app` + `build-ios-app` (in parallel). The iOS build job and the iOS release job run on GitHub's `xcode-27` runner (a preview image) and select Xcode 27.1 with `maxim-lobanov/setup-xcode`: the iPhone Duo layout uses iOS 27.1 SDK APIs, so Xcode 27.0 cannot build the app.
 - iOS CI build forces arm64 simulator architecture: `xcodebuild -project iosApp/FeedFlow.xcodeproj -configuration Debug -scheme FeedFlow -sdk iphonesimulator -destination "generic/platform=iOS Simulator" ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build | xcbeautify --renderer github-actions`
 - CI runs `.scripts/refresh-translations.sh` before checks; do this locally before pushing if translations changed
 - Debugging CI failures: `gh run list --limit=10`, then `gh run view <run-id> --log`

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
@@ -385,6 +386,7 @@ internal fun resolveWidgetCardDividerLayout(
 }
 
 @Composable
+@ReadOnlyComposable
 private fun defaultWidgetHeaderTitle(filter: WidgetContentFilter): String = when (filter) {
     WidgetContentFilter.Bookmarks -> LocalFeedFlowStrings.current.drawerTitleBookmarks
     else -> LocalFeedFlowStrings.current.widgetLatestItems

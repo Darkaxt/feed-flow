@@ -6,7 +6,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -73,7 +73,6 @@ import com.prof18.feedflow.desktop.ui.components.ConfirmationDialog
 import com.prof18.feedflow.desktop.ui.components.DesktopDesignTokens
 import com.prof18.feedflow.desktop.ui.components.FeedFlowTheme
 import com.prof18.feedflow.desktop.ui.components.SnackbarHost
-import com.prof18.feedflow.desktop.ui.components.scrollbarStyle
 import com.prof18.feedflow.shared.data.DesktopWindowSettingsRepository
 import com.prof18.feedflow.shared.domain.feedsync.FeedSyncRepository
 import com.prof18.feedflow.shared.presentation.HomeViewModel
@@ -169,7 +168,7 @@ private fun MainWindowEffects(
         }
     }
 
-    LaunchedEffect(composeWindow.rootPane) {
+    SideEffect(composeWindow.rootPane) {
         if (getDesktopOS().isMacOs()) {
             with(composeWindow.rootPane) {
                 putClientProperty("apple.awt.transparentTitleBar", true)
@@ -254,13 +253,12 @@ private fun FrameWindowScope.MainWindowContent(
     val homeViewModel = koinViewModel<HomeViewModel>()
     val homeListStateStore = rememberDesktopHomeListStateStore()
 
-    LaunchedEffect(Unit) {
+    SideEffect(Unit) {
         homeViewModel.onAppLaunch()
     }
 
     val menuCommands = remember { DesktopMenuCommands() }
     CompositionLocalProvider(
-        LocalScrollbarStyle provides scrollbarStyle(),
         LocalDesktopMenuCommands provides menuCommands,
     ) {
         val reduceMotionEnabled = LocalReduceMotion.current
@@ -335,7 +333,6 @@ private fun FrameWindowScope.MainWindowContent(
 
         CompositionLocalProvider(
             LocalDesktopDialogWindowNavigator provides dialogWindowNavigator,
-            LocalScrollbarStyle provides scrollbarStyle(),
         ) {
             val onSearch: (() -> Unit)? = if (backStack.lastOrNull() == Home) {
                 { backStack.add(Search) }
