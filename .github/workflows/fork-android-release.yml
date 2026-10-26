@@ -2,6 +2,14 @@ name: Fork Android Release
 
 on:
   workflow_dispatch:
+    inputs:
+      verification:
+        description: Verification scope (manual diagnostic runs never publish)
+        type: choice
+        default: full
+        options:
+          - full
+          - desktop-settings
   push:
     tags:
       - '*-widget-card.*'
@@ -98,16 +106,25 @@ jobs:
           sudo apt-get install --yes --no-install-recommends openbox x11-utils xvfb
 
       - name: Run release gate
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.verification == 'full' }}
         run: >-
           xvfb-run --auto-servernum bash .scripts/with-linux-test-window-manager.sh
           ./gradlew --quiet --console=plain
           detekt allTests :androidApp:assembleFDroidRelease
+
+      - name: Diagnose Linux settings window
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.verification == 'desktop-settings' }}
+        run: >-
+          xvfb-run --auto-servernum bash .scripts/with-linux-test-window-manager.sh
+          ./gradlew --info --console=plain :desktopApp:jvmTest
+          --tests com.prof18.feedflow.desktop.settings.DesktopSettingsWindowTest
 
       - name: Report failed Gradle tests
         if: ${{ failure() }}
         run: python3 .scripts/report-gradle-test-failures.py
 
       - name: Locate and checksum signed APK
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.verification == 'full' }}
         id: artifact
         run: |
           set -euo pipefail
@@ -136,6 +153,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Verify APK signature
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.verification == 'full' }}
         env:
           APK_PATH: ${{ steps.artifact.outputs.apk_path }}
         run: |

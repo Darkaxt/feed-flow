@@ -263,7 +263,10 @@ class DesktopSettingsWindowTest {
         // The OS keeps a window inside the usable screen, so small displays (CI VMs) get a smaller initial size.
         val screen = GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
         assertTrue(initialSize.isResizable)
-        assertTrue(initialSize.width >= minOf((INITIAL_WIDTH_DP * densityScale).toInt(), screen.width))
+        assertTrue(
+            initialSize.width >= minOf((INITIAL_WIDTH_DP * densityScale).toInt(), screen.width),
+            "Initial window $initialSize, screen $screen, density $densityScale",
+        )
         assertTrue(initialSize.height >= minOf((INITIAL_HEIGHT_DP * densityScale).toInt(), screen.height))
         assertTrue(initialSize.minimumWidth >= (MINIMUM_WIDTH_DP * densityScale).toInt())
         assertTrue(initialSize.minimumHeight >= (MINIMUM_HEIGHT_DP * densityScale).toInt())
