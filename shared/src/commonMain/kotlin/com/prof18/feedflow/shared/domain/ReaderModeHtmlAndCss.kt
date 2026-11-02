@@ -1,7 +1,9 @@
 package com.prof18.feedflow.shared.domain
 
 import com.prof18.feedflow.core.model.AudioEnclosure
+import com.prof18.feedflow.core.model.ReaderFontFamily
 import com.prof18.feedflow.core.model.ReaderModeDefaults
+import com.prof18.feedflow.shared.domain.readerfont.readerFontFaceCss
 
 // Last export: 2025-12-21T11:48:48.756Z
 fun getReaderModeStyledHtml(
@@ -15,6 +17,9 @@ fun getReaderModeStyledHtml(
     siteName: String? = null,
     audioBanner: ReaderAudioBanner? = null,
     languageTag: String? = null,
+    bodyFont: ReaderFontFamily = ReaderModeDefaults.BODY_FONT,
+    headlineFont: ReaderFontFamily = ReaderModeDefaults.HEADLINE_FONT,
+    titleFontSize: Int = ReaderModeDefaults.TITLE_FONT_SIZE,
 ): String {
     val titleTag = if (title != null) {
         "<h1>${title.escapeHtml()}</h1>"
@@ -42,7 +47,7 @@ fun getReaderModeStyledHtml(
     <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-      ${readerModeCss(colors, fontSize, lineHeight)}
+      ${readerModeCss(colors, fontSize, lineHeight, bodyFont, headlineFont, titleFontSize)}
     </style>
     </head>
     <body>
@@ -289,15 +294,27 @@ private val HTML_HEADING_REGEX = Regex(
 private val HTML_ELEMENT_REGEX = Regex("<[^>]*>")
 private val HTML_WHITESPACE_REGEX = Regex("\\s+")
 
-internal fun readerModeCss(colors: ReaderColors?, fontSize: Int, lineHeight: Int): String {
+internal fun readerModeCss(
+    colors: ReaderColors?,
+    fontSize: Int,
+    lineHeight: Int,
+    bodyFont: ReaderFontFamily = ReaderModeDefaults.BODY_FONT,
+    headlineFont: ReaderFontFamily = ReaderModeDefaults.HEADLINE_FONT,
+    titleFontSize: Int = ReaderModeDefaults.TITLE_FONT_SIZE,
+): String {
     val fontSizeCss = "${fontSize}px"
     val lineHeightCss = readerLineHeightToCss(lineHeight)
     val textColor = colors?.textColor ?: "inherit"
     val linkColor = colors?.linkColor ?: "inherit"
     val backgroundColor = colors?.backgroundColor ?: "transparent"
     val borderColor = colors?.borderColor ?: "transparent"
+    val bodyFontCss = bodyFont.cssFontFamilyValue
+    val headlineFontCss = headlineFont.cssFontFamilyValue
+    val fontFaces = readerFontFaceCss(bodyFont, headlineFont)
     // language=css
     return """
+$fontFaces
+
 :root {
     --reader-text: $textColor;
     --reader-link: $linkColor;
@@ -313,7 +330,7 @@ body {
     overflow-x: hidden;
     overflow-wrap: break-word;
     font: -apple-system-body;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    font-family: $bodyFontCss;
     font-size: $fontSizeCss;
     line-height: $lineHeightCss;
     padding-bottom: 112px;
@@ -333,6 +350,7 @@ body {
 #__content {
     line-height: $lineHeightCss;
     overflow-x: hidden;
+    font-family: $bodyFontCss;
 }
 
 @media screen and (min-width: 650px) {
@@ -341,11 +359,12 @@ body {
 
 h1, h2, h3, h4, h5, h6 {
     line-height: 1.2;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    font-family: $headlineFontCss;
     font-weight: 800;
 }
 
 body > h1 {
+    font-size: ${titleFontSize}px;
     padding: 0 16px;
     margin: 16px auto;
     max-width: 700px;
@@ -430,9 +449,11 @@ a:link {
     color: var(--reader-link);
 }
 
-figure {
+figure, .wp-caption {
     margin-left: 0;
     margin-right: 0;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 figcaption, cite {
@@ -706,6 +727,21 @@ fun readerLineHeightToTextLineHeightSp(fontSize: Int, step: Int): Int =
 fun readerFontSizeJs(fontSize: Int): String =
     """document.getElementById("container").style.fontSize = "$fontSize" + "px";"""
 
+// The injected article title is the only h1 directly under body; headings inside the article keep their sizes.
+fun readerTitleFontSizeJs(titleFontSize: Int): String =
+    """
+        (function() {
+          var styleId = "__feedflow_title_font_size_style";
+          var style = document.getElementById(styleId);
+          if (!style) {
+            style = document.createElement("style");
+            style.id = styleId;
+            document.head.appendChild(style);
+          }
+          style.textContent = "body > h1 { font-size: ${titleFontSize}px; }";
+        })();
+    """.trimIndent()
+
 fun readerLineHeightLabel(step: Int): String = readerLineHeightToCss(step)
 
 fun readerCodeBlockColors(isDarkMode: Boolean): ReaderCodeBlockColors = if (isDarkMode) {
@@ -727,6 +763,38 @@ fun readerLineHeightJs(step: Int): String {
             document.head.appendChild(style);
           }
           style.textContent = "body, #__content { line-height: $lineHeight; }";
+        })();
+    """.trimIndent()
+}
+
+fun readerFontFamilyJs(bodyFont: ReaderFontFamily, headlineFont: ReaderFontFamily): String {
+    val fontFaces = readerFontFaceCss(bodyFont, headlineFont)
+        .replace("\\", "\\\\")
+        .replace("`", "\\`")
+        .replace("$", "\\$")
+    val bodyCss = bodyFont.cssFontFamilyValue.replace("'", "\\'")
+    val headlineCss = headlineFont.cssFontFamilyValue.replace("'", "\\'")
+    return """
+        (function() {
+          var faceStyleId = "__feedflow_font_face_style";
+          var faceStyle = document.getElementById(faceStyleId);
+          if (!faceStyle) {
+            faceStyle = document.createElement("style");
+            faceStyle.id = faceStyleId;
+            document.head.appendChild(faceStyle);
+          }
+          faceStyle.textContent = `$fontFaces`;
+
+          var familyStyleId = "__feedflow_font_family_style";
+          var familyStyle = document.getElementById(familyStyleId);
+          if (!familyStyle) {
+            familyStyle = document.createElement("style");
+            familyStyle.id = familyStyleId;
+            document.head.appendChild(familyStyle);
+          }
+          familyStyle.textContent =
+            "body, #__content { font-family: $bodyCss; }" +
+            "h1, h2, h3, h4, h5, h6 { font-family: $headlineCss; }";
         })();
     """.trimIndent()
 }

@@ -321,7 +321,7 @@ AND (
         (SELECT pub_date FROM feed_item WHERE url_hash = :targetItemId) IS NULL
         AND (
             pub_date IS NOT NULL
-            OR (pub_date IS NULL AND url_hash >= :targetItemId)
+            OR (pub_date IS NULL AND url_hash > :targetItemId)
         )
     )
     OR (
@@ -331,7 +331,7 @@ AND (
             pub_date > (SELECT pub_date FROM feed_item WHERE url_hash = :targetItemId)
             OR (
                 pub_date = (SELECT pub_date FROM feed_item WHERE url_hash = :targetItemId)
-                AND url_hash >= :targetItemId
+                AND url_hash > :targetItemId
             )
         )
     )
@@ -362,7 +362,7 @@ AND (
     (
         (SELECT pub_date FROM feed_item WHERE url_hash = :targetItemId) IS NULL
         AND pub_date IS NULL
-        AND url_hash <= :targetItemId
+        AND url_hash < :targetItemId
     )
     OR (
         (SELECT pub_date FROM feed_item WHERE url_hash = :targetItemId) IS NOT NULL
@@ -371,7 +371,7 @@ AND (
             OR pub_date < (SELECT pub_date FROM feed_item WHERE url_hash = :targetItemId)
             OR (
                 pub_date = (SELECT pub_date FROM feed_item WHERE url_hash = :targetItemId)
-                AND url_hash <= :targetItemId
+                AND url_hash < :targetItemId
             )
         )
     )
@@ -404,7 +404,7 @@ AND (
         (SELECT pub_date FROM feed_item WHERE url_hash = :targetItemId) IS NULL
         AND (
             pub_date IS NOT NULL
-            OR (pub_date IS NULL AND url_hash >= :targetItemId)
+            OR (pub_date IS NULL AND url_hash > :targetItemId)
         )
     )
     OR (
@@ -414,7 +414,7 @@ AND (
             pub_date > (SELECT pub_date FROM feed_item WHERE url_hash = :targetItemId)
             OR (
                 pub_date = (SELECT pub_date FROM feed_item WHERE url_hash = :targetItemId)
-                AND url_hash >= :targetItemId
+                AND url_hash > :targetItemId
             )
         )
     )
@@ -446,7 +446,7 @@ AND (
     (
         (SELECT pub_date FROM feed_item WHERE url_hash = :targetItemId) IS NULL
         AND pub_date IS NULL
-        AND url_hash <= :targetItemId
+        AND url_hash < :targetItemId
     )
     OR (
         (SELECT pub_date FROM feed_item WHERE url_hash = :targetItemId) IS NOT NULL
@@ -455,7 +455,7 @@ AND (
             OR pub_date < (SELECT pub_date FROM feed_item WHERE url_hash = :targetItemId)
             OR (
                 pub_date = (SELECT pub_date FROM feed_item WHERE url_hash = :targetItemId)
-                AND url_hash <= :targetItemId
+                AND url_hash < :targetItemId
             )
         )
     )
@@ -505,6 +505,19 @@ AND is_blocked = 0
 GROUP BY feed_source.url_hash
 ORDER BY pub_date DESC;
 
+selectArticlesToNotify:
+SELECT feed_item.url_hash AS id,
+       feed_item.title,
+       feed_source.title AS feed_source_title,
+       feed_item.image_url
+FROM feed_item
+INNER JOIN feed_source ON feed_item.feed_source_id = feed_source.url_hash
+LEFT JOIN feed_source_preferences ON feed_source.url_hash = feed_source_preferences.feed_source_id
+WHERE feed_source_preferences.notifications_enabled = 1
+AND feed_item.notification_sent = 0
+AND feed_item.is_blocked = 0
+ORDER BY feed_item.pub_date DESC, feed_item.url_hash DESC;
+
 markFeedItemsNotified:
 UPDATE feed_item
 SET notification_sent = 1
@@ -518,10 +531,25 @@ WHERE url_hash IN (
     AND is_blocked = 0
 );
 
+markArticleItemsNotified:
+UPDATE feed_item
+SET notification_sent = 1
+WHERE url_hash IN :ids;
+
+markFeedSourceItemsNotified:
+UPDATE feed_item
+SET notification_sent = 1
+WHERE feed_source_id = :feedSourceId
+AND notification_sent = 0;
+
 updateReadStatusFromFeedItemStatus:
 UPDATE feed_item
 SET is_read = CASE 
     WHEN url_hash IN (SELECT feed_item_id FROM feed_item_status WHERE type = 'UNREAD') THEN 0
+    ELSE 1
+END,
+notification_sent = CASE
+    WHEN url_hash IN (SELECT feed_item_id FROM feed_item_status WHERE type = 'UNREAD') THEN notification_sent
     ELSE 1
 END;
 

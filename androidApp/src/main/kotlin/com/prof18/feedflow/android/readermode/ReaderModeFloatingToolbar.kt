@@ -68,6 +68,7 @@ import com.prof18.feedflow.android.ui.utils.LocalFeedFlowStrings
 import com.prof18.feedflow.android.ui.utils.exposeTestTagsAsResourceIds
 import com.prof18.feedflow.core.model.ArticleReportUiState
 import com.prof18.feedflow.core.model.FeedItemId
+import com.prof18.feedflow.core.model.ReaderFontFamily
 import com.prof18.feedflow.core.model.ReaderModeState
 import com.prof18.feedflow.core.model.ShownContentSource
 import com.prof18.feedflow.i18n.FeedFlowStrings
@@ -132,6 +133,11 @@ fun ReaderModeFloatingToolbar(
     onFontSizeChange: (Int) -> Unit,
     lineHeight: Int,
     onLineHeightChange: (Int) -> Unit,
+    titleFontSize: Int,
+    onTitleFontSizeChange: (Int) -> Unit,
+    headlineFont: ReaderFontFamily,
+    bodyFont: ReaderFontFamily,
+    onFontFamiliesChange: (headline: ReaderFontFamily, body: ReaderFontFamily) -> Unit,
     articleReportState: ArticleReportUiState,
     onReportArticle: () -> Unit,
     modifier: Modifier = Modifier,
@@ -362,16 +368,23 @@ fun ReaderModeFloatingToolbar(
     if (showFontSizeMenu) {
         ModalBottomSheet(
             onDismissRequest = { showFontSizeMenu = false },
-            sheetState = rememberModalBottomSheetState(),
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         ) {
             ReaderTextSettingsSheetContent(
+                // The sheet is its own window, so the activity's test-tag exposure doesn't reach it.
                 modifier = Modifier
                     .navigationBarsPadding()
+                    .exposeTestTagsAsResourceIds()
                     .testTag(ReaderModeE2eIds.TEXT_SETTINGS_SHEET),
                 fontSize = fontSize,
                 onFontSizeChange = onFontSizeChange,
                 lineHeight = lineHeight,
                 onLineHeightChange = onLineHeightChange,
+                titleFontSize = titleFontSize,
+                onTitleFontSizeChange = onTitleFontSizeChange,
+                headlineFont = headlineFont,
+                bodyFont = bodyFont,
+                onFontFamiliesChange = onFontFamiliesChange,
                 resetButtonModifier = Modifier.testTag(ReaderModeE2eIds.TEXT_SETTINGS_RESET_BUTTON),
             )
         }

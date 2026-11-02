@@ -360,6 +360,40 @@ class HomeViewModelTest : KoinTestBase() {
     }
 
     @Test
+    fun `markAsReadOnScroll keeps items from keep-unread feeds unread`() = runTest(testDispatcher) {
+        settingsRepository.setMarkFeedAsReadWhenScrolling(true)
+        val feedSource = createFeedSource(id = "source-1", title = "Source 1")
+        val keepUnreadSource = createFeedSource(id = "source-2", title = "Source 2")
+        insertFeedSources(feedSource, keepUnreadSource)
+        databaseHelper.setKeepUnreadOnScroll(keepUnreadSource.id, true)
+        val items = listOf(
+            buildFeedItem(id = "item-1", title = "Item 1", pubDateMillis = 3000, source = feedSource),
+            buildFeedItem(id = "item-2", title = "Item 2", pubDateMillis = 2000, source = keepUnreadSource),
+            buildFeedItem(id = "item-3", title = "Item 3", pubDateMillis = 1000, source = feedSource),
+        )
+        databaseHelper.insertFeedItems(items, lastSyncTimestamp = 0)
+
+        val viewModel = getViewModel()
+        advanceUntilIdle()
+
+        viewModel.onVisibleFeedItemsChanged(
+            listOf(
+                VisibleFeedItem(id = "item-1", index = 0),
+                VisibleFeedItem(id = "item-2", index = 1),
+            ),
+        )
+        viewModel.onVisibleFeedItemsChanged(
+            listOf(
+                VisibleFeedItem(id = "item-3", index = 2),
+            ),
+        )
+        advanceUntilIdle()
+
+        val readIds = getDbItems().filter { it.is_read }.map { it.url_hash }.toSet()
+        assertEquals(setOf("item-1"), readIds)
+    }
+
+    @Test
     fun `markAsReadOnScroll accumulates observed items while debounce is pending`() = runTest(testDispatcher) {
         settingsRepository.setMarkFeedAsReadWhenScrolling(true)
         val feedSource = createFeedSource(id = "source-1", title = "Source 1")
@@ -954,6 +988,33 @@ class HomeViewModelTest : KoinTestBase() {
     }
 
     @Test
+    fun `returning to top applies the deferred feed update`() = runTest(testDispatcher) {
+        val feedSource = createFeedSource(id = "source-1", title = "Source 1")
+        insertFeedSources(feedSource)
+        databaseHelper.insertFeedItems(
+            listOf(buildFeedItem(id = "existing", title = "Existing", pubDateMillis = 1, source = feedSource)),
+            lastSyncTimestamp = 0,
+        )
+        val viewModel = getViewModel()
+        advanceUntilIdle()
+        viewModel.onFeedListScrolledAwayFromTopChanged(true)
+        databaseHelper.insertFeedItems(
+            listOf(buildFeedItem(id = "new-item", title = "New", pubDateMillis = 2, source = feedSource)),
+            lastSyncTimestamp = 0,
+        )
+        feedStateRepository.publishFetchedFeeds()
+
+        assertEquals(listOf("existing"), viewModel.feedState.value.map { it.id })
+        assertEquals(1, viewModel.pendingNewArticlesState.value)
+
+        viewModel.onFeedListScrolledAwayFromTopChanged(false)
+        advanceUntilIdle()
+
+        assertEquals(setOf("existing", "new-item"), viewModel.feedState.value.map { it.id }.toSet())
+        assertEquals(0, viewModel.pendingNewArticlesState.value)
+    }
+
+    @Test
     fun `markAllRead updates state and database`() = runTest(testDispatcher) {
         val feedSource = createFeedSource(id = "source-1", title = "Source 1")
         insertFeedSources(feedSource)
@@ -1188,7 +1249,7 @@ class HomeViewModelTest : KoinTestBase() {
         assertEquals(listOf("item-1", "item-2", "item-3"), viewModel.feedState.value.map { it.id })
         assertTrue(viewModel.feedState.value[1].isRead)
 
-        feedStateRepository.markItemsBelowAsRead("item-3")
+        feedStateRepository.markItemsBelowAsRead("item-2")
         assertEquals(listOf("item-1", "item-2", "item-3"), viewModel.feedState.value.map { it.id })
         assertTrue(viewModel.feedState.value.last().isRead)
     }
@@ -1214,8 +1275,7 @@ class HomeViewModelTest : KoinTestBase() {
         viewModel.markAllAboveAsRead("item-2")
         advanceUntilIdle()
 
-        assertEquals(1, viewModel.feedState.value.size)
-        assertEquals("item-3", viewModel.feedState.value.first().id)
+        assertEquals(listOf("item-2", "item-3"), viewModel.feedState.value.map { it.id })
     }
 
     @Test
@@ -1239,8 +1299,7 @@ class HomeViewModelTest : KoinTestBase() {
         viewModel.markAllBelowAsRead("item-2")
         advanceUntilIdle()
 
-        assertEquals(1, viewModel.feedState.value.size)
-        assertEquals("item-1", viewModel.feedState.value.first().id)
+        assertEquals(listOf("item-1", "item-2"), viewModel.feedState.value.map { it.id })
     }
 
     @Test
@@ -1262,7 +1321,7 @@ class HomeViewModelTest : KoinTestBase() {
 
         val dbItems = getDbItems().associateBy { it.url_hash }
         assertTrue(dbItems.getValue("item-1").is_read)
-        assertTrue(dbItems.getValue("item-2").is_read)
+        assertTrue(dbItems.getValue("item-2").is_read.not())
         assertTrue(dbItems.getValue("item-3").is_read.not())
     }
 
@@ -1285,7 +1344,7 @@ class HomeViewModelTest : KoinTestBase() {
 
         val dbItems = getDbItems().associateBy { it.url_hash }
         assertTrue(dbItems.getValue("item-1").is_read.not())
-        assertTrue(dbItems.getValue("item-2").is_read)
+        assertTrue(dbItems.getValue("item-2").is_read.not())
         assertTrue(dbItems.getValue("item-3").is_read)
     }
 

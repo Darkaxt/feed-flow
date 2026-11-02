@@ -6,12 +6,12 @@
   "rangeStrategy": "bump",
   "packageRules": [
     {
-      "groupName": "Kotlin, KSP, SKIE",
+      "description": "New Kotlin versions need a matching SKIE release, so they must land in a single PR. KSP is versioned independently of Kotlin since 2.3.0 and updates on its own.",
+      "groupName": "Kotlin, SKIE",
       "groupSlug": "kotlin",
       "matchPackageNames": [
-        "com.google.devtools.ksp",
-        "org.jetbrains.kotlin",
-        "co.touchlab.skie"
+        "/^org\\.jetbrains\\.kotlin[.:]/",
+        "/^co\\.touchlab\\.skie[.:]/"
       ]
     },
     {
@@ -19,6 +19,13 @@
         "com.feedflow.detekt:com.feedflow.detekt.gradle.plugin",
         "com.feedflow.library:com.feedflow.library.gradle.plugin",
         "com.github.prof18:lyricist"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "sqlite-jdbc must match the version SQLDelight's sqlite-driver brings in and the macOS sandbox native library in desktopApp/resources-sandbox. Update it by hand together with SQLDelight (see the comment in gradle/libs.versions.toml).",
+      "matchPackageNames": [
+        "org.xerial:sqlite-jdbc"
       ],
       "enabled": false
     },

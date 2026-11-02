@@ -22,8 +22,10 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import app.cash.sqldelight.db.SqlDriver
 import co.touchlab.kermit.Logger
 import com.prof18.feedflow.core.model.ThemeMode
+import com.prof18.feedflow.core.utils.AppDataPathBuilder
 import com.prof18.feedflow.core.utils.AppEnvironment
 import com.prof18.feedflow.core.utils.DesktopOS
 import com.prof18.feedflow.core.utils.getDesktopOS
@@ -31,6 +33,14 @@ import com.prof18.feedflow.core.utils.isMacOs
 import com.prof18.feedflow.desktop.di.DI
 import com.prof18.feedflow.desktop.resources.Res
 import com.prof18.feedflow.desktop.resources.icon
+import com.prof18.feedflow.desktop.startup.AlreadyRunningWindow
+import com.prof18.feedflow.desktop.startup.DatabaseStartupErrorWindow
+import com.prof18.feedflow.desktop.startup.DesktopStartupCoordinator
+import com.prof18.feedflow.desktop.startup.InstanceActivation
+import com.prof18.feedflow.desktop.startup.SingleInstanceLock
+import com.prof18.feedflow.desktop.startup.StartupState
+import com.prof18.feedflow.desktop.startup.bringToFront
+import com.prof18.feedflow.desktop.startup.handleStartupCrash
 import com.prof18.feedflow.desktop.telemetry.TelemetryDeckClient
 import com.prof18.feedflow.desktop.ui.DesktopWindowBackground
 import com.prof18.feedflow.desktop.ui.components.restoreInitialLinuxWindowSize
@@ -44,8 +54,14 @@ import com.prof18.feedflow.shared.data.SettingsRepository
 import com.prof18.feedflow.shared.domain.DatabaseCloser
 import com.prof18.feedflow.shared.domain.DesktopAutoRefreshScheduler
 import com.prof18.feedflow.shared.domain.feedsync.FeedSyncRepository
+import com.prof18.feedflow.shared.logging.DatabaseFailureReporterConfig
+import com.prof18.feedflow.shared.logging.reportDesktopDatabaseFailure
+import io.sentry.Sentry
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.painterResource
@@ -53,35 +69,80 @@ import java.awt.Toolkit
 import java.io.File
 import java.io.InputStream
 import java.util.Properties
+import kotlin.system.exitProcess
 import kotlin.time.Duration.Companion.milliseconds
 
-@OptIn(ExperimentalComposeUiApi::class)
 fun main() {
+    var appConfig: DesktopConfig? = null
+    try {
+        runDesktopApp(onConfigReady = { appConfig = it })
+    } catch (e: Throwable) {
+        reportStartupCrash(e, appConfig)
+        exitProcess(1)
+    }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+private fun runDesktopApp(onConfigReady: (DesktopConfig) -> Unit) {
     integrateAppImageIfNeeded()
     setupSandboxEnvironment()
 
-    application {
-        val properties = loadProperties()
-        val appConfig = createAppConfig(properties, isIcloudEnabled = setupICloudSupport())
+    val appConfig = createAppConfig(loadProperties(), isIcloudEnabled = setupICloudSupport())
+    onConfigReady(appConfig)
+    val dataFolder = File(AppDataPathBuilder.getAppDataPath(appConfig.appEnvironment))
+    val lockResult = singleInstanceLock.acquire(dataFolder)
+    DatabaseFailureReporterConfig.singleInstanceLockState = singleInstanceLock.state
 
-        var isInitialized by remember { mutableStateOf(false) }
+    if (lockResult == SingleInstanceLock.Result.HeldByOther) {
+        if (InstanceActivation.requestActivation(dataFolder)) return
+        application {
+            AlreadyRunningWindow(onQuit = ::exitApplication)
+        }
+        return
+    }
+    if (lockResult == SingleInstanceLock.Result.Acquired) {
+        instanceActivation.listen(dataFolder) { activationRequests.tryEmit(Unit) }
+    }
+
+    application {
         var showMainWindow by remember { mutableStateOf(false) }
         var initProgress by remember { mutableFloatStateOf(0.1f) }
         var startupThemeMode by remember { mutableStateOf<ThemeMode?>(null) }
+        val startupCoordinator = remember {
+            DesktopStartupCoordinator(
+                initDependencies = {
+                    initializeDependencies(appConfig)
+                    val initialThemeMode = DI.koin.get<SettingsRepository>().getThemeMode()
+                    withContext(Dispatchers.Main) { startupThemeMode = initialThemeMode }
+                    // Open the database here, so a failure reaches the coordinator instead of a composable.
+                    DI.koin.get<SqlDriver>()
+                },
+                afterDatabaseReady = {
+                    DI.koin.get<DesktopAutoRefreshScheduler>().start()
+                    @Suppress("MagicNumber")
+                    withContext(Dispatchers.Main) { initProgress = 0.6f }
+                    setupTelemetryAndCrashReporting(appConfig)
+                },
+                reportStartupFailure = { error ->
+                    runCatching { setupTelemetryAndCrashReporting(appConfig) }
+                    runCatching { reportDesktopDatabaseFailure("startup", error) }
+                },
+            )
+        }
+        val startupState by startupCoordinator.state.collectAsState()
 
         @Suppress("MagicNumber")
         LaunchedEffect(Unit) {
             delay(100.milliseconds)
             initProgress = 0.2f
             launch(Dispatchers.IO) {
-                initializeDependencies(appConfig)
-                val initialThemeMode = DI.koin.get<SettingsRepository>().getThemeMode()
-                withContext(Dispatchers.Main) { startupThemeMode = initialThemeMode }
-                DI.koin.get<DesktopAutoRefreshScheduler>().start()
-                withContext(Dispatchers.Main) { initProgress = 0.6f }
-                setupTelemetryAndCrashReporting(appConfig)
-                withContext(Dispatchers.Main) {
-                    isInitialized = true
+                try {
+                    startupCoordinator.start()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    reportStartupCrash(e, appConfig)
+                    exitProcess(1)
                 }
             }
         }
@@ -90,7 +151,7 @@ fun main() {
         val icon = painterResource(Res.drawable.icon)
         val systemDarkTheme = rememberDesktopDarkTheme()
 
-        if (!showMainWindow) {
+        if (!showMainWindow && startupState !is StartupState.DatabaseFailed) {
             DesktopStartupSplashWindow(
                 themeMode = startupThemeMode,
                 systemDarkTheme = systemDarkTheme,
@@ -99,7 +160,16 @@ fun main() {
             )
         }
 
-        if (isInitialized) {
+        (startupState as? StartupState.DatabaseFailed)?.let { failed ->
+            DatabaseStartupErrorWindow(
+                failure = failed.failure,
+                dataFolder = File(AppDataPathBuilder.getAppDataPath(appConfig.appEnvironment)),
+                onQuit = ::exitApplication,
+                activationRequests = activationRequests,
+            )
+        }
+
+        if (startupState == StartupState.Ready) {
             val desktopWindowSettingsRepository = remember { DI.koin.get<DesktopWindowSettingsRepository>() }
             val settingsRepository = remember { DI.koin.get<SettingsRepository>() }
             val windowState = windowState(desktopWindowSettingsRepository)
@@ -141,6 +211,10 @@ fun main() {
             ) {
                 DesktopWindowBackground(window, desktopWindowBackgroundColor(isDarkTheme, themeMode == ThemeMode.OLED))
 
+                LaunchedEffect(window) {
+                    activationRequests.collect { window.bringToFront(windowState) }
+                }
+
                 LaunchedEffect(Unit) {
                     initProgress = 1f
                     delay(100.milliseconds)
@@ -156,6 +230,28 @@ fun main() {
         }
     }
 }
+
+private fun reportStartupCrash(error: Throwable, appConfig: DesktopConfig?) {
+    val dataFolder = appConfig?.let { File(AppDataPathBuilder.getAppDataPath(it.appEnvironment)) }
+    handleStartupCrash(error = error, appVersion = appConfig?.version, dataFolder = dataFolder)
+    // Only reaches Sentry when startup got far enough to read the crash reporting preference.
+    runCatching {
+        Sentry.captureException(error)
+        Sentry.flush(SENTRY_FLUSH_TIMEOUT_MILLIS)
+    }
+}
+
+private const val SENTRY_FLUSH_TIMEOUT_MILLIS = 2_000L
+
+// Held for the whole process lifetime so the OS keeps the lock until FeedFlow exits.
+private val singleInstanceLock = SingleInstanceLock()
+private val instanceActivation = InstanceActivation()
+
+// Requests that arrive before any window exists are dropped: the splash or main window is about to appear.
+private val activationRequests = MutableSharedFlow<Unit>(
+    extraBufferCapacity = 1,
+    onBufferOverflow = BufferOverflow.DROP_OLDEST,
+)
 
 @Composable
 internal fun DesktopStartupSplashWindow(

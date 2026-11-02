@@ -194,6 +194,9 @@ internal class FeedSourcesRepository(
             }
         }
 
+    fun getKeepUnreadOnScrollFeedSourceIds(): Flow<Set<String>> =
+        databaseHelper.getKeepUnreadOnScrollFeedSourceIdsFlow()
+
     suspend fun insertFeedSourcePreference(
         feedSourceId: String,
         articleOpenMode: ArticleOpenMode,
@@ -315,26 +318,28 @@ internal class FeedSourcesRepository(
         newFeedSource: FeedSource,
         originalFeedSource: FeedSource?,
     ): FeedEditedState {
-        if (newFeedSource != originalFeedSource) {
-            databaseHelper.insertFeedSourcePreference(
-                feedSourceId = newFeedSource.id,
-                articleOpenMode = newFeedSource.articleOpenMode,
-                isHidden = newFeedSource.isHiddenFromTimeline,
-                isPinned = newFeedSource.isPinned,
-                isNotificationEnabled = newFeedSource.isNotificationEnabled,
-                isHideImagesEnabled = newFeedSource.isHideImagesEnabled,
-            )
-            feedStateRepository.getFeeds()
-        }
-        return when (accountsRepository.getCurrentSyncAccount()) {
-            SyncAccounts.FRESH_RSS, SyncAccounts.MINIFLUX, SyncAccounts.BAZQUX ->
-                editFeedSourceForFreshRss(newFeedSource, originalFeedSource)
-            SyncAccounts.FEEDBIN -> editFeedSourceForFeedbin(newFeedSource, originalFeedSource)
-            SyncAccounts.LOCAL,
-            SyncAccounts.DROPBOX,
-            SyncAccounts.GOOGLE_DRIVE,
-            SyncAccounts.ICLOUD,
-            -> editFeedSourceForLocalAccount(newFeedSource, originalFeedSource)
+        return feedStateRepository.runUserWrite<FeedEditedState>(FeedEditedState.Error.GenericError) {
+            if (newFeedSource != originalFeedSource) {
+                databaseHelper.insertFeedSourcePreference(
+                    feedSourceId = newFeedSource.id,
+                    articleOpenMode = newFeedSource.articleOpenMode,
+                    isHidden = newFeedSource.isHiddenFromTimeline,
+                    isPinned = newFeedSource.isPinned,
+                    isNotificationEnabled = newFeedSource.isNotificationEnabled,
+                    isHideImagesEnabled = newFeedSource.isHideImagesEnabled,
+                )
+                feedStateRepository.getFeeds()
+            }
+            return when (accountsRepository.getCurrentSyncAccount()) {
+                SyncAccounts.FRESH_RSS, SyncAccounts.MINIFLUX, SyncAccounts.BAZQUX ->
+                    editFeedSourceForFreshRss(newFeedSource, originalFeedSource)
+                SyncAccounts.FEEDBIN -> editFeedSourceForFeedbin(newFeedSource, originalFeedSource)
+                SyncAccounts.LOCAL,
+                SyncAccounts.DROPBOX,
+                SyncAccounts.GOOGLE_DRIVE,
+                SyncAccounts.ICLOUD,
+                -> editFeedSourceForLocalAccount(newFeedSource, originalFeedSource)
+            }
         }
     }
 
@@ -622,8 +627,9 @@ internal class FeedSourcesRepository(
             cloudSessionId = cloudSessionId,
             withCurrentSession = feedSyncRepository.cloudEditGuard(cloudSessionId),
         )
-        databaseHelper.updateNotificationEnabledStatus(feedSource.id, isNotificationEnabled)
         databaseHelper.insertFeedItems(feedItems, currentTimestamp)
+        // After the items, so enabling notifications marks the initial articles as already notified.
+        databaseHelper.updateNotificationEnabledStatus(feedSource.id, isNotificationEnabled)
         feedSyncRepository.localEditCommitted(cloudSessionId)
         feedSyncRepository.performBackup()
         feedStateRepository.emitUpdateStatus(FinishedFeedUpdateStatus)

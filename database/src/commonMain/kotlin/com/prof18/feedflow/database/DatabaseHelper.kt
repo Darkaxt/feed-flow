@@ -10,7 +10,9 @@ import app.cash.sqldelight.coroutines.mapToOneOrDefault
 import app.cash.sqldelight.db.SqlDriver
 import co.touchlab.kermit.Logger
 import com.prof18.feedflow.core.model.ArticleExportFilter
+import com.prof18.feedflow.core.model.ArticleNotificationPolicy
 import com.prof18.feedflow.core.model.ArticleOpenMode
+import com.prof18.feedflow.core.model.ArticleToNotify
 import com.prof18.feedflow.core.model.AudioEnclosure
 import com.prof18.feedflow.core.model.CategoryWithUnreadCount
 import com.prof18.feedflow.core.model.CloudFeedAndCategorySnapshot
@@ -63,6 +65,8 @@ import kotlinx.coroutines.withContext
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 class DatabaseHelper(
     private val sqlDriver: SqlDriver,
@@ -285,16 +289,58 @@ class DatabaseHelper(
         }
     }
 
-    suspend fun insertFeedItems(feedItems: List<FeedItem>, lastSyncTimestamp: Long) =
+    suspend fun insertFeedItems(
+        feedItems: List<FeedItem>,
+        lastSyncTimestamp: Long,
+        markFirstSyncItemsAsNotified: Boolean = false,
+    ) =
         dbRef.transactionWithContext(backgroundDispatcher, suspensionGuardReason = "Saving fetched articles") {
-            writeFeedItems(feedItems)
-
-            // One update per source instead of one per item: the timestamp is identical for all
-            // of them, and this transaction is on the path that gets killed for running long.
-            for (feedSourceId in feedItems.mapTo(mutableSetOf()) { it.feedSource.id }) {
-                dbRef.feedSourceQueries.updateLastSyncTimestamp(lastSyncTimestamp, feedSourceId)
-            }
+            writeFetchedItems(feedItems, lastSyncTimestamp, markFirstSyncItemsAsNotified)
         }
+
+    /**
+     * Saves everything one refresh produced in a single transaction, so a failure never leaves new
+     * timestamps or cache validators next to articles that were not saved (or the other way around).
+     */
+    suspend fun persistFeedRefresh(
+        feedItems: List<FeedItem>,
+        syncedFeedSourceIds: List<String>,
+        lastSyncTimestamp: Long,
+        updatedCacheInfo: List<FeedSourceCacheInfo>,
+        markFirstSyncItemsAsNotified: Boolean,
+    ) = dbRef.transactionWithContext(backgroundDispatcher, suspensionGuardReason = "Saving fetched articles") {
+        if (feedItems.isNotEmpty()) {
+            writeFetchedItems(feedItems, lastSyncTimestamp, markFirstSyncItemsAsNotified)
+        }
+        for (feedSourceId in syncedFeedSourceIds) {
+            dbRef.feedSourceQueries.updateLastSyncTimestamp(lastSyncTimestamp, feedSourceId)
+        }
+        updatedCacheInfo.forEach(::writeCacheInfo)
+    }
+
+    private fun writeFetchedItems(
+        feedItems: List<FeedItem>,
+        lastSyncTimestamp: Long,
+        markFirstSyncItemsAsNotified: Boolean,
+    ) {
+        writeFeedItems(feedItems)
+
+        // A source's first sync brings in its back-catalog, which must not be announced as new.
+        if (markFirstSyncItemsAsNotified) {
+            feedItems
+                .filter { it.feedSource.lastSyncTimestamp == null }
+                .mapTo(mutableSetOf()) { it.feedSource.id }
+                .forEach { feedSourceId ->
+                    dbRef.feedItemQueries.markFeedSourceItemsNotified(feedSourceId)
+                }
+        }
+
+        // One update per source instead of one per item: the timestamp is identical for all
+        // of them, and this transaction is on the path that gets killed for running long.
+        for (feedSourceId in feedItems.mapTo(mutableSetOf()) { it.feedSource.id }) {
+            dbRef.feedSourceQueries.updateLastSyncTimestamp(lastSyncTimestamp, feedSourceId)
+        }
+    }
 
     private fun writeFeedItems(feedItems: List<FeedItem>) {
         for (feedItem in feedItems) {
@@ -783,18 +829,20 @@ class DatabaseHelper(
 
     suspend fun updateFeedSourcesCacheInfo(cacheInfoList: List<FeedSourceCacheInfo>) =
         dbRef.transactionWithContext(backgroundDispatcher) {
-            for (cacheInfo in cacheInfoList) {
-                dbRef.feedSourceCacheInfoQueries.upsertCacheInfo(
-                    url_hash = cacheInfo.feedSourceId,
-                    etag = cacheInfo.etag,
-                    last_modified = cacheInfo.lastModified,
-                    validators_timestamp = cacheInfo.validatorsTimestamp,
-                    next_fetch_timestamp = cacheInfo.nextFetchTimestamp,
-                    backoff_timestamp = cacheInfo.backoffTimestamp,
-                    user_agent_tier = cacheInfo.userAgentTier,
-                )
-            }
+            cacheInfoList.forEach(::writeCacheInfo)
         }
+
+    private fun writeCacheInfo(cacheInfo: FeedSourceCacheInfo) {
+        dbRef.feedSourceCacheInfoQueries.upsertCacheInfo(
+            url_hash = cacheInfo.feedSourceId,
+            etag = cacheInfo.etag,
+            last_modified = cacheInfo.lastModified,
+            validators_timestamp = cacheInfo.validatorsTimestamp,
+            next_fetch_timestamp = cacheInfo.nextFetchTimestamp,
+            backoff_timestamp = cacheInfo.backoffTimestamp,
+            user_agent_tier = cacheInfo.userAgentTier,
+        )
+    }
 
     suspend fun deleteFeedSource(
         feedSourceId: String,
@@ -1346,6 +1394,7 @@ class DatabaseHelper(
         isNotificationEnabled: Boolean,
         isHideImagesEnabled: Boolean,
     ) = dbRef.transactionWithContext(backgroundDispatcher) {
+        val wasNotificationEnabled = isNotificationEnabled(feedSourceId)
         dbRef.feedSourcePreferencesQueries.insertPreference(
             feed_source_id = feedSourceId,
             article_open_mode = articleOpenMode,
@@ -1362,7 +1411,39 @@ class DatabaseHelper(
             notificationsEnabled = isNotificationEnabled,
             hideImages = isHideImagesEnabled,
         )
+        if (isNotificationEnabled && !wasNotificationEnabled) {
+            dbRef.feedItemQueries.markFeedSourceItemsNotified(feedSourceId)
+        }
     }
+
+    suspend fun setKeepUnreadOnScroll(feedSourceId: String, enabled: Boolean) =
+        dbRef.transactionWithContext(backgroundDispatcher) {
+            dbRef.feedSourcePreferencesQueries.insertKeepUnreadOnScrollPreference(
+                feed_source_id = feedSourceId,
+                keep_unread_on_scroll = enabled,
+            )
+            dbRef.feedSourcePreferencesQueries.updateKeepUnreadOnScroll(
+                keepUnreadOnScroll = enabled,
+                feedSourceId = feedSourceId,
+            )
+        }
+
+    suspend fun isKeepUnreadOnScrollEnabled(feedSourceId: String): Boolean = withContext(backgroundDispatcher) {
+        dbRef.feedSourcePreferencesQueries
+            .isKeepUnreadOnScrollEnabled(feedSourceId)
+            .executeAsOneOrNull() ?: false
+    }
+
+    fun getKeepUnreadOnScrollFeedSourceIdsFlow(): Flow<Set<String>> =
+        dbRef.feedSourcePreferencesQueries
+            .getKeepUnreadOnScrollFeedSourceIds()
+            .asFlow()
+            .catch {
+                logger.d(it) { "Something wrong while getting data from Database" }
+            }
+            .mapToList(backgroundDispatcher)
+            .map { ids -> ids.toSet() }
+            .flowOn(backgroundDispatcher)
 
     suspend fun deleteCategoriesExcept(categoryIds: List<String>) = dbRef.transactionWithContext(backgroundDispatcher) {
         dbRef.feedSourceCategoryQueries.deleteAllExcept(categoryIds)
@@ -1417,20 +1498,7 @@ class DatabaseHelper(
 
     suspend fun updateNotificationEnabledStatus(feedSourceId: String, enabled: Boolean) =
         dbRef.transactionWithContext(backgroundDispatcher) {
-            val feedSourcePreference = dbRef.feedSourcePreferencesQueries
-                .getPreference(feedSourceId)
-                .executeAsOneOrNull()
-            if (feedSourcePreference == null) {
-                dbRef.feedSourcePreferencesQueries.insertNotificationEnabledPreference(
-                    feed_source_id = feedSourceId,
-                    notifications_enabled = enabled,
-                )
-            } else {
-                dbRef.feedSourcePreferencesQueries.updateNotificationEnabledStatus(
-                    feedSourceId = feedSourceId,
-                    enabled = enabled,
-                )
-            }
+            setNotificationEnabled(feedSourceId, enabled)
         }
 
     suspend fun updateFeedSourceFetchFailed(feedSourceId: String, fetchFailed: Boolean) =
@@ -1445,22 +1513,37 @@ class DatabaseHelper(
         dbRef.transactionWithContext(backgroundDispatcher) {
             val feedSources = dbRef.feedSourceQueries.selectAllUrlHashes().executeAsList()
             feedSources.forEach { feedSourceId ->
-                val feedSourcePreference = dbRef.feedSourcePreferencesQueries
-                    .getPreference(feedSourceId)
-                    .executeAsOneOrNull()
-                if (feedSourcePreference == null) {
-                    dbRef.feedSourcePreferencesQueries.insertNotificationEnabledPreference(
-                        feed_source_id = feedSourceId,
-                        notifications_enabled = enabled,
-                    )
-                } else {
-                    dbRef.feedSourcePreferencesQueries.updateNotificationEnabledStatus(
-                        feedSourceId = feedSourceId,
-                        enabled = enabled,
-                    )
-                }
+                setNotificationEnabled(feedSourceId, enabled)
             }
         }
+
+    private fun isNotificationEnabled(feedSourceId: String): Boolean =
+        dbRef.feedSourcePreferencesQueries
+            .getPreference(feedSourceId)
+            .executeAsOneOrNull()
+            ?.notifications_enabled == true
+
+    // Must run inside a transaction. Turning notifications on marks the feed's existing articles as
+    // notified, so only articles fetched afterwards are announced.
+    private fun setNotificationEnabled(feedSourceId: String, enabled: Boolean) {
+        val feedSourcePreference = dbRef.feedSourcePreferencesQueries
+            .getPreference(feedSourceId)
+            .executeAsOneOrNull()
+        if (feedSourcePreference == null) {
+            dbRef.feedSourcePreferencesQueries.insertNotificationEnabledPreference(
+                feed_source_id = feedSourceId,
+                notifications_enabled = enabled,
+            )
+        } else {
+            dbRef.feedSourcePreferencesQueries.updateNotificationEnabledStatus(
+                feedSourceId = feedSourceId,
+                enabled = enabled,
+            )
+        }
+        if (enabled && feedSourcePreference?.notifications_enabled != true) {
+            dbRef.feedItemQueries.markFeedSourceItemsNotified(feedSourceId)
+        }
+    }
 
     suspend fun addBlockedWord(word: String) =
         dbRef.transactionWithContext(backgroundDispatcher) {
@@ -1494,6 +1577,30 @@ class DatabaseHelper(
                     categoryTitle = item.feed_source_category_title,
                 )
             }
+    }
+
+    suspend fun getArticlesToNotify(): List<ArticleToNotify> = withContext(backgroundDispatcher) {
+        dbRef.feedItemQueries.selectArticlesToNotify().executeAsList().map { item ->
+            ArticleToNotify(
+                id = item.id,
+                title = item.title,
+                feedSourceTitle = item.feed_source_title,
+                imageUrl = item.image_url,
+            )
+        }
+    }
+
+    suspend fun markArticleItemsAsNotified(ids: List<String>) {
+        if (ids.isEmpty()) return
+
+        dbRef.transactionWithContext(
+            coroutineContext = backgroundDispatcher,
+            suspensionGuardReason = "FeedFlow article notification acknowledgement",
+        ) {
+            ids.chunked(ArticleNotificationPolicy.ACK_CHUNK_SIZE).forEach { chunk ->
+                dbRef.feedItemQueries.markArticleItemsNotified(chunk)
+            }
+        }
     }
 
     suspend fun markFeedItemsAsNotified() =
@@ -1531,13 +1638,31 @@ class DatabaseHelper(
         body: TransactionWithReturn<T>.() -> T,
     ): T =
         withContext(coroutineContext) {
-            if (suspensionGuardReason == null) {
-                this@transactionWithContext.transactionWithResult(noEnclosing, body)
-            } else {
-                withSuspensionGuard(suspensionGuardReason) {
+            val label = suspensionGuardReason ?: "unnamed"
+            val start = TimeSource.Monotonic.markNow()
+            val result = try {
+                if (suspensionGuardReason == null) {
                     this@transactionWithContext.transactionWithResult(noEnclosing, body)
+                } else {
+                    withSuspensionGuard(suspensionGuardReason) {
+                        this@transactionWithContext.transactionWithResult(noEnclosing, body)
+                    }
                 }
+            } catch (e: DatabaseTransactionException) {
+                throw e
+            } catch (e: Throwable) {
+                if (e.isDatabaseFailure()) {
+                    throw DatabaseTransactionException(label, start.elapsedNow().inWholeMilliseconds, e)
+                }
+                throw e
             }
+            val elapsed = start.elapsedNow()
+            if (elapsed > SLOW_TRANSACTION) {
+                // Constant text: Sentry groups message events by it, so the duration goes to the debug log.
+                logger.w { "Slow database transaction ($label)" }
+                logger.d { "Slow database transaction ($label): ${elapsed.inWholeMilliseconds} ms" }
+            }
+            result
         }
 
     private fun recordCloudPendingArticleFlags(
@@ -2262,5 +2387,6 @@ class DatabaseHelper(
         internal const val DB_FILE_NAME_WITH_EXTENSION = "FeedFlow.db"
         const val APP_DATABASE_NAME_PROD = "FeedFlowDB"
         const val APP_DATABASE_NAME_DEBUG = "FeedFlowDB-debug"
+        private val SLOW_TRANSACTION = 5.seconds
     }
 }

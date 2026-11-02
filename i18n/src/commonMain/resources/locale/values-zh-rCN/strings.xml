@@ -254,7 +254,6 @@
     <string name="decrease_font_size_button_content_description">减小字体大小</string>
     <string name="scroll_to_top_button_content_description">滚动到顶部</string>
     <string name="dropbox_auth_code_expired">授权码已失效。请重试。</string>
-    <string name="database_error_reset">我们加载您的数据时遇到问题，因此需要重新开始。对此我们深表歉意。</string>
     <string name="google_drive_connect_button">连接 Google Drive</string>
     <string name="change_category">更改类别</string>
     <string name="trigger_feed_sync">上传更改</string>
@@ -320,7 +319,7 @@
     <string name="search_filter_bookmarks">收藏</string>
     <string name="settings_refresh_feeds_on_launch">应用启动时刷新订阅源</string>
     <string name="settings_notification_mode">通知分组</string>
-    <string name="settings_notification_mode_desc">按订阅源、类别分组通知，或显示单条合并通知</string>
+    <string name="settings_notification_mode_desc">按文章、订阅源、分类或合并显示通知。</string>
     <string name="settings_reduce_motion">减少动态效果和动画</string>
     <string name="notification_grouped_body">您有新文章待阅读！</string>
     <string name="settings_notification_mode_feed_source">按订阅源</string>
@@ -460,7 +459,6 @@
     <string name="reader_mode_tts_stop">停止聆听</string>
     <string name="reader_mode_tts_error">无法将文章读出来。请重试。</string>
     <string name="reader_mode_tts_preparing">正在准备文章音频…</string>
-    <string name="widget_refreshing">刷新中…</string>
     <string name="widget_show_refresh_button">显示刷新按钮</string>
     <string name="widget_content_feed_source">Feed源</string>
     <string name="date_format_day_month_dot">日期.月份</string>

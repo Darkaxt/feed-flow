@@ -4,7 +4,7 @@ plugins {
 }
 
 kotlin {
-    androidLibrary {
+    android {
         namespace = "com.prof18.feedflow.database"
     }
 
@@ -39,6 +39,7 @@ kotlin {
         jvmMain {
             dependencies {
                 implementation(libs.sqldelight.sqlite.driver)
+                implementation(libs.sqlite.jdbc)
             }
         }
 

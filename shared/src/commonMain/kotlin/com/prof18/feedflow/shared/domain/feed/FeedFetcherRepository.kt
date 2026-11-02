@@ -20,6 +20,7 @@ import com.prof18.feedflow.core.model.StartedFeedUpdateStatus
 import com.prof18.feedflow.core.model.onErrorSuspend
 import com.prof18.feedflow.core.utils.DispatcherProvider
 import com.prof18.feedflow.database.DatabaseHelper
+import com.prof18.feedflow.database.isDatabaseFailure
 import com.prof18.feedflow.feedsync.feedbin.domain.FeedbinRepository
 import com.prof18.feedflow.feedsync.greader.domain.GReaderRepository
 import com.prof18.feedflow.shared.data.SettingsRepository
@@ -36,6 +37,8 @@ import com.prof18.feedflow.shared.domain.recovery.FeedRecoveryRepository
 import com.prof18.feedflow.shared.domain.recovery.FeedVerificationRequired
 import com.prof18.feedflow.shared.domain.recovery.RecoveryTicket
 import com.prof18.feedflow.shared.domain.recovery.RecoveryUpdate
+import com.prof18.feedflow.shared.logging.reportDatabaseFailure
+import com.prof18.feedflow.shared.presentation.model.DatabaseError
 import com.prof18.feedflow.shared.presentation.model.SyncError
 import com.prof18.feedflow.shared.utils.getNumberOfConcurrentParsingRequests
 import com.prof18.rssparser.exception.HttpException
@@ -51,6 +54,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
+import com.prof18.feedflow.core.model.DatabaseError as DatabaseErrorCode
 
 class FeedFetcherRepository internal constructor(
     private val dispatcherProvider: DispatcherProvider,
@@ -82,21 +86,30 @@ class FeedFetcherRepository internal constructor(
         fetchMutex.withLock {
             withContext(dispatcherProvider.io) {
                 feedStateRepository.emitUpdateStatus(StartedFeedUpdateStatus)
-                when {
-                    gReaderRepository.isAccountSet() -> {
-                        fetchFeedsWithGReader(publishToFeedList)
+                try {
+                    when {
+                        gReaderRepository.isAccountSet() -> {
+                            fetchFeedsWithGReader(publishToFeedList)
+                        }
+                        feedbinRepository.isAccountSet() -> {
+                            fetchFeedsWithFeedbin(publishToFeedList)
+                        }
+                        else -> {
+                            fetchFeedsWithRssParser(
+                                isFirstLaunch = isFirstLaunch,
+                                forceRefresh = forceRefresh,
+                                publishToFeedList = publishToFeedList,
+                                feedFilter = feedFilter,
+                            )
+                        }
                     }
-                    feedbinRepository.isAccountSet() -> {
-                        fetchFeedsWithFeedbin(publishToFeedList)
-                    }
-                    else -> {
-                        fetchFeedsWithRssParser(
-                            isFirstLaunch = isFirstLaunch,
-                            forceRefresh = forceRefresh,
-                            publishToFeedList = publishToFeedList,
-                            feedFilter = feedFilter,
-                        )
-                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    if (!e.isDatabaseFailure()) throw e
+                    reportDatabaseFailure("refresh_write", e, logger)
+                    feedStateRepository.emitErrorState(DatabaseError(DatabaseErrorCode.SaveFailed))
+                    feedStateRepository.emitUpdateStatus(FinishedFeedUpdateStatus)
                 }
             }
         }
@@ -128,7 +141,7 @@ class FeedFetcherRepository internal constructor(
         // After fetching new feeds, delete old ones based on user settings
         cleanOldFeeds(publishToFeedList)
         if (publishToFeedList) {
-            feedStateRepository.getFeeds()
+            feedStateRepository.publishFetchedFeeds()
         }
     }
 
@@ -149,7 +162,7 @@ class FeedFetcherRepository internal constructor(
         // After fetching new feeds, delete old ones based on user settings
         cleanOldFeeds(publishToFeedList)
         if (publishToFeedList) {
-            feedStateRepository.getFeeds()
+            feedStateRepository.publishFetchedFeeds()
         }
     }
 
@@ -172,7 +185,7 @@ class FeedFetcherRepository internal constructor(
         feedToUpdate.addAll(feedSourceUrls.map { it.url })
 
         if (!isFirstLaunch && publishToFeedList) {
-            feedStateRepository.getFeeds()
+            feedStateRepository.publishFetchedFeeds()
         }
         feedStateRepository.emitUpdateStatus(
             InProgressFeedUpdateStatus(
@@ -196,7 +209,7 @@ class FeedFetcherRepository internal constructor(
         cleanOldFeeds(publishToFeedList)
         updateRefreshCount()
         if (publishToFeedList) {
-            feedStateRepository.getFeeds()
+            feedStateRepository.publishFetchedFeeds()
         }
     }
 
@@ -239,7 +252,7 @@ class FeedFetcherRepository internal constructor(
         feedSyncRepository.deleteFeedItems(oldFeedIds)
         databaseHelper.cleanupOldDeletedItems()
         if (publishToFeedList) {
-            feedStateRepository.getFeeds()
+            feedStateRepository.publishFetchedFeeds()
         }
     }
 
@@ -406,29 +419,20 @@ class FeedFetcherRepository internal constructor(
 
         val syncTimestamp = dateFormatter.currentTimeMillis()
 
-        if (allFeedItems.isNotEmpty()) {
-            logger.d { "Inserting ${allFeedItems.size} items into database" }
-            try {
-                databaseHelper.insertFeedItems(
-                    feedItems = allFeedItems,
-                    lastSyncTimestamp = syncTimestamp,
-                )
-            } catch (e: Throwable) {
-                logger.d(e) { "Failed to insert feed items into database" }
-            }
-        }
-
-        // Clear the fetch-failed flag and refresh the timestamp for every successful source,
-        // even those that returned no new items (e.g. an empty or unchanged feed).
-        if (syncedFeedSourceIds.isNotEmpty()) {
-            databaseHelper.updateLastSyncTimestamps(
-                feedSourceIds = syncedFeedSourceIds,
+        logger.d { "Saving ${allFeedItems.size} items into database" }
+        // Always runs: the timestamps clear the fetch-failed flag and the cache info keeps the HTTP
+        // validators even for sources that returned no new items (e.g. an empty or unchanged feed).
+        try {
+            databaseHelper.persistFeedRefresh(
+                feedItems = allFeedItems,
+                syncedFeedSourceIds = syncedFeedSourceIds,
                 lastSyncTimestamp = syncTimestamp,
+                updatedCacheInfo = updatedCacheInfo,
+                markFirstSyncItemsAsNotified = true,
             )
-        }
-
-        if (updatedCacheInfo.isNotEmpty()) {
-            databaseHelper.updateFeedSourcesCacheInfo(updatedCacheInfo)
+        } catch (e: Throwable) {
+            if (e.isDatabaseFailure()) throw e
+            logger.d(e) { "Failed to insert feed items into database" }
         }
     }
 
@@ -482,6 +486,8 @@ class FeedFetcherRepository internal constructor(
                 ),
             )
         } catch (e: Throwable) {
+            // No cancellation rethrow here: the withTimeout above must stay a per-feed failure.
+            if (e.isDatabaseFailure()) throw e
             handleFetchError(
                 feedSource = feedSource,
                 error = e,

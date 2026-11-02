@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalDensity
@@ -24,6 +25,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import com.prof18.feedflow.core.model.ReaderFontFamily
 import com.prof18.feedflow.core.model.ReaderModeDefaults
 import com.prof18.feedflow.desktop.ui.LocalFeedFlowStrings
 import com.prof18.feedflow.desktop.ui.components.FeedFlowTheme
@@ -76,6 +78,120 @@ class ReaderTextSettingsTest {
             assertEquals(ReaderModeDefaults.FONT_SIZE, fontSize.intValue)
             assertEquals(ReaderModeDefaults.LINE_HEIGHT, lineHeight.intValue)
         }
+        rule.onNodeWithText(EnFeedFlowStrings.readerModeResetToDefault).assertIsNotEnabled()
+    }
+
+    @Test
+    fun `reset restores both fonts`() {
+        val headlineFont = mutableStateOf(ReaderFontFamily.IBM_PLEX_SANS)
+        val bodyFont = mutableStateOf(ReaderFontFamily.IBM_PLEX_SANS)
+        rule.setContent {
+            CompositionLocalProvider(LocalFeedFlowStrings provides EnFeedFlowStrings) {
+                FeedFlowTheme(darkTheme = false, useOledTheme = false) {
+                    ReaderTextSettingsControls(
+                        fontSize = ReaderModeDefaults.FONT_SIZE,
+                        lineHeight = ReaderModeDefaults.LINE_HEIGHT,
+                        onFontSizeChange = {},
+                        onLineHeightChange = {},
+                        headlineFont = headlineFont.value,
+                        bodyFont = bodyFont.value,
+                        onHeadlineFontChange = { headlineFont.value = it },
+                        onBodyFontChange = { bodyFont.value = it },
+                    )
+                }
+            }
+        }
+
+        rule.onNodeWithText(EnFeedFlowStrings.readerModeResetToDefault).performClick()
+
+        rule.runOnIdle {
+            assertEquals(ReaderFontFamily.SYSTEM, headlineFont.value)
+            assertEquals(ReaderFontFamily.SYSTEM, bodyFont.value)
+        }
+        rule.onNodeWithText(EnFeedFlowStrings.readerModeResetToDefault).assertIsNotEnabled()
+    }
+
+    @Test
+    fun `one font choice sets both headline and body`() {
+        val headlineFont = mutableStateOf(ReaderFontFamily.SYSTEM)
+        val bodyFont = mutableStateOf(ReaderFontFamily.SYSTEM)
+        rule.setContent {
+            CompositionLocalProvider(LocalFeedFlowStrings provides EnFeedFlowStrings) {
+                FeedFlowTheme(darkTheme = false, useOledTheme = false) {
+                    ReaderTextSettingsControls(
+                        fontSize = ReaderModeDefaults.FONT_SIZE,
+                        lineHeight = ReaderModeDefaults.LINE_HEIGHT,
+                        onFontSizeChange = {},
+                        onLineHeightChange = {},
+                        headlineFont = headlineFont.value,
+                        bodyFont = bodyFont.value,
+                        onHeadlineFontChange = { headlineFont.value = it },
+                        onBodyFontChange = { bodyFont.value = it },
+                    )
+                }
+            }
+        }
+
+        rule.onNodeWithText(ReaderFontFamily.IBM_PLEX_SANS.familyName!!).performClick()
+
+        rule.runOnIdle {
+            assertEquals(ReaderFontFamily.IBM_PLEX_SANS, headlineFont.value)
+            assertEquals(ReaderFontFamily.IBM_PLEX_SANS, bodyFont.value)
+        }
+    }
+
+    @Test
+    fun `latin-only font shows the script coverage hint`() {
+        val bodyFont = mutableStateOf(ReaderFontFamily.SYSTEM)
+        rule.setContent {
+            CompositionLocalProvider(LocalFeedFlowStrings provides EnFeedFlowStrings) {
+                FeedFlowTheme(darkTheme = false, useOledTheme = false) {
+                    ReaderTextSettingsControls(
+                        fontSize = ReaderModeDefaults.FONT_SIZE,
+                        lineHeight = ReaderModeDefaults.LINE_HEIGHT,
+                        onFontSizeChange = {},
+                        onLineHeightChange = {},
+                        headlineFont = bodyFont.value,
+                        bodyFont = bodyFont.value,
+                        onBodyFontChange = { bodyFont.value = it },
+                    )
+                }
+            }
+        }
+
+        rule.onNodeWithText(EnFeedFlowStrings.readerFontLatinScriptOnly).assertDoesNotExist()
+        rule.onNodeWithText(ReaderFontFamily.ATKINSON_HYPERLEGIBLE_NEXT.familyName!!).performClick()
+        rule.onNodeWithText(EnFeedFlowStrings.readerFontLatinScriptOnly).assertExists()
+    }
+
+    @Test
+    fun `preview title drops to one line above the default title size`() {
+        assertEquals(2, previewTitleMaxLines(ReaderModeDefaults.TITLE_FONT_SIZE))
+        assertEquals(1, previewTitleMaxLines(ReaderModeDefaults.TITLE_FONT_SIZE + 1))
+    }
+
+    @Test
+    fun `reset restores the title size`() {
+        val titleFontSize = mutableIntStateOf(20)
+        rule.setContent {
+            CompositionLocalProvider(LocalFeedFlowStrings provides EnFeedFlowStrings) {
+                FeedFlowTheme(darkTheme = false, useOledTheme = false) {
+                    ReaderTextSettingsControls(
+                        fontSize = ReaderModeDefaults.FONT_SIZE,
+                        lineHeight = ReaderModeDefaults.LINE_HEIGHT,
+                        onFontSizeChange = {},
+                        onLineHeightChange = {},
+                        titleFontSize = titleFontSize.value,
+                        onTitleFontSizeChange = { titleFontSize.value = it },
+                    )
+                }
+            }
+        }
+
+        rule.onNodeWithText(EnFeedFlowStrings.readerModeTitleFontSize).assertExists()
+        rule.onNodeWithText(EnFeedFlowStrings.readerModeResetToDefault).performClick()
+
+        rule.runOnIdle { assertEquals(ReaderModeDefaults.TITLE_FONT_SIZE, titleFontSize.value) }
         rule.onNodeWithText(EnFeedFlowStrings.readerModeResetToDefault).assertIsNotEnabled()
     }
 

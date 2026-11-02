@@ -8,6 +8,7 @@ import com.prof18.feedflow.core.model.ArticleReportUiState
 import com.prof18.feedflow.core.model.FeedItem
 import com.prof18.feedflow.core.model.FeedItemId
 import com.prof18.feedflow.core.model.FeedItemUrlInfo
+import com.prof18.feedflow.core.model.ReaderFontFamily
 import com.prof18.feedflow.core.model.ReaderModeData
 import com.prof18.feedflow.core.model.ReaderModeState
 import com.prof18.feedflow.core.model.ShownContentSource
@@ -24,12 +25,14 @@ import com.prof18.feedflow.shared.domain.feed.FeedActionsRepository
 import com.prof18.feedflow.shared.domain.feeditem.ArticleContentParser
 import com.prof18.feedflow.shared.domain.feeditem.FeedItemContentFileHandler
 import com.prof18.feedflow.shared.domain.feeditem.ReaderContentFetcher
+import com.prof18.feedflow.shared.domain.readerfont.readerFontFaceCss
 import com.prof18.feedflow.shared.domain.recovery.FeedRecoveryCoordinator
 import com.prof18.feedflow.shared.domain.recovery.FeedRecoveryRepository
 import com.prof18.feedflow.shared.domain.recovery.ReaderFetchResult
 import com.prof18.feedflow.shared.domain.recovery.RecoveryTicket
 import io.ktor.http.Url
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -87,6 +90,16 @@ class ReaderModeViewModel internal constructor(
                 state.isForArticle(article.id) && !report.sending,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, ArticleReportUiState())
+
+    init {
+        // Reading and encoding the bundled font files is slow; do it off the main thread
+        // before the reader HTML needs the cached @font-face CSS.
+        viewModelScope.launch(Dispatchers.Default) {
+            settingsRepository.readerFontSettingsState.collect { settings ->
+                readerFontFaceCss(settings.bodyFont, settings.headlineFont)
+            }
+        }
+    }
 
     fun requestArticleReport() {
         if (!articleReportState.value.canReport || articleReportMutableState.value.showDisclosure) return
@@ -356,6 +369,8 @@ class ReaderModeViewModel internal constructor(
         baseUrl = baseUrl,
         fontSize = settingsRepository.getReaderModeFontSize(),
         lineHeight = settingsRepository.getReaderModeLineHeight(),
+        bodyFont = settingsRepository.getReaderModeBodyFont(),
+        headlineFont = settingsRepository.getReaderModeHeadlineFont(),
         isBookmarked = urlInfo.isBookmarked,
         commentsUrl = urlInfo.commentsUrl,
         imageUrl = readerImageUrl(urlInfo, shownContentSource),
@@ -410,6 +425,18 @@ class ReaderModeViewModel internal constructor(
 
     fun updateLineHeight(newLineHeight: Int) {
         settingsRepository.setReaderModeLineHeight(newLineHeight)
+    }
+
+    fun updateBodyFont(font: ReaderFontFamily) {
+        settingsRepository.setReaderModeBodyFont(font)
+    }
+
+    fun updateHeadlineFont(font: ReaderFontFamily) {
+        settingsRepository.setReaderModeHeadlineFont(font)
+    }
+
+    fun updateTitleFontSize(newTitleFontSize: Int) {
+        settingsRepository.setReaderModeTitleFontSize(newTitleFontSize)
     }
 
     fun updateBookmarkStatus(feedItemId: FeedItemId, bookmarked: Boolean) {

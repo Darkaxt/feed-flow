@@ -20,7 +20,7 @@ val appVersionName = extra["appVersionName"] as () -> String
 @Suppress("UNCHECKED_CAST")
 val appVersionCode = extra["appVersionCode"] as () -> Int
 
-val generateDesktopBuildInfo by tasks.registering {
+val generateDesktopBuildInfo = tasks.register("generateDesktopBuildInfo") {
     val versionName = appVersionName()
     inputs.property("versionName", versionName)
     val outputDirectory = layout.buildDirectory.dir("generated/desktop-build-info/kotlin")
@@ -48,12 +48,15 @@ val isMacOS = System.getProperty("os.name").lowercase().contains("mac")
 val isLinux = System.getProperty("os.name").lowercase().contains("linux")
 val isWindows = System.getProperty("os.name").startsWith("Windows", ignoreCase = true)
 
+// Generated on every build from the resolved dependencies, so it stays out of the source tree.
+val generatedLicensesDir = layout.buildDirectory.dir("generated/aboutlibraries")
+
 aboutLibraries {
     collect {
         configPath.set(file("config/aboutlibraries"))
     }
     export {
-        outputFile.set(file("src/jvmMain/resources/aboutlibraries.json"))
+        outputFile.set(generatedLicensesDir.map { it.file("aboutlibraries.json") })
     }
 }
 
@@ -93,6 +96,7 @@ kotlin {
     sourceSets {
         jvmMain {
             kotlin.srcDir(generateDesktopBuildInfo)
+            resources.srcDir(tasks.named("exportLibraryDefinitions").map { generatedLicensesDir.get() })
             dependencies {
                 implementation(libs.jewel.int.ui.standalone)
                 implementation(libs.jewel.platform.icons)
@@ -110,6 +114,8 @@ kotlin {
                 implementation(libs.io.coil.network)
                 implementation(libs.jsystem.theme.detector)
                 implementation(project(":shared"))
+                implementation(project(":database"))
+                implementation(libs.sqldelight.runtime)
                 implementation(compose.desktop.currentOs) {
                     exclude(group = "org.jetbrains.compose.material", module = "material")
                 }
@@ -137,6 +143,7 @@ kotlin {
             dependencies {
                 implementation(kotlin("test"))
                 implementation(libs.kotlinx.coroutines.test)
+                implementation(libs.turbine)
                 implementation(compose.desktop.uiTestJUnit4)
                 implementation(compose.desktop.currentOs) {
                     exclude(group = "org.jetbrains.compose.material", module = "material")
@@ -153,6 +160,15 @@ kotlin {
                 implementation(libs.junit.jupiter.api)
             }
         }
+    }
+}
+
+dependencies {
+    constraints {
+        // Jewel markdown images pins older Coil JVM artifacts, which drag in an incompatible Skiko.
+        val coilVersion = libs.versions.io.coil.get()
+        add("jvmMainImplementation", "io.coil-kt.coil3:coil-svg-jvm:$coilVersion")
+        add("jvmMainImplementation", "io.coil-kt.coil3:coil-network-ktor3-jvm:$coilVersion")
     }
 }
 

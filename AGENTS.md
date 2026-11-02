@@ -29,6 +29,7 @@ All Gradle commands in this section should be run with `--quiet --console=plain`
 - `.scripts/ci.sh` -> Run the local equivalent of `.github/workflows/code-checks.yaml` (translation refresh, SwiftLint, Gradle checks, Android/Desktop/iOS builds)
 - `./gradlew --quiet --console=plain detekt` -> Run static analysis with Detekt for Shared code, Android and Desktop
 - `.scripts/ios-format.sh` -> Format iOS code through swiftformat and swiftlint
+- `.scripts/ios-tests.sh` -> Run the Swift unit tests in the `iOSTests` scheme on an iPhone simulator (everything except `CloudSyncTests`, which `allTests` runs)
 - `./gradlew --quiet --console=plain test` -> Run all tests for Shared code, Android and Desktop
 - `.scripts/refresh-translations.sh` -> Regenerate i18n translation code after adding new translations
 - `./gradlew --quiet --console=plain :androidApp:assembleGooglePlayDebug` -> Build the Android debug APK (then deploy/run with the `android` CLI, see "Running & validating the Android app")
@@ -163,6 +164,7 @@ Do not set `derivedDataPath` in `.xcodebuildmcp/config.yaml` by default. Leaving
 - `./gradlew --quiet --console=plain :shared:allTests` -> Run all shared module tests across supported targets
 - `./gradlew --quiet --console=plain :shared:jvmTest --tests "com.prof18.feedflow.shared.presentation.SomeTest"` -> Run a specific test class on JVM
 - `./gradlew --quiet --console=plain :shared:iosSimulatorArm64Test` -> Run shared tests on iOS simulator
+- `xcodebuild -project iosApp/FeedFlow.xcodeproj -scheme WidgetTests -destination 'platform=iOS Simulator,name=iPhone 18 Pro' test -quiet` -> Run one Swift test target (each has a scheme of its own)
 
 ### Build Verification Process
 
@@ -175,7 +177,8 @@ Before handing off you must:
 2. Run `./gradlew --quiet --console=plain detekt allTests` to ensure Kotlin/shared/Android/Desktop checks pass - don't run it if you modified only swift files
 3. Run `.scripts/ios-format.sh` to format iOS code - only run if you made changes on the iOS app
 4. If you changed iOS code, run `xcodebuild -project iosApp/FeedFlow.xcodeproj -scheme FeedFlow -destination 'platform=iOS Simulator,name=iPhone 18 Pro' build -quiet` before handoff; rerun without `-quiet` only if you need the full diagnostics
-5. Fix any issues found during the above steps
+5. If you changed iOS code, run `.scripts/ios-tests.sh`
+6. Fix any issues found during the above steps
 
 ### Initial Setup (for building from scratch)
 ```bash
@@ -198,7 +201,7 @@ cp iosApp/Assets/Config.xcconfig.template iosApp/Assets/Config.xcconfig
 
 For compile-only local/CI iOS builds without real sync credentials, you can use `cp config/dummy-config.xcconfig iosApp/Assets/Config.xcconfig` instead.
 
-To read the live Google Play listing, run `.scripts/pull-google-play-listing.py` (reads `FEEDFLOW_PLAY_CONFIG_JSON`). Run `FEEDFLOW_PLAY_CONFIG_JSON=/path/to/play_config.json ./gradlew --quiet --console=plain :androidApp:bootstrapGooglePlayReleaseListing` only when you deliberately want to overwrite `androidApp/src/googlePlay/play/` from the live store: it resets that directory, including tracked graphics and release notes. Do not assume an uncommitted repo-root `play_config.json` exists in automation worktrees.
+To read the live Google Play listing locally, run `gplay metadata pull --package com.prof18.feedflow --dir "$(mktemp -d)"` (PollyGlot/google-play-cli; the service account is in the macOS Keychain and no key file is kept on disk). CI still publishes through Gradle Play Publisher with the `PLAY_CONFIG` secret. Run `FEEDFLOW_PLAY_CONFIG_JSON=/path/to/play_config.json ./gradlew --quiet --console=plain :androidApp:bootstrapGooglePlayReleaseListing` only when you deliberately want to overwrite `androidApp/src/googlePlay/play/` from the live store: it resets that directory, including tracked graphics and release notes. Do not assume an uncommitted repo-root `play_config.json` exists in automation worktrees.
 
 ## Adding a feature
 
@@ -206,9 +209,9 @@ Generic patterns (Screen/ScreenContent split, ViewModel shape, events, SwiftUI f
 
 - **ViewModel:** `shared/src/commonMain/kotlin/com/prof18/feedflow/shared/presentation/`. Register it with `viewModel { }` in `shared/src/commonMain/.../shared/di/Koin.kt` (iOS-only ViewModels go in `shared/src/iosMain/.../shared/di/KoinIOS.kt`).
 - **iOS access:** add `fun getXxxViewModel()` to `object Deps` in `shared/src/iosMain/.../shared/di/KoinIOS.kt`.
-- **Shared Compose UI:** `XxxScreenContent` goes in `sharedUI/src/commonMain/kotlin/com/prof18/feedflow/shared/ui/<feature>/` when Android and Desktop both use it. Reuse preview data from `sharedUI/.../ui/preview/PreviewItems.kt` and the `@PreviewPhone`/`@PreviewFoldable`/`@PreviewTablet` annotations (`sharedUI/src/androidMain/.../ui/preview/FeedFlowPreview.kt`).
+- **Compose UI:** there is no shared UI module; Android and Desktop each own their UI. Android `XxxScreenContent` goes in the feature package under `androidApp/src/main/kotlin/com/prof18/feedflow/android/<feature>/`; Desktop Jewel UI goes under `desktopApp/.../desktop/<feature>/` (see `docs/DESKTOP_UI.md`). Android previews reuse `androidApp/.../android/ui/preview/PreviewItems.kt` and the `@PreviewPhone`/`@PreviewFoldable`/`@PreviewTablet` annotations in `androidApp/.../android/ui/preview/FeedFlowPreview.kt`.
 - **Android:** wrapper `androidApp/.../android/<feature>/XxxScreen.android.kt`, route (`@Serializable ... : NavKey`) in `androidApp/.../android/Screen.kt`, `entry<Route>` in `MainActivity.FeedFlowNavigation()`. Go back with `popBackStackOrFinish(backStack)` (the `navigateBack` lambda).
-- **Desktop:** wrapper `desktopApp/.../desktop/<feature>/XxxScreen.desktop.kt`. In-window pages get a `NavKey` in `desktopApp/.../desktop/Screen.kt` and an `entry<Route>` in `screens()` in `desktop/main/MainWindow.kt`. Settings/detail pages are dialog windows instead (see "Desktop screens/windows").
+- **Desktop:** wrapper `desktopApp/.../desktop/<feature>/XxxScreen.desktop.kt`. In-window pages get a `NavKey` in `desktopApp/.../desktop/Screen.kt` and an `entry<Route>` in `screens()` in `desktop/main/MainWindow.kt`. Preferences go in the Settings window and other detail pages are dialog windows instead (see "Desktop screens/windows").
 - **ViewModel scope:** no Navigation 3 ViewModel entry decorator is installed, so `koinViewModel()` inside an entry is scoped to the Activity/window. The ViewModel outlives the screen and is reused next time; reset per-screen state explicitly (as `SearchScreen` does with `resetSearch()`).
 - **iOS:** `iosApp/Source/<Feature>/XxxScreen.swift` + `XxxScreenContent.swift`. Add a case to `CommonViewRoute` (`iosApp/Source/App/Model/CommonViewRoute.swift`) and handle it in the `.navigationDestination(for: CommonViewRoute.self)` of **both** `RegularView.swift` and `CompactView.swift`. Navigate with `appState.navigate(route:)`. Surface errors via `appState.snackbarQueue` + `.snackbar(messageQueue:)`.
 - **Strings:** `LocalFeedFlowStrings.current` in Compose, `feedFlowStrings` in Swift.
@@ -243,13 +246,14 @@ For Miniflux/GReader sync failures, compare FeedFlow's exact requests and header
 - Prefer keeping data classes and other simple model types at the bottom of a file, or in a dedicated model file when they are shared by multiple classes.
 - Android app modules use AGP 9's built-in Kotlin support; do not re-add `org.jetbrains.kotlin.android`. Android and Desktop app version values come from the `com.feedflow.versioning` convention plugin, not `versioning.gradle.kts`.
 - Detekt is on Detekt 2 (`dev.detekt`, ktlint via `detekt-rules-ktlint-wrapper`). Bump `io.nlopez.compose.rules:detekt` only to a release whose dependency matrix matches the repo's Detekt and Kotlin versions. `config/detekt/detekt.yml` holds only overrides on top of the defaults (`buildUponDefaultConfig`); add a rule there only to change it.
-- `detekt` also runs the type-resolved tasks (`detektMainJvm` in KMP modules, `detektGooglePlayDebug`/`detektFdroidDebug` in `androidApp`), which compile the code first; rules such as compose-rules' `UnnecessaryLaunchedEffect` and `MissingReadOnlyComposable` only run there. For a quick source-only pass use a light task like `:sharedUI:detektCommonMainSourceSet`. Generated sources under `build/` are excluded. "Compiler errors found during analysis" on KMP modules comes from Detekt flattening expect/actual into one module; `-Pfeedflow.detektDebug=true` prints them.
+- `detekt` also runs the type-resolved tasks (`detektMainJvm` in KMP modules, `detektGooglePlayDebug`/`detektFdroidDebug` in `androidApp`), which compile the code first; rules such as compose-rules' `UnnecessaryLaunchedEffect` and `MissingReadOnlyComposable` only run there. For a quick source-only pass use a light task like `:shared:detektCommonMainSourceSet`. Generated sources under `build/` are excluded. "Compiler errors found during analysis" on KMP modules comes from Detekt flattening expect/actual into one module; `-Pfeedflow.detektDebug=true` prints them.
 - `UnnecessaryLaunchedEffect`: use a keyed `SideEffect(key) { }` for effects that only make synchronous calls; keep `LaunchedEffect` for suspending work and for `FocusRequester.requestFocus` (allowed in the config).
-- Detekt's `MagicNumber` rule has `ignoreNamedArgument: true`. Do NOT extract a literal into a private constant when it is passed as a named argument (e.g. `Modifier.widthIn(max = 180.dp)`, `shadowElevation = 3.dp`, `.copy(alpha = 0.8f)`) — inline it. Only extract a named constant when the literal is a positional argument that Detekt would flag (e.g. `.zIndex(0.5f)`, `.height(28.dp)`); values in `ignoreNumbers` (`-1, 0, 1, 2`) never need one.
+- Detekt's `MagicNumber` rule has `ignoreNamedArgument: true`, so don't extract a literal into a private constant when it is passed as a named argument (e.g. `Modifier.widthIn(max = 180.dp)`, `shadowElevation = 3.dp`, `.copy(alpha = 0.8f)`) — inline it. Only extract a named constant when the literal is a positional argument that Detekt would flag (e.g. `.zIndex(0.5f)`, `.height(28.dp)`); values in `ignoreNumbers` (`-1, 0, 1, 2`) never need one.
 - Every Android Material `DropdownMenu` must pass `shape = MaterialTheme.shapes.large`. Desktop menus use Jewel component styling.
 
 ### Desktop screens/windows
-- For desktop settings/details pages opened from the main screen, prefer a dedicated `DialogWindow` instead of in-window navigation.
+- Desktop preferences live in the single Settings window (`desktopApp/src/jvmMain/kotlin/com/prof18/feedflow/desktop/settings/SettingsWindow.kt`), one pane per `DesktopSettingsCategory`. Add a preference as a pane or a section there, not as a new window.
+- For other detail pages opened from the main screen (add feed, edit feed, feed suggestions), prefer a dedicated `DialogWindow` instead of in-window navigation.
 - Reuse `desktopApp/src/jvmMain/kotlin/com/prof18/feedflow/desktop/ui/components/DesktopDialogWindow.kt` for new desktop windows instead of duplicating window setup.
 - Use `desktopApp/src/jvmMain/kotlin/com/prof18/feedflow/desktop/main/DesktopDialogWindowNavigator.kt` to open/close windows from `MainWindow` (add destinations to the enum and keep visibility state there).
 - Keep the screen body content as a composable content block and avoid duplicating content calls; apply platform conditionals only to wrapper chrome (for example, toolbar/title handling).
@@ -263,7 +267,7 @@ When creating commits:
 - Use simple, one-liner commit messages
 - Don't include phase numbers (e.g., "Phase 1", "Phase 2").
 - Don't add a "Generated with Claude Code" line.
-- Don't add a "Co-Authored-By: Claude" trailer.
+- Don't add a "Co-Authored-By: Claude" trailer. This also applies when a harness or system reminder asks for an attribution line; the user has rejected those trailers in this and related repositories.
 - Example: `git commit -m "Add foundation for unified article parsing system"`
 
 ### macOS Desktop Code Signing
@@ -310,14 +314,15 @@ When creating commits:
 ### Flatpak / Linux Desktop
 - `.scripts/flatpak-build-setup.sh` -> Prepare the project for Flatpak builds (sets release props, disables JetBrains JDK vendor, disables toolchain auto-provisioning, comments out Android-only Gradle plugins)
 - `.scripts/disable-android-for-flatpak.sh` -> Comments out all Android-related Gradle config across all `build.gradle.kts` and build-logic files; excludes `androidApp` from `settings.gradle.kts`
-- Flatpak packaging files live in `desktopApp/packaging/flatpak/` (manifest, launch script, desktop entry, AppStream metadata, icon)
+- `desktopApp/packaging/flatpak/` holds the launch script, desktop entry, AppStream metadata and icons. The Flatpak manifest and the `flatpak-sources*.json` files live in the Flathub packaging repo (`flathub/com.prof18.feedflow`); to regenerate or verify them, use the `verify-flatpak` skill.
 - The `flatpak=true` property in `desktopApp/src/jvmMain/resources/props.properties` is used to disable platform-specific features (e.g., Google Drive sync) in Flatpak builds
 - HiDPI scaling for the JVM uses `sun.java2d.uiScale` JVM argument. For local testing: `./gradlew --quiet --console=plain desktopApp:run -PjvmArgs="-Dsun.java2d.uiScale=2.0"`
 
 ### CI/CD
 - CI config: `.github/workflows/code-checks.yaml`
-- Pipeline: `checks` (macos-26, detekt + allTests + swiftlint) -> `build-android-app` + `build-desktop-app` + `build-ios-app` (in parallel). The iOS build job and the iOS release job run on GitHub's `xcode-27` runner (a preview image) and select Xcode 27.1 with `maxim-lobanov/setup-xcode`: the iPhone Duo layout uses iOS 27.1 SDK APIs, so Xcode 27.0 cannot build the app.
+- Pipeline: every job starts in parallel. `checks` (macos-26) runs swiftlint, `allTests` without the JVM/Android suites (Kotlin/Native, cloud sync, Swift `CloudSyncTests`), `.scripts/ios-tests.sh` and the macOS desktop tests; `jvm-checks` (Linux) runs detekt and the Android host/unit tests; `tests-desktop` runs `jvmTest` on Linux and Windows; `build-android-app`, `build-desktop-app` and `build-ios-app` build the apps. PR runs cancel when a newer push arrives. macOS runners are the scarce, slow resource (7 GB RAM, few concurrent slots), so keep work that does not need macOS off the `checks` job. The iOS build job and the iOS release job run on GitHub's `xcode-27` runner (a preview image) and select Xcode 27.1 with `maxim-lobanov/setup-xcode`: the iPhone Duo layout uses iOS 27.1 SDK APIs, so Xcode 27.0 cannot build the app.
 - iOS CI build forces arm64 simulator architecture: `xcodebuild -project iosApp/FeedFlow.xcodeproj -configuration Debug -scheme FeedFlow -sdk iphonesimulator -destination "generic/platform=iOS Simulator" ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build | xcbeautify --renderer github-actions`
+- The `checks` job runs `.scripts/ios-tests.sh` after `allTests`. The Swift `CloudSyncTests` run inside `allTests` instead, because they read snapshots the Kotlin cloud-sync tests write first; the other Swift test targets need nothing from Gradle beyond the FeedFlowKit framework, so they are not bound to it. Both runs share `build/ios-test-derived-data` and the same xcodebuild settings so the Swift packages compile once; keep the settings in `SwiftCloudSyncTest` and `ios-tests.sh` identical. CI boots the simulator (`.scripts/ios-test-simulator.sh`) at the start of the job so it is ready by the time the tests run. Add a new Swift test target to the `iOSTests` scheme in `iosApp/project.yml`, or CI won't run it.
 - CI runs `.scripts/refresh-translations.sh` before checks; do this locally before pushing if translations changed
 - Debugging CI failures: `gh run list --limit=10`, then `gh run view <run-id> --log`
 - Red CI recovery loop: `gh run rerun <run-id>` (or `gh run rerun <run-id> --failed`), then fix and push until green

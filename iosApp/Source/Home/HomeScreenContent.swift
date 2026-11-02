@@ -46,8 +46,10 @@ struct HomeContent: View {
     let nextFeedPreviewState: NextFeedPreviewState
     let feedItemDisplaySettings: FeedItemDisplaySettings
     let viewMenuState: HomeViewMenuState
+    let pendingNewArticlesCount: Int
 
     @State private var showScrollToTop = false
+    @State private var keepsLoadingHeaderSpace = false
     @State private var showMarkAllReadDialog = false
     @State private var showClearOldArticlesDialog = false
     @State private var showViewOptionsSheet = false
@@ -70,9 +72,14 @@ struct HomeContent: View {
     let onFeedOrderChange: (FeedOrder) -> Void
     let onShowReadArticlesTimelineChange: (Bool) -> Void
     let onSettingsDone: () -> Void
+    let onShowNewArticlesClick: () -> Void
 
     var isCompactPhone: Bool {
         horizontalSizeClass == .compact
+    }
+
+    private var showNewArticlesPill: Bool {
+        pendingNewArticlesCount > 0 && loadingState?.isLoading() != true
     }
 
     var shouldUseSystemNavigationTitle: Bool {
@@ -90,6 +97,18 @@ struct HomeContent: View {
     var body: some View {
         ScrollViewReader { proxy in
             feedListView(proxy: proxy)
+        }
+        // Removing the loading header while scrolled away would shift the whole list,
+        // so keep its space until the user is back at the top.
+        .onChange(of: showLoading && showScrollToTop) { _, isLoadingAwayFromTop in
+            if isLoadingAwayFromTop {
+                keepsLoadingHeaderSpace = true
+            }
+        }
+        .onChange(of: showScrollToTop) { _, isAwayFromTop in
+            if !isAwayFromTop {
+                keepsLoadingHeaderSpace = false
+            }
         }
         .alert(feedFlowStrings.markAllReadButton, isPresented: $showMarkAllReadDialog) {
             Button(feedFlowStrings.cancelButton, role: .cancel) {}
@@ -157,6 +176,7 @@ private extension HomeContent {
             loadingState: loadingState,
             feedState: feedState,
             showLoading: showLoading,
+            keepsLoadingHeaderSpace: keepsLoadingHeaderSpace,
             currentFeedFilter: currentFeedFilter,
             columnVisibility: columnVisibility,
             feedFontSizes: feedFontSizes,
@@ -250,6 +270,21 @@ private extension HomeContent {
                     showScrollToTop = false
                 }
             })
+            .overlay(alignment: .top) {
+                if showNewArticlesPill {
+                    NewArticlesPillView(count: pendingNewArticlesCount) {
+                        withAnimation(.default, completionCriteria: .logicallyComplete) {
+                            proxy.scrollTo(feedState.first?.id)
+                            showScrollToTop = false
+                        } completion: {
+                            onShowNewArticlesClick()
+                        }
+                    }
+                    .padding(.top, Spacing.small)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.3), value: showNewArticlesPill)
     }
 
     @ViewBuilder

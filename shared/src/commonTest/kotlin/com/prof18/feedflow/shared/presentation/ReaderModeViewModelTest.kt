@@ -9,6 +9,7 @@ import com.prof18.feedflow.core.model.FeedItemUrlInfo
 import com.prof18.feedflow.core.model.FeedOrder
 import com.prof18.feedflow.core.model.FeedSource
 import com.prof18.feedflow.core.model.ParsedFeedSource
+import com.prof18.feedflow.core.model.ReaderFontFamily
 import com.prof18.feedflow.core.model.ReaderModeDefaults
 import com.prof18.feedflow.core.model.ReaderModeState
 import com.prof18.feedflow.core.model.SearchState
@@ -384,6 +385,38 @@ class ReaderModeViewModelTest : KoinTestBase() {
 
             assertEquals(4, awaitItem().lineHeight)
         }
+    }
+
+    @Test
+    fun `initial body and headline fonts are system`() = runTest {
+        assertEquals(ReaderFontFamily.SYSTEM, viewModel.readerFontSettingsState.value.bodyFont)
+        assertEquals(ReaderFontFamily.SYSTEM, viewModel.readerFontSettingsState.value.headlineFont)
+    }
+
+    @Test
+    fun `updateBodyFont updates settings and state`() = runTest {
+        viewModel.updateBodyFont(ReaderFontFamily.IBM_PLEX_SANS)
+        assertEquals(ReaderFontFamily.IBM_PLEX_SANS, viewModel.readerFontSettingsState.value.bodyFont)
+    }
+
+    @Test
+    fun `updateHeadlineFont updates settings and state`() = runTest {
+        viewModel.updateHeadlineFont(ReaderFontFamily.LITERATA)
+        assertEquals(ReaderFontFamily.LITERATA, viewModel.readerFontSettingsState.value.headlineFont)
+    }
+
+    @Test
+    fun `initial title font size is default value`() = runTest {
+        assertEquals(
+            ReaderModeDefaults.TITLE_FONT_SIZE,
+            viewModel.readerFontSettingsState.value.titleFontSize,
+        )
+    }
+
+    @Test
+    fun `updateTitleFontSize updates settings and state`() = runTest {
+        viewModel.updateTitleFontSize(22)
+        assertEquals(22, viewModel.readerFontSettingsState.value.titleFontSize)
     }
 
     @Test
@@ -1047,7 +1080,7 @@ class ReaderModeViewModelTest : KoinTestBase() {
             ArticleOpenMode.FEED_CONTENT,
             requireNotNull(info).resolveArticleOpenMode(settingsRepository.getArticleOpenMode()),
         )
-        assertEquals(item.isBookmarked, info?.isBookmarked)
+        assertEquals(item.isBookmarked, info.isBookmarked)
         assertNull(viewModel.currentArticleState.value)
         assertEquals(item.isRead, databaseHelper.getAllFeedItemFlagsForCloud().single { it.id == item.id }.isRead)
 

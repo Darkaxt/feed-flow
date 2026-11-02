@@ -50,9 +50,6 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Update Licenses file
-        run: ./gradlew :desktopApp:exportLibraryDefinitions -PaboutLibraries.exportPath=src/main/resources/
-
       - name: Create path variables
         id: path_variables
         run: |
@@ -102,6 +99,9 @@ jobs:
 
       - name: Create RPM, DEB & staged AppImage
         run: ./gradlew :desktopApp:packageReleaseDeb :desktopApp:packageReleaseRpm :desktopApp:packageReleaseAppImage
+
+      - name: Install AppStream
+        run: sudo apt-get update && sudo apt-get install -y appstream
 
       - name: Create AppImage
         run: .scripts/package-appimage.sh

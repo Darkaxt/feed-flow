@@ -14,8 +14,10 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-val appVersionCode: () -> Int by extra
-val appVersionName: () -> String by extra
+@Suppress("UNCHECKED_CAST")
+val appVersionCode = extra["appVersionCode"] as () -> Int
+@Suppress("UNCHECKED_CAST")
+val appVersionName = extra["appVersionName"] as () -> String
 
 val local = Properties()
 val localProperties: File = rootProject.file("keystore.properties")
@@ -127,6 +129,9 @@ android {
     }
 
     aboutLibraries {
+        collect {
+            configPath.set(file("config/aboutlibraries"))
+        }
         export {
             excludeFields.set(listOf("generated"))
         }

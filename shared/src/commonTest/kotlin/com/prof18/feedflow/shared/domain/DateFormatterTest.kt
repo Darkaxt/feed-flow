@@ -117,6 +117,11 @@ class DateFormatterTest {
         "Wednesday, 08 April 2026",
         // JavaScript-style date string (JAVA-G6)
         "Sun Feb 05 2012 10:48:29",
+        // JavaScript Date.toString() output (JAVA-MH)
+        "Wed Sep 09 2026 00:00:00 GMT+0000 (Coordinated Universal Time)",
+        "Tue Oct 20 2026 17:43:00 GMT+0100 (British Summer Time)",
+        // British Summer Time abbreviation (JAVA-MH)
+        "Tue, 20 Oct 2026 16:43:00 BST",
         // Month-first timestamp without a day comma (JAVA-B3 follow-up in same Sentry bucket)
         "Fri, Jun 14 2024 10:08:25 +0000",
     )
@@ -165,8 +170,8 @@ class DateFormatterTest {
         val timezone = TimeZone.currentSystemDefault()
         val millis = LocalDateTime(
             year = 2025,
-            monthNumber = 2,
-            dayOfMonth = 3,
+            month = 2,
+            day = 3,
             hour = 14,
             minute = 30,
         ).toInstant(timezone).toEpochMilliseconds()
@@ -185,8 +190,8 @@ class DateFormatterTest {
         val timezone = TimeZone.currentSystemDefault()
         val millis = LocalDateTime(
             year = 2024,
-            monthNumber = 12,
-            dayOfMonth = 25,
+            month = 12,
+            day = 25,
             hour = 14,
             minute = 30,
         ).toInstant(timezone).toEpochMilliseconds()

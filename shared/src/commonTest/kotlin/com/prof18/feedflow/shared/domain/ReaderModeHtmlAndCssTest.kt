@@ -1,5 +1,6 @@
 package com.prof18.feedflow.shared.domain
 
+import com.prof18.feedflow.core.model.ReaderFontFamily
 import com.prof18.feedflow.core.model.ReaderModeDefaults
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -16,6 +17,66 @@ class ReaderModeHtmlAndCssTest {
         assertFalse(unknown.contains("<html lang=\"en\""))
         val unsafe = getReaderModeStyledHtml(null, "body", fontSize = 16, languageTag = "it\" onclick=\"alert(1)")
         assertFalse(unsafe.contains("onclick"))
+    }
+
+    @Test
+    fun `readerModeCss uses system font stack by default`() {
+        val css = readerModeCss(colors = null, fontSize = 18, lineHeight = 0)
+
+        assertTrue(css.contains(ReaderFontFamily.SYSTEM_FONT_STACK))
+        assertFalse(css.contains("@font-face"))
+    }
+
+    @Test
+    fun `readerModeCss falls back to the system stack after bundled fonts`() {
+        val css = readerModeCss(
+            colors = null,
+            fontSize = 18,
+            lineHeight = 0,
+            bodyFont = ReaderFontFamily.LITERATA,
+            headlineFont = ReaderFontFamily.IBM_PLEX_SANS,
+        )
+
+        assertTrue(css.contains("font-family: 'FeedFlow Literata', -apple-system"))
+        assertTrue(css.contains("font-family: 'FeedFlow IBM Plex Sans', -apple-system"))
+    }
+
+    @Test
+    fun `readerFontFamilyJs updates body and headline families with fallback`() {
+        val js = readerFontFamilyJs(ReaderFontFamily.ATKINSON_HYPERLEGIBLE_NEXT, ReaderFontFamily.SOURCE_SERIF_4)
+
+        assertTrue(js.contains("__feedflow_font_family_style"))
+        assertTrue(js.contains("FeedFlow Atkinson Hyperlegible Next"))
+        assertTrue(js.contains("FeedFlow Source Serif 4"))
+        assertTrue(js.contains("-apple-system"))
+    }
+
+    @Test
+    fun `readerModeCss sizes the article title on its own`() {
+        val css = readerModeCss(colors = null, fontSize = 18, lineHeight = 0, titleFontSize = 24)
+
+        assertTrue(css.contains("body > h1 {\n    font-size: 24px;"))
+    }
+
+    @Test
+    fun `readerModeCss uses the default title size`() {
+        val css = readerModeCss(colors = null, fontSize = 18, lineHeight = 0)
+
+        assertTrue(css.contains("font-size: ${ReaderModeDefaults.TITLE_FONT_SIZE}px;"))
+    }
+
+    @Test
+    fun `readerTitleFontSizeJs restyles only the article title`() {
+        val js = readerTitleFontSizeJs(28)
+
+        assertTrue(js.contains("__feedflow_title_font_size_style"))
+        assertTrue(js.contains("body > h1 { font-size: 28px; }"))
+    }
+
+    @Test
+    fun `unknown or missing stored font names map to system`() {
+        assertEquals(ReaderFontFamily.SYSTEM, ReaderFontFamily.fromStorageName("OUTFIT"))
+        assertEquals(ReaderFontFamily.SYSTEM, ReaderFontFamily.fromStorageName(null))
     }
 
     @Test
@@ -36,6 +97,26 @@ class ReaderModeHtmlAndCssTest {
                 #__content img {
                     display: block;
                     margin: 4px auto;
+                }
+                """.trimIndent(),
+            ),
+        )
+    }
+
+    @Test
+    fun `reader mode css keeps fixed-width captioned figures inside the screen`() {
+        val css = readerModeCss(colors = null, fontSize = 18, lineHeight = 0)
+
+        // WordPress writes `style="width: 760px"` on captioned figures; without a cap the
+        // figure and its image overflow the column and get clipped.
+        assertTrue(
+            css.contains(
+                """
+                figure, .wp-caption {
+                    margin-left: 0;
+                    margin-right: 0;
+                    max-width: 100%;
+                    box-sizing: border-box;
                 }
                 """.trimIndent(),
             ),
