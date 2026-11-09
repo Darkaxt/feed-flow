@@ -176,6 +176,7 @@ struct AddFeedScreenContent: View {
                 categorySelectorObserver: categorySelectorObserver,
                 onSave: {}
             )
+            .snackbarPresentationSurface()
         }
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarLeading) {
@@ -190,6 +191,7 @@ struct AddFeedScreenContent: View {
                             Image(systemName: "xmark.circle")
                         }
                     })
+                    .accessibilityLabel(feedFlowStrings.closeButtonContentDescription)
                 }
             }
 

@@ -22,6 +22,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import com.prof18.feedflow.desktop.ui.LocalFeedFlowStrings
 import org.jetbrains.jewel.foundation.theme.JewelTheme
@@ -36,6 +37,7 @@ internal fun ConfirmationDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
     confirmLabel: String? = null,
+    destructive: Boolean = false,
 ) {
     var settled by remember { mutableStateOf(false) }
     val latestDismiss by rememberUpdatedState(onDismiss)
@@ -46,7 +48,7 @@ internal fun ConfirmationDialog(
             latestDismiss()
         }
     }
-    Dialog(title = title, onCloseRequest = dismiss, alertStyle = true) {
+    Dialog(title = title, onCloseRequest = dismiss, size = CONFIRMATION_DIALOG_SIZE, alertStyle = true) {
         ConfirmationContent(
             title = title,
             message = message,
@@ -61,6 +63,7 @@ internal fun ConfirmationDialog(
             modifier = Modifier.fillMaxSize(),
             enabled = !settled,
             confirmLabel = confirmLabel,
+            destructive = destructive,
         )
     }
 }
@@ -74,6 +77,7 @@ internal fun ConfirmationContent(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     confirmLabel: String? = null,
+    destructive: Boolean = false,
 ) {
     val strings = LocalFeedFlowStrings.current
     val cancelFocus = remember { FocusRequester() }
@@ -106,9 +110,25 @@ internal fun ConfirmationContent(
             ) {
                 Text(strings.cancelButton)
             }
-            DefaultButton(onClick = onConfirm, enabled = enabled, modifier = Modifier.heightIn(min = actionHeight)) {
-                Text(confirmLabel ?: strings.confirmButton)
+            if (destructive) {
+                OutlinedButton(
+                    onClick = onConfirm,
+                    enabled = enabled,
+                    modifier = Modifier.heightIn(min = actionHeight),
+                ) {
+                    Text(confirmLabel ?: strings.confirmButton, color = JewelTheme.globalColors.text.error)
+                }
+            } else {
+                DefaultButton(
+                    onClick = onConfirm,
+                    enabled = enabled,
+                    modifier = Modifier.heightIn(min = actionHeight),
+                ) {
+                    Text(confirmLabel ?: strings.confirmButton)
+                }
             }
         }
     }
 }
+
+private val CONFIRMATION_DIALOG_SIZE = DpSize(width = 400.dp, height = 250.dp)

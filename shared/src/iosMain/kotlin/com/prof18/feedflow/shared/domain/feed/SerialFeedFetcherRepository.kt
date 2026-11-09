@@ -28,6 +28,7 @@ import com.prof18.feedflow.shared.domain.recovery.RecoveryUpdate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TimeSource
 
 /**
  * Serial version of FeedFetcherRepository that processes feeds one at a time
@@ -46,16 +47,22 @@ class SerialFeedFetcherRepository internal constructor(
     private val feedHttpCacheStore: FeedHttpCacheStore,
     private val feedAttempt: FeedAttempt,
     private val recoveryRepository: FeedRecoveryRepository,
+    private val timeSource: TimeSource = TimeSource.Monotonic,
 ) {
     @Suppress("unused") // Used on iOS
+    @Throws(Exception::class)
     suspend fun getFeedSourceToNotify(): List<FeedSourceToNotify> =
         databaseHelper.getFeedSourceToNotify()
 
     @Suppress("unused") // Used on iOS
+    @Throws(Exception::class)
     suspend fun markItemsAsNotified() =
         databaseHelper.markFeedItemsAsNotified()
 
+    // Without @Throws, any exception other than a cancellation terminates the app on iOS instead of
+    // reaching the background task handler's catch.
     @SuspendInterop.Enabled
+    @Throws(Exception::class)
     suspend fun fetchFeeds(forceRefresh: Boolean = false) {
         return withContext(dispatcherProvider.io) {
             withSuspensionGuard("FeedFlow serial feed fetch") {
@@ -69,6 +76,40 @@ class SerialFeedFetcherRepository internal constructor(
                     }
                     else -> {
                         fetchFeedsWithRssParser(forceRefresh = forceRefresh)
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * The short iOS background refresh. Sync accounts (FreshRSS, Miniflux, Feedbin, …) sync as
+     * usual. Local feeds skip the cloud backup sync (Dropbox, Google Drive, iCloud), which the long
+     * background task does, and stop starting new feeds once [timeBudgetMillis] is used up so the
+     * caller still has time to post notifications; the skipped feeds stay due for the next refresh.
+     */
+    @SuspendInterop.Enabled
+    @Throws(Exception::class)
+    suspend fun refreshFeedsQuickly(timeBudgetMillis: Long) {
+        val startMark = timeSource.markNow()
+        return withContext(dispatcherProvider.io) {
+            withSuspensionGuard("FeedFlow quick feed refresh") {
+                feedStateRepository.emitUpdateStatus(StartedFeedUpdateStatus)
+                when {
+                    gReaderRepository.isAccountSet() -> fetchFeedsWithGReader()
+                    feedbinRepository.isAccountSet() -> fetchFeedsWithFeedbin()
+                    else -> {
+                        parseFeedsSerially(
+                            feedSourceUrls = databaseHelper.getFeedSources(),
+                            forceRefresh = false,
+                            isBudgetUsedUp = {
+                                val isUsedUp = startMark.elapsedNow().inWholeMilliseconds >= timeBudgetMillis
+                                if (isUsedUp) logger.d { "Time budget used up, leaving the rest for the next refresh" }
+                                isUsedUp
+                            },
+                        )
+                        feedStateRepository.publishFetchedFeeds()
+                        feedStateRepository.emitUpdateStatus(FinishedFeedUpdateStatus)
                     }
                 }
             }
@@ -135,6 +176,7 @@ class SerialFeedFetcherRepository internal constructor(
     private suspend fun parseFeedsSerially(
         feedSourceUrls: List<FeedSource>,
         forceRefresh: Boolean,
+        isBudgetUsedUp: () -> Boolean = { false },
     ) {
         val ticket = recoveryRepository.issueTicket()
         val recoveryRecords = recoveryRepository.records(ticket.accountEpoch)
@@ -182,7 +224,8 @@ class SerialFeedFetcherRepository internal constructor(
         }
 
         // Process feeds one at a time
-        for (feedSource in feedsToProcess) {
+        // A lazy sequence so the budget is checked before each feed starts
+        for (feedSource in feedsToProcess.asSequence().takeWhile { !isBudgetUsedUp() }) {
             logger.d { "-> Getting ${feedSource.url}" }
             val record = recoveryRecords[feedSource.id]?.takeIf { it.subscriptionUrl == feedSource.url }
             var fetchSucceeded = false

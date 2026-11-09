@@ -17,6 +17,8 @@ struct SearchScreen: View {
 
     @State private var feedFontSizes: FeedFontSizes = defaultFeedFontSizes()
 
+    @State private var articleReveal: ArticleRevealRequest?
+
     @State private var feedItemDisplaySettings = FeedItemDisplaySettings(
         isHideUnreadDotEnabled: false,
         isHideFeedSourceEnabled: false,
@@ -35,8 +37,6 @@ struct SearchScreen: View {
     }
 
     var body: some View {
-        @Bindable var appState = appState
-        
         SearchScreenContent(
             searchText: $searchText,
             searchState: searchState,
@@ -60,11 +60,19 @@ struct SearchScreen: View {
             },
             onMarkAllBelowAsRead: { feedItemId in
                 vmStoreOwner.instance.markAllBelowAsRead(targetItemId: feedItemId)
+            },
+            articleReveal: articleReveal,
+            onArticleRevealed: { [readerModeViewModel] request in
+                readerModeViewModel.onArticleRevealed(request: request)
             }
         )
-        .snackbar(messageQueue: $appState.snackbarQueue)
         .onChange(of: searchText) {
             vmStoreOwner.instance.updateSearchQuery(query: searchText)
+        }
+        .task {
+            for await request in readerModeViewModel.articleRevealState {
+                articleReveal = request
+            }
         }
         .task {
             for await state in vmStoreOwner.instance.searchQueryState {

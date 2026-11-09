@@ -87,6 +87,11 @@ struct FeedbinSyncContent: View {
                                 .foregroundColor(.gray)
                         }
                     )
+                    .accessibilityLabel(
+                        isPasswordVisible
+                            ? feedFlowStrings.desktopAccountHidePassword
+                            : feedFlowStrings.desktopAccountShowPassword
+                    )
                     .accessibilityIdentifier(AccountAccessibilityIdentifiers.passwordVisibility)
                 }
             },
@@ -148,15 +153,11 @@ struct FeedbinSyncContent: View {
                     }
                 }
 
-                Button(
-                    action: {
-                        onDisconnectClick()
-                    },
-                    label: {
-                        Label(feedFlowStrings.accountDisconnectButton, systemImage: "square.slash")
-                    }
+                DisconnectAccountButton(
+                    kind: .readerService,
+                    isDisabled: state.syncState is AccountSyncUIState.Loading,
+                    onConfirm: onDisconnectClick
                 )
-                .disabled(state.syncState is AccountSyncUIState.Loading)
             }
         }
     }

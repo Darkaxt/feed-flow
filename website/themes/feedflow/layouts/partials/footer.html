@@ -7,7 +7,7 @@
           FeedFlow
         </a>
         <p>Minimal RSS reader for Android, iOS, macOS, Windows, and Linux. Your feeds, in the order they were published.</p>
-        <a href="{{ .Site.Params.donate }}" class="btn btn-ghost btn-sm" target="_blank" rel="noopener">Donate ♥</a>
+        <a href="{{ .Site.Params.donate }}" class="btn btn-ghost btn-sm" target="_blank" rel="noopener">Donate</a>
       </div>
 
       <div class="footer-col" id="footer-downloads">
@@ -30,6 +30,7 @@
         <h4>Resources</h4>
         <ul class="footer-links" role="list">
           <li><a href="{{ .Site.BaseURL | relLangURL }}updates/">Updates</a></li>
+          <li><a href="{{ with site.GetPage "/faq" }}{{ .RelPermalink }}{{ else }}/faq/{{ end }}">FAQ</a></li>
           <li><a href="{{ .Site.Params.github }}" target="_blank" rel="noopener">GitHub</a></li>
           <li><a href="{{ .Site.Params.weblate }}" target="_blank" rel="noopener">Translate on Weblate</a></li>
           <li><a href="{{ .Site.Params.privacy }}" target="_blank" rel="noopener">Privacy Policy</a></li>
@@ -39,8 +40,7 @@
     </div>
 
     <div class="footer-bottom">
-      <span>© {{ now.Year }} <a href="{{ .Site.Params.authorURL }}" target="_blank" rel="noopener" style="color:rgba(255,255,255,.65)">{{ .Site.Params.authorName }}</a>. Open source under Apache 2.0.</span>
-      <span>Made with care for the open web.</span>
+      <span>© {{ now.Year }} <a href="{{ .Site.Params.authorURL }}" target="_blank" rel="noopener">{{ .Site.Params.authorName }}</a>. Open source under Apache 2.0.</span>
     </div>
   </div>
 </footer>

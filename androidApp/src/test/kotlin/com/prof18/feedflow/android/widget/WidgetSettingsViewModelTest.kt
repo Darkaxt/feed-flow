@@ -204,7 +204,12 @@ class WidgetSettingsViewModelTest {
         )
         drivers.add(driver)
         val logger = co.touchlab.kermit.Logger
-        val database = com.prof18.feedflow.database.DatabaseHelper(driver, dispatcher, logger)
+        val database = com.prof18.feedflow.database.DatabaseHelper(
+            driver,
+            dispatcher,
+            logger,
+            com.prof18.feedflow.core.utils.LiveQueryGate(),
+        )
         val constructor = com.prof18.feedflow.shared.domain.feed.FeedWidgetRepository::class.java.declaredConstructors
             .single()
         constructor.isAccessible = true

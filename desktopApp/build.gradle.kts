@@ -112,6 +112,7 @@ kotlin {
                 implementation(libs.lyricist)
                 implementation(libs.io.coil.compose)
                 implementation(libs.io.coil.network)
+                implementation(libs.io.coil.svg)
                 implementation(libs.jsystem.theme.detector)
                 implementation(project(":shared"))
                 implementation(project(":database"))
@@ -380,6 +381,8 @@ val macExtraPlistKeys: String
           <string>ar</string>
           <string>sq</string>
           <string>ca</string>
+          <string>ro</string>
+          <string>id</string>
           <string>zh-Hant</string>
         </array>
         <key>NSUbiquitousContainers</key>

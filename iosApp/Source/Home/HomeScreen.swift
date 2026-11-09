@@ -29,6 +29,8 @@ struct HomeScreen: View {
 
     @State private var pendingNewArticlesCount = 0
 
+    @State private var articleReveal: ArticleRevealRequest?
+
     @State private var isUnreadCountHidden = false
 
     @State private var currentFeedFilter: FeedFilter = .Timeline()
@@ -69,8 +71,6 @@ struct HomeScreen: View {
     var onSidebarSelectionChanged: ((FeedFilter) -> Void)?
 
     var body: some View {
-        @Bindable var appState = appState
-
         HomeContent(
             loadingState: loadingState,
             feedState: feedState,
@@ -148,12 +148,20 @@ struct HomeScreen: View {
             },
             onShowNewArticlesClick: { [homeViewModel] in
                 homeViewModel.onShowNewArticlesClicked()
+            },
+            articleReveal: articleReveal,
+            onArticleRevealed: { [readerModeViewModel] request in
+                readerModeViewModel.onArticleRevealed(request: request)
             }
         )
         .refreshable { [homeViewModel] in
             homeViewModel.refreshCurrentFilter()
         }
-        .snackbar(messageQueue: $appState.snackbarQueue)
+        .task {
+            for await request in readerModeViewModel.articleRevealState {
+                articleReveal = request
+            }
+        }
         .task {
             for await state in homeViewModel.loadingState {
                 let isLoading = state.isLoading()
@@ -263,7 +271,7 @@ struct HomeScreen: View {
         .onChange(of: scenePhase) {
             switch scenePhase {
             case .background:
-                homeViewModel.enqueueBackup()
+                homeViewModel.onAppBackgrounded()
             default:
                 break
             }

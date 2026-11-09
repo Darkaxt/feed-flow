@@ -31,7 +31,7 @@ import com.prof18.feedflow.desktop.ui.FeedManagementActions
 import com.prof18.feedflow.desktop.ui.LocalFeedFlowStrings
 import com.prof18.feedflow.desktop.ui.LocalReduceMotion
 import com.prof18.feedflow.desktop.ui.ShareBehavior
-import com.prof18.feedflow.desktop.ui.components.DesktopLoadingOperationDialog
+import com.prof18.feedflow.desktop.ui.components.DesktopLoadingOperationOverlay
 import com.prof18.feedflow.desktop.ui.desktopExternalLinkAction
 import com.prof18.feedflow.desktop.ui.scrollToItemConditionally
 import com.prof18.feedflow.desktop.utils.copyToClipboard
@@ -40,6 +40,7 @@ import com.prof18.feedflow.shared.data.DesktopHomeSettingsRepository
 import com.prof18.feedflow.shared.presentation.ChangeFeedCategoryViewModel
 import com.prof18.feedflow.shared.presentation.HomeViewModel
 import com.prof18.feedflow.shared.presentation.ReaderModeViewModel
+import com.prof18.feedflow.shared.presentation.model.ArticleListSource
 import com.prof18.feedflow.shared.presentation.model.HomeDisplayState
 import com.prof18.feedflow.shared.presentation.model.NextFeedDisplayState
 import com.prof18.feedflow.shared.presentation.model.NextFeedPreviewState
@@ -89,6 +90,10 @@ internal fun HomeScreen(
 
     val readerModeViewModel = koinViewModel<ReaderModeViewModel>()
     val currentReaderArticle by readerModeViewModel.currentArticleState.collectAsState()
+    val articleReveal by readerModeViewModel.articleRevealState.collectAsState()
+    val timelineRevealId = articleReveal?.takeIf { it.source == ArticleListSource.TIMELINE }?.articleId
+    val searchRevealId = articleReveal?.takeIf { it.source == ArticleListSource.SEARCH }?.articleId
+    val onArticleRevealed: () -> Unit = { articleReveal?.let(readerModeViewModel::onArticleRevealed) }
 
     var showNoFeedsBottomSheet by remember { mutableStateOf(false) }
 
@@ -107,7 +112,7 @@ internal fun HomeScreen(
     }
 
     if (feedOperation != FeedOperation.None) {
-        DesktopLoadingOperationDialog(feedOperation)
+        DesktopLoadingOperationOverlay(feedOperation)
     }
 
     LaunchedEffect(homeViewModel, snackbarHostState) {
@@ -197,16 +202,27 @@ internal fun HomeScreen(
         onDispose { menuCommands.search = null }
     }
 
-    LaunchedEffect(refreshTrigger, isMultiPaneLayoutEnabled) {
-        if (refreshTrigger > 0) {
-            if (isGridLayoutEnabled && !isMultiPaneLayoutEnabled) {
-                gridState.scrollToItemConditionally(0, reduceMotionEnabled = reduceMotionEnabled)
-            } else {
-                listState.scrollToItemConditionally(0, reduceMotionEnabled = reduceMotionEnabled)
-            }
-            if (isMultiPaneLayoutEnabled) {
-                resetReaderArticle()
-            }
+    var isNewArticlesRefreshPending by remember { mutableStateOf(false) }
+    val onShowNewArticlesClicked: () -> Unit = remember(homeViewModel) {
+        {
+            isNewArticlesRefreshPending = true
+            homeViewModel.onShowNewArticlesClicked()
+        }
+    }
+
+    RefreshScrollEffect(refreshTrigger) {
+        val fromNewArticles = isNewArticlesRefreshPending
+        isNewArticlesRefreshPending = false
+        val scrollToTop = shouldScrollToTopOnRefresh(
+            isMultiPane = isMultiPaneLayoutEnabled,
+            isReaderOpen = currentReaderArticle != null,
+            fromNewArticles = fromNewArticles,
+        )
+        if (!scrollToTop) return@RefreshScrollEffect
+        if (isGridLayoutEnabled && !isMultiPaneLayoutEnabled) {
+            gridState.scrollToItemConditionally(0, reduceMotionEnabled = reduceMotionEnabled)
+        } else {
+            listState.scrollToItemConditionally(0, reduceMotionEnabled = reduceMotionEnabled)
         }
     }
 
@@ -310,6 +326,7 @@ internal fun HomeScreen(
             onEditCategoryClick = { categoryId, newName -> homeViewModel.updateCategoryName(categoryId, newName) },
             validateCategoryName = homeViewModel::validateCategoryName,
             onDeleteCategoryClick = { categoryId -> homeViewModel.deleteCategory(categoryId) },
+            onAddCategoryClick = { categoryName -> changeFeedCategoryViewModel.createCategory(categoryName) },
             onOpenWebsite = desktopExternalLinkAction(uriHandler, ::showBrowserLaunchError),
             onMoveFeedSourcesToCategory = { feedSources, category ->
                 changeFeedCategoryViewModel.moveFeedSourcesToCategory(feedSources, category)
@@ -364,13 +381,15 @@ internal fun HomeScreen(
                         navigateBack = { inlineSearch = false },
                         navigateToReaderMode = openReaderArticle,
                         navigateToEditFeed = onEditFeedClick,
+                        revealArticleId = searchRevealId,
+                        onArticleRevealed = onArticleRevealed,
                     )
                 }
             } else {
                 null
             },
             pendingNewArticlesCount = pendingNewArticlesCount,
-            onShowNewArticlesClicked = homeViewModel::onShowNewArticlesClicked,
+            onShowNewArticlesClicked = onShowNewArticlesClicked,
             displayState = homeDisplayState,
             feedListActions = feedListActions,
             feedManagementActions = feedManagementActions,
@@ -382,6 +401,8 @@ internal fun HomeScreen(
             onEmptyStateClick = {
                 showNoFeedsBottomSheet = true
             },
+            revealArticleId = timelineRevealId,
+            onArticleRevealed = onArticleRevealed,
         )
     } else {
         DesktopSinglePaneHomeScaffold(
@@ -389,7 +410,7 @@ internal fun HomeScreen(
             gridState = gridState,
             onSearchClick = onSearchClick,
             pendingNewArticlesCount = pendingNewArticlesCount,
-            onShowNewArticlesClicked = homeViewModel::onShowNewArticlesClicked,
+            onShowNewArticlesClicked = onShowNewArticlesClicked,
             displayState = homeDisplayState,
             feedListActions = feedListActions,
             feedManagementActions = feedManagementActions,
@@ -399,6 +420,8 @@ internal fun HomeScreen(
             onEmptyStateClick = {
                 showNoFeedsBottomSheet = true
             },
+            revealArticleId = timelineRevealId,
+            onArticleRevealed = onArticleRevealed,
         )
     }
 

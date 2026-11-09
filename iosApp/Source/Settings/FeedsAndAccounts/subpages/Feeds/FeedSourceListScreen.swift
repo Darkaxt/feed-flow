@@ -26,8 +26,6 @@ struct FeedSourceListScreen: View {
     @State private var feedOperationLoadingMessage: String?
 
     var body: some View {
-        @Bindable var appState = appState
-
         FeedSourceListScreenContent(
             feedState: feedState,
             recoveryStates: recoveryStates,
@@ -54,8 +52,6 @@ struct FeedSourceListScreen: View {
                 vmStoreOwner.instance.verifyWebsite(source: source)
             }
         )
-        .id(appState.redrawAfterFeedSourceEdit)
-        .snackbar(messageQueue: $appState.snackbarQueue)
         .loadingDialog(isLoading: showFeedOperationDialog, message: feedOperationLoadingMessage)
         .task {
             for await state in vmStoreOwner.instance.feedOperationState {

@@ -41,20 +41,17 @@ struct BlockedWordsScreenContent: View {
                         } label: {
                             Image(systemName: "checkmark.circle.fill")
                                 .tint(.green)
+                                // Grows the hit area to 44 pt without moving the icon or making the row taller
+                                .padding(Spacing.small + Spacing.xsmall)
+                                .contentShape(Rectangle())
+                                .padding(-(Spacing.small + Spacing.xsmall))
                         }
+                        // Borderless keeps the Form row from firing this button on any tap in the row
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(feedFlowStrings.addWordPlaceholder)
                         .accessibilityIdentifier(BlockedWordsAccessibilityIdentifiers.addButton)
                         .hoverEffect()
                     }
-
-                    #if DEBUG
-                    Button {
-                        onAddWord("pixel")
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                    }
-                    .accessibilityIdentifier(BlockedWordsAccessibilityIdentifiers.addPixelButton)
-                    .hoverEffect()
-                    #endif
                 }
                 }
 

@@ -15,13 +15,14 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
-import com.prof18.feedflow.core.utils.FeatureFlags
+import com.prof18.feedflow.core.utils.Websites
 import com.prof18.feedflow.core.utils.Websites.FEED_FLOW_WEBSITE
 import com.prof18.feedflow.core.utils.Websites.MG_WEBSITE
 import com.prof18.feedflow.core.utils.Websites.TRANSLATION_WEBSITE
 import com.prof18.feedflow.desktop.DesktopConfig
 import com.prof18.feedflow.desktop.about.LicensesScreen
 import com.prof18.feedflow.desktop.di.DI
+import com.prof18.feedflow.desktop.settings.search.OnSettingsSearchJump
 import com.prof18.feedflow.desktop.ui.LocalFeedFlowStrings
 import com.prof18.feedflow.desktop.utils.disableSentry
 import com.prof18.feedflow.desktop.utils.initSentry
@@ -42,6 +43,7 @@ internal fun AboutPane(
     val userFeedbackReporter = remember { DI.koin.get<UserFeedbackReporter>() }
     val uriHandler = LocalUriHandler.current
     var showLicenses by rememberSaveable { mutableStateOf(false) }
+    OnSettingsSearchJump { showLicenses = false }
     var showOpenError by remember { mutableStateOf(false) }
     var restoreLicensesFocus by remember { mutableStateOf(false) }
     val licensesFocus = remember { FocusRequester() }
@@ -81,16 +83,11 @@ internal fun AboutPane(
                     },
                     trailing = { ExternalLinkIcon() },
                 )
-                if (FeatureFlags.ENABLE_FAQ) {
-                    SettingsActionRow(
-                        title = strings.aboutMenuFaq,
-                        onClick = {
-                            val languageCode = java.util.Locale.getDefault().language
-                            openExternalUrl("https://feedflow.dev/$languageCode/faq")
-                        },
-                        trailing = { ExternalLinkIcon() },
-                    )
-                }
+                SettingsActionRow(
+                    title = strings.aboutMenuFaq,
+                    onClick = { openExternalUrl(Websites.faqUrl(java.util.Locale.getDefault().language)) },
+                    trailing = { ExternalLinkIcon() },
+                )
                 SettingsActionRow(
                     title = strings.openWebsiteButton,
                     onClick = { openExternalUrl(FEED_FLOW_WEBSITE) },

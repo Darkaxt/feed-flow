@@ -31,8 +31,6 @@ struct ImportExportScreen: View {
     let fetchFeeds: () -> Void
 
     var body: some View {
-        @Bindable var appState = appState
-
         NavigationStack {
             ImportExportContent(
                 feedImportExportState: feedImportExportState,
@@ -74,7 +72,6 @@ struct ImportExportScreen: View {
                     vmStoreOwner.instance.clearState()
                 }
             )
-            .snackbar(messageQueue: $appState.snackbarQueue)
             .navigationTitle(feedFlowStrings.importExportOpmlTitle)
             .navigationBarTitleDisplayMode(.inline)
             .background(Color.secondaryBackgroundColor)
@@ -90,6 +87,7 @@ struct ImportExportScreen: View {
                                 Image(systemName: "xmark.circle")
                             }
                         }
+                        .accessibilityLabel(feedFlowStrings.closeButtonContentDescription)
                     }
                 }
             }

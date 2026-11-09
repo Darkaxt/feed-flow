@@ -57,6 +57,7 @@ struct FeedSourceListScreenContent: View {
                         Image(systemName: "plus")
                             .foregroundStyle(.primary)
                 }
+                .accessibilityLabel(feedFlowStrings.addFeed)
             }
         }
     }
@@ -294,7 +295,7 @@ private struct FeedSourceListItem: View {
         self.verifyWebsite = verifyWebsite
     }
 
-    var body: some View {
+    private var rowContent: some View {
         HStack {
             if feedSource.fetchFailed {
                 makeFeedFailureIcon()
@@ -319,23 +320,30 @@ private struct FeedSourceListItem: View {
                             .clipped()
                     } else {
                         Image(systemName: "square.stack.3d.up")
+                            .accessibilityHidden(true)
                     }
                 }
                 .padding(.leading, feedSource.fetchFailed ? Spacing.xsmall : Spacing.regular)
             } else {
                 Image(systemName: "square.stack.3d.up")
+                    .accessibilityHidden(true)
                     .padding(.leading, feedSource.fetchFailed ? Spacing.xsmall : Spacing.regular)
             }
 
             VStack(alignment: .leading) {
                 HStack(alignment: .center) {
-                    TextField("", text: $feedSourceTitle)
-                        .focused($isTextFieldFocused, equals: true)
-                        .disabled(!isRenameEnabled)
-                        .accessibilityIdentifier(FeedSourceListAccessibilityIdentifiers.renameInput(feedSource.id))
-                        .font(.system(size: 16))
-                        .padding(.top, Spacing.regular)
-                        .padding(.bottom, 2)
+                    Group {
+                        if isRenameEnabled {
+                            TextField("", text: $feedSourceTitle)
+                                .focused($isTextFieldFocused, equals: true)
+                                .accessibilityIdentifier(FeedSourceListAccessibilityIdentifiers.renameInput(feedSource.id))
+                        } else {
+                            Text(feedSource.title)
+                        }
+                    }
+                    .font(.system(size: 16))
+                    .padding(.top, Spacing.regular)
+                    .padding(.bottom, 2)
 
                     Spacer()
 
@@ -348,6 +356,7 @@ private struct FeedSourceListItem: View {
                             Image(systemName: "checkmark.circle.fill")
                                 .tint(.green)
                         }
+                        .accessibilityLabel(feedFlowStrings.renameFeedSourceNameButton)
                         .accessibilityIdentifier(FeedSourceListAccessibilityIdentifiers.renameSave(feedSource.id))
                         .padding(.top, Spacing.regular)
                     }
@@ -361,7 +370,22 @@ private struct FeedSourceListItem: View {
             .padding(.leading, Spacing.small)
         }
         .padding(.trailing, Spacing.small)
-        .accessibilityElement(children: .contain)
+    }
+
+    var body: some View {
+        Group {
+            if isRenameEnabled {
+                rowContent
+                    .accessibilityElement(children: .contain)
+            } else {
+                NavigationLink {
+                    feedSettings
+                } label: {
+                    rowContent
+                }
+                .navigationLinkIndicatorVisibility(.hidden)
+            }
+        }
         .accessibilityIdentifier(FeedSourceListAccessibilityIdentifiers.row(feedSource.id))
         .websiteVerificationExplanation(
             url: verificationExplanationUrl,
@@ -373,14 +397,7 @@ private struct FeedSourceListItem: View {
         )
         .contentShape(Rectangle())
         .hoverEffect()
-        .listRowInsets(
-            EdgeInsets(
-                top: .zero,
-                leading: .zero,
-                bottom: .zero,
-                trailing: .zero
-            )
-        )
+        .listRowInsets(EdgeInsets())
         .contextMenu {
             if !isRenameEnabled {
                 if feedSource.fetchFailed {
@@ -412,13 +429,9 @@ private struct FeedSourceListItem: View {
                     }
                 }
 
-                NavigationLink(
-                    destination: EditFeedScreen(
-                        feedSource: feedSource
-                    )
-                    .environment(appState)
-                    .environment(browserSelector)
-                ) {
+                NavigationLink {
+                    feedSettings
+                } label: {
                     Label(feedFlowStrings.openFeedSettings, systemImage: "gearshape")
                 }
 
@@ -446,6 +459,12 @@ private struct FeedSourceListItem: View {
                 feedSourceTitle = newTitle
             }
         }
+    }
+
+    private var feedSettings: some View {
+        EditFeedScreen(feedSource: feedSource)
+            .environment(appState)
+            .environment(browserSelector)
     }
 
     @ViewBuilder

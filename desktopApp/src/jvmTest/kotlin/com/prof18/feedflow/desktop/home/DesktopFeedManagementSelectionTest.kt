@@ -10,8 +10,13 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.MouseButton
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -60,31 +65,39 @@ class DesktopFeedManagementSelectionTest {
         .take(3).mapIndexed { index, source -> source.copy(feedSource = source.feedSource.copy(title = "Feed $index")) }
 
     @Test
-    fun `modified click and shift range select without activating then clear selection`() {
+    fun `modified click and shift range select without activating then Escape clears`() {
         var activations = 0
         setHost { activations++ }
         modifiedClick("Feed 0", toggleKey)
         modifiedClick("Feed 2", Key.ShiftLeft)
-        rule.onNodeWithText("3 selected").assertExists()
-        rule.onNodeWithText("Feed 1").assertIsSelected()
+        assertSelection("Feed 0", "Feed 1", "Feed 2")
         assertEquals(0, activations)
-        rule.onNodeWithText("Clear selection").performMouseInput { click() }
-        rule.onNodeWithText("0 selected").assertDoesNotExist()
+        rule.onNodeWithText("Feed 2").performKeyInput { pressKey(Key.Escape) }
+        assertSelection()
     }
 
     @Test
-    fun `context on a selected row preserves batch but an unselected row replaces it`() {
+    fun `context on a selected row offers the batch actions`() {
         var activations = 0
         setHost { activations++ }
         modifiedClick("Feed 0", toggleKey)
         modifiedClick("Feed 1", toggleKey)
         rule.onNodeWithText("Feed 1").performMouseInput { click(button = MouseButton.Secondary) }
-        rule.onNodeWithText("2 selected").assertExists()
+        rule.onNodeWithText(EnFeedFlowStrings.desktopMoveSelectedFeeds).assertExists()
         rule.onNodeWithText(EnFeedFlowStrings.openFeedSettings).assertDoesNotExist()
-        rule.onNodeWithText("Feed 2").performKeyInput { pressKey(Key.Escape) }
+        assertEquals(0, activations)
+    }
+
+    @Test
+    fun `context on an unselected row opens its own menu and leaves the selection alone`() {
+        var activations = 0
+        setHost { activations++ }
+        modifiedClick("Feed 0", toggleKey)
+        modifiedClick("Feed 1", toggleKey)
         rule.onNodeWithText("Feed 2").performMouseInput { click(button = MouseButton.Secondary) }
-        rule.onNodeWithText("1 selected").assertExists()
         rule.onNodeWithText(EnFeedFlowStrings.openFeedSettings).assertExists()
+        rule.onNodeWithText(EnFeedFlowStrings.desktopMoveSelectedFeeds).assertDoesNotExist()
+        assertSelection("Feed 0", "Feed 1")
         assertEquals(0, activations)
     }
 
@@ -106,12 +119,12 @@ class DesktopFeedManagementSelectionTest {
             pressKey(Key.Enter)
             keyUp(Key.ShiftLeft)
         }
-        rule.onNodeWithText("3 selected").assertExists()
+        assertSelection("Feed 0", "Feed 1", "Feed 2")
         assertEquals(0, activations)
     }
 
     @Test
-    fun `keyboard context targets the focused source without opening articles`() {
+    fun `keyboard context opens the focused menu without selecting or opening articles`() {
         var activations = 0
         setHost { activations++ }
         val row = rule.onNodeWithText("Feed 1")
@@ -122,7 +135,7 @@ class DesktopFeedManagementSelectionTest {
             keyUp(Key.ShiftLeft)
         }
         rule.onNodeWithText(EnFeedFlowStrings.openFeedSettings).assertExists()
-        rule.onNodeWithText("1 selected").assertExists()
+        assertSelection()
         assertEquals(0, activations)
     }
 
@@ -132,10 +145,10 @@ class DesktopFeedManagementSelectionTest {
         setHost(onDelete = { deleted.add(it) }, onActivate = {})
         modifiedClick("Feed 0", toggleKey)
         modifiedClick("Feed 1", toggleKey)
-        rule.onNodeWithText(EnFeedFlowStrings.desktopDeleteSelectedFeeds).performMouseInput { click() }
+        batchAction("Feed 1", EnFeedFlowStrings.desktopDeleteSelectedFeeds)
         rule.onNodeWithText(EnFeedFlowStrings.cancelButton).performSemanticsAction(SemanticsActions.OnClick) { it() }
         assertEquals(emptyList(), deleted)
-        rule.onNodeWithText(EnFeedFlowStrings.desktopDeleteSelectedFeeds).performMouseInput { click() }
+        batchAction("Feed 1", EnFeedFlowStrings.desktopDeleteSelectedFeeds)
         rule.onNodeWithText(EnFeedFlowStrings.deleteFeed).performSemanticsAction(SemanticsActions.OnClick) { it() }
         rule.runOnIdle {
             val expectedIds = sources.take(2).map { it.feedSource.id }.toSet()
@@ -151,21 +164,29 @@ class DesktopFeedManagementSelectionTest {
         val moved = mutableListOf<List<FeedSource>>()
         setHost(drawerState = { drawer }, onMove = { feeds, _ -> moved.add(feeds) }, onActivate = {})
         modifiedClick("Feed 0", toggleKey)
-        rule.onNodeWithText(EnFeedFlowStrings.desktopMoveSelectedFeeds).performMouseInput { click() }
+        modifiedClick("Feed 1", toggleKey)
+        batchAction("Feed 1", EnFeedFlowStrings.desktopMoveSelectedFeeds)
         rule.onNodeWithText(EnFeedFlowStrings.cancelButton).performSemanticsAction(SemanticsActions.OnClick) { it() }
         assertEquals(emptyList(), moved)
-        rule.onNodeWithText(EnFeedFlowStrings.desktopMoveSelectedFeeds).performMouseInput { click() }
+        batchAction("Feed 1", EnFeedFlowStrings.desktopMoveSelectedFeeds)
         rule.runOnIdle {
             val updated = sources.first().copy(
                 feedSource = sources.first().feedSource.copy(title = "Renamed", isPinned = true),
             )
             drawer = drawer.copy(feedSourcesWithoutCategory = (listOf(updated) + sources.drop(1)).toImmutableList())
         }
+        // The dialog opens on the category the feeds are already in, so a destination has to be picked first.
+        moveDestination(EnFeedFlowStrings.noCategory).performSemanticsAction(SemanticsActions.OnClick) { it() }
+        rule.waitUntil(timeoutMillis = 5_000) {
+            rule.onAllNodes(moveDestinationMatcher(EnFeedFlowStrings.noCategory) and isSelected())
+                .fetchSemanticsNodes().size == 1
+        }
         rule.onNodeWithText(EnFeedFlowStrings.confirmButton).performSemanticsAction(SemanticsActions.OnClick) { it() }
         rule.runOnIdle {
             assertEquals(1, moved.size)
-            assertEquals("Renamed", moved.single().single().title)
-            assertEquals(true, moved.single().single().isPinned)
+            val renamed = moved.single().single { it.id == sources.first().feedSource.id }
+            assertEquals("Renamed", renamed.title)
+            assertEquals(true, renamed.isPinned)
         }
     }
 
@@ -317,7 +338,7 @@ class DesktopFeedManagementSelectionTest {
             pressKey(Key.DirectionDown)
             keyUp(Key.ShiftLeft)
         }
-        rule.onNodeWithText("2 selected").assertExists()
+        assertSelection("Feed 0", "Feed 1")
         rule.onNodeWithText("Feed 1").assertIsFocused()
         assertEquals(0, activations)
     }
@@ -432,6 +453,18 @@ class DesktopFeedManagementSelectionTest {
         assertEquals(emptyList(), moved)
     }
 
+    private fun assertSelection(vararg selectedTitles: String) {
+        sources.indices.map { "Feed $it" }.forEach { title ->
+            val row = rule.onNodeWithText(title)
+            if (title in selectedTitles) row.assertIsSelected() else row.assertIsNotSelected()
+        }
+    }
+
+    private fun batchAction(rowTitle: String, label: String) {
+        rule.onNodeWithText(rowTitle).performMouseInput { click(button = MouseButton.Secondary) }
+        rule.onNodeWithText(label).performMouseInput { click() }
+    }
+
     private fun modifiedClick(title: String, modifierKey: Key) {
         val row = rule.onNodeWithText(title)
         row.performKeyInput { keyDown(modifierKey) }
@@ -539,6 +572,12 @@ class DesktopFeedManagementSelectionTest {
             }
         }
     }
+
+    // "Uncategorized" also titles a drawer section, so destinations are matched inside the move dialog's own list.
+    private fun moveDestinationMatcher(label: String) =
+        hasText(label) and hasAnyAncestor(hasContentDescription(EnFeedFlowStrings.changeCategory))
+
+    private fun moveDestination(label: String) = rule.onNode(moveDestinationMatcher(label))
 
     private val categoryTitle = requireNotNull(sources[0].feedSource.category).title
 

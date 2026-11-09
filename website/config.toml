@@ -96,17 +96,150 @@ theme = "feedflow"
     weight = 11
     title = "FeedFlow — RSS 閱讀器"
 
+  [languages.ar]
+    languageCode = "ar"
+    languageName = "العربية"
+    contentDir = "content/ar"
+    weight = 12
+
+  [languages.bg]
+    languageCode = "bg"
+    languageName = "Български"
+    contentDir = "content/bg"
+    weight = 13
+
+  [languages.ca]
+    languageCode = "ca"
+    languageName = "Català"
+    contentDir = "content/ca"
+    weight = 14
+
+  [languages.cs]
+    languageCode = "cs"
+    languageName = "Čeština"
+    contentDir = "content/cs"
+    weight = 15
+
+  [languages.da]
+    languageCode = "da"
+    languageName = "Dansk"
+    contentDir = "content/da"
+    weight = 16
+
+  [languages.el]
+    languageCode = "el"
+    languageName = "Ελληνικά"
+    contentDir = "content/el"
+    weight = 17
+
+  [languages.es]
+    languageCode = "es"
+    languageName = "Español"
+    contentDir = "content/es"
+    weight = 18
+
+  [languages.fi]
+    languageCode = "fi"
+    languageName = "Suomi"
+    contentDir = "content/fi"
+    weight = 19
+
+  [languages.fr]
+    languageCode = "fr"
+    languageName = "Français"
+    contentDir = "content/fr"
+    weight = 20
+
+  [languages.he]
+    languageCode = "he"
+    languageName = "עברית"
+    contentDir = "content/he"
+    weight = 21
+
+  [languages.hu]
+    languageCode = "hu"
+    languageName = "Magyar"
+    contentDir = "content/hu"
+    weight = 22
+
+  [languages.ja]
+    languageCode = "ja"
+    languageName = "日本語"
+    contentDir = "content/ja"
+    weight = 23
+
+  [languages.nl]
+    languageCode = "nl"
+    languageName = "Nederlands"
+    contentDir = "content/nl"
+    weight = 24
+
+  [languages.pl]
+    languageCode = "pl"
+    languageName = "Polski"
+    contentDir = "content/pl"
+    weight = 25
+
+  [languages.pt]
+    languageCode = "pt"
+    languageName = "Português"
+    contentDir = "content/pt"
+    weight = 26
+
+  [languages.ro]
+    languageCode = "ro"
+    languageName = "Română"
+    contentDir = "content/ro"
+    weight = 27
+
+  [languages.sk]
+    languageCode = "sk"
+    languageName = "Slovenčina"
+    contentDir = "content/sk"
+    weight = 28
+
+  [languages.sq]
+    languageCode = "sq"
+    languageName = "Shqip"
+    contentDir = "content/sq"
+    weight = 29
+
+  [languages.ta]
+    languageCode = "ta"
+    languageName = "தமிழ்"
+    contentDir = "content/ta"
+    weight = 30
+
+  [languages.tr]
+    languageCode = "tr"
+    languageName = "Türkçe"
+    contentDir = "content/tr"
+    weight = 31
+
+  [languages.uk]
+    languageCode = "uk"
+    languageName = "Українська"
+    contentDir = "content/uk"
+    weight = 32
+
+  [languages.vi]
+    languageCode = "vi"
+    languageName = "Tiếng Việt"
+    contentDir = "content/vi"
+    weight = 33
+
 enableRobotsTXT = true
 
 [params]
   logo          = "images/logo.png"
   github        = "https://github.com/prof18/feed-flow"
   weblate       = "https://hosted.weblate.org/projects/feedflow/"
-  bluesky       = "https://bsky.app/profile/feedflow.dev"
-  mastodon      = "https://mastodon.social/@feedflowapp"
+  bluesky       = "https://bsky.app/profile/marcogomiero.com"
+  mastodon      = "https://androiddev.social/@marcogom"
   donate        = "https://www.paypal.me/MarcoGomiero"
   privacy       = "https://www.prof18.com/feed-flow/pp/privacy-policy-jul23/"
   reportIssue   = "https://github.com/prof18/feed-flow/issues/new?title=App+issue&body=Please+describe+the+issue+and+provide+a+link+to+the+RSS+Feed+that+causes+the+issues:%0A"
+  supportEmail  = "mgp.dev.studio+feedflow@gmail.com"
   authorName    = "Marco Gomiero"
   authorURL     = "https://www.marcogomiero.com/"
-  twitterHandle = "@feedflowapp"
+  twitterHandle = "@marcoGomier"

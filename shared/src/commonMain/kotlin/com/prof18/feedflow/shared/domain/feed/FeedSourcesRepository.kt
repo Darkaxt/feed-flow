@@ -229,6 +229,7 @@ internal class FeedSourcesRepository(
         isNotificationEnabled: Boolean,
         hideYouTubeShorts: Boolean = false,
     ): FeedAddedState {
+        dropMemoisedLogoLookups()
         val sanitizedUrl = sanitizeUrl(feedUrl.trim())
         val url = YouTubeChannelUrl.normalizePlaylistUrl(sanitizedUrl)
             ?: YouTubeChannelUrl.normalizeFeedUrl(sanitizedUrl) ?: sanitizedUrl
@@ -318,6 +319,7 @@ internal class FeedSourcesRepository(
         newFeedSource: FeedSource,
         originalFeedSource: FeedSource?,
     ): FeedEditedState {
+        dropMemoisedLogoLookups()
         return feedStateRepository.runUserWrite<FeedEditedState>(FeedEditedState.Error.GenericError) {
             if (newFeedSource != originalFeedSource) {
                 databaseHelper.insertFeedSourcePreference(
@@ -424,6 +426,12 @@ internal class FeedSourcesRepository(
         feedStateRepository.getFeeds()
     }
 
+    /**
+     * This repository lives as long as the screen that owns it. Per action, not per fetch: hiding
+     * a YouTube channel's shorts parses two feeds and should still read the website once.
+     */
+    private suspend fun dropMemoisedLogoLookups() = feedSourceLogoRetriever.invalidateLookupCaches()
+
     private suspend fun fetchSingleFeed(
         url: String,
         category: FeedSourceCategory?,
@@ -475,9 +483,17 @@ internal class FeedSourcesRepository(
             feedStateRepository.updateCurrentFilterName(newName)
         }
 
+        if (previousUrl != null && newUrl != previousUrl &&
+            YouTubeChannelUrl.channelIdFromNoShortsFeedUrl(newUrl) != null
+        ) {
+            return editToNoShortsFeed(newFeedSource, newUrl, previousUrl)
+        }
+
         return if (newUrl != previousUrl) {
             when (val response = fetchSingleFeed(newUrl, newFeedSource.category)) {
                 is AddFeedResponse.FeedFound -> {
+                    val duplicate = otherSourceWithUrl(response.parsedFeedSource.url, newFeedSource.id)
+                    if (duplicate != null) return FeedEditedState.Error.FeedAlreadyExists(duplicate.title)
                     updateFeedSource(
                         newFeedSource.copy(
                             url = response.parsedFeedSource.url,
@@ -512,6 +528,31 @@ internal class FeedSourcesRepository(
             FeedEditedState.FeedEdited(newName)
         }
     }
+
+    private suspend fun editToNoShortsFeed(
+        newFeedSource: FeedSource,
+        noShortsUrl: String,
+        previousUrl: String,
+    ): FeedEditedState {
+        val filteredFeed = fetchSingleFeed(noShortsUrl, newFeedSource.category) as? AddFeedResponse.FeedFound
+        currentCoroutineContext().ensureActive()
+        if (filteredFeed == null || filteredFeed.rssChannel.items.isEmpty()) {
+            updateFeedSource(newFeedSource.copy(url = previousUrl))
+            return FeedEditedState.FeedEdited(newFeedSource.title, shortsFilterFallback = true)
+        }
+        otherSourceWithUrl(filteredFeed.parsedFeedSource.url, newFeedSource.id)?.let { duplicate ->
+            return FeedEditedState.Error.FeedAlreadyExists(duplicate.title)
+        }
+        // Cleanup first: if the URL update below fails, the channel URL stays and the user can save again
+        val removedShorts = databaseHelper.deleteYouTubeShorts(newFeedSource.id)
+        feedSyncRepository.deleteFeedItems(removedShorts)
+        updateFeedSource(newFeedSource.copy(url = filteredFeed.parsedFeedSource.url))
+        feedStateRepository.getFeeds()
+        return FeedEditedState.FeedEdited(newFeedSource.title)
+    }
+
+    private suspend fun otherSourceWithUrl(url: String, feedSourceId: String): FeedSource? =
+        databaseHelper.getFeedSources().firstOrNull { it.url == url && it.id != feedSourceId }
 
     private suspend fun editFeedSourceForFreshRss(
         newFeedSource: FeedSource,

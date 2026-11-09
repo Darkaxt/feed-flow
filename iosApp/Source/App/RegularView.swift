@@ -219,6 +219,7 @@ struct RegularView: View {
                 .environment(appState)
                 .environment(browserSelector)
                 .toggleStyle(BlueToggleStyle())
+                .snackbarPresentationSurface()
         }
         .sheet(isPresented: $showSidebarSettingsSheet) {
             SettingsScreen(
@@ -228,6 +229,7 @@ struct RegularView: View {
                 .environment(appState)
                 .environment(browserSelector)
                 .preferredColorScheme(appState.colorScheme)
+                .snackbarPresentationSurface()
         }
         .sheet(isPresented: $showImportExportSheet) {
             ImportExportScreen(
@@ -235,16 +237,21 @@ struct RegularView: View {
                 fetchFeeds: { homeViewModel.getNewFeeds(isFirstLaunch: false, forceRefresh: false) }
             )
                 .environment(appState)
+                .snackbarPresentationSurface()
         }
         .sheet(item: $feedSourceToEdit) { item in
             EditFeedScreen(feedSource: item.feedSource)
                 .environment(appState)
                 .environment(browserSelector)
                 .toggleStyle(BlueToggleStyle())
+                .snackbarPresentationSurface()
         }
         .onChange(of: appState.pendingBrowserURL) { _, newURL in
             if let url = newURL {
                 appState.pendingBrowserURL = nil
+                // The browser is pushed on the main stack, so a settings sheet would cover it.
+                showSettings = false
+                showSidebarSettingsSheet = false
                 appState.regularNavigationPath.append(CommonViewRoute.inAppBrowser(url: url))
             }
         }
@@ -264,12 +271,14 @@ struct RegularView: View {
                 self.navDrawerState = state
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .didReceiveNotificationDeepLink)) { _ in
+        .onReceive(NotificationCenter.default.publisher(
+            for: .didReceiveNotificationDeepLink,
+            object: appState.widgetLinks.dismissalSender
+        )) { _ in
             showAddFeedSheet = false
             feedSourceToEdit = nil
             showSettings = false
             showSidebarSettingsSheet = false
-            appState.regularNavigationPath = NavigationPath()
             preferredCompactColumn = .detail
         }
     }

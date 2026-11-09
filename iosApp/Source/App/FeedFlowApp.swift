@@ -22,6 +22,7 @@ struct FeedFlowApp: App {
     private var feedSyncTimer: FeedSyncTimer = .init()
 
     init() {
+        SVGImageDecoder.register()
         startKoin(notifier: IOSNotifier(), websiteRecovery: true)
         RevenueCatSupport.configure()
         setupTelemetry()
@@ -44,37 +45,54 @@ struct FeedFlowApp: App {
             }
         }
 
-        registerBackgroundTask()
+        for identifier in BackgroundRefreshScheduler.taskIdentifiers {
+            registerBackgroundTask(identifier: identifier)
+        }
     }
 
-    private func registerBackgroundTask() {
+    // A background launch never reports a .background scene phase, so the live queries are
+    // paused here; becoming active resumes them.
+    @MainActor
+    private func pauseLiveQueriesUnlessActive() {
+        if UIApplication.shared.applicationState != .active {
+            Deps.shared.getLiveQueryGate().pause()
+        }
+    }
+
+    private func registerBackgroundTask(identifier: String) {
         BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: "com.prof18.feedflow.articlesync",
+            forTaskWithIdentifier: identifier,
             using: nil
         ) { task in
-            scheduleAppRefresh()
+            BackgroundRefreshScheduler.schedule()
 
-            let completionLock = NSLock()
-            var didComplete = false
-
-            func finish(success: Bool) {
-                completionLock.lock()
-                defer { completionLock.unlock() }
-                guard !didComplete else { return }
-                didComplete = true
+            let completion = BackgroundTaskCompletion { success in
                 task.setTaskCompleted(success: success)
             }
 
+            func finish(success: Bool) {
+                completion.finish(success: success)
+            }
+
             let backgroundTask = Task {
+                await pauseLiveQueriesUnlessActive()
                 let repo = Deps.shared.getSerialFeedFetcherRepository()
                 var fetchSucceeded = false
 
                 // Phase 1: Fetch feeds (expensive, may be interrupted)
                 do {
-                    try await repo.fetchFeeds(forceRefresh: false)
+                    if task is BGAppRefreshTask {
+                        try await repo.refreshFeedsQuickly(
+                            timeBudgetMillis: BackgroundRefreshScheduler.refreshTimeBudgetMillis
+                        )
+                    } else {
+                        try await repo.fetchFeeds(forceRefresh: false)
+                    }
                     fetchSucceeded = true
                 } catch is CancellationError {
-                    // System cancelled — items carry over to next run
+                    // System cancelled — items carry over to next run. The feeds fetched before the
+                    // cutoff are already saved, so the widget can show them now.
+                    WidgetCenter.shared.reloadAllTimelines()
                     finish(success: false)
                     return
                 } catch {
@@ -122,7 +140,7 @@ struct FeedFlowApp: App {
 
             task.expirationHandler = {
                 backgroundTask.cancel()
-                finish(success: false)
+                completion.finishAfterGracePeriod()
             }
         }
     }
@@ -166,15 +184,20 @@ struct FeedFlowApp: App {
                 .onChange(of: scenePhase) {
                     switch scenePhase {
                     case .active:
+                        Deps.shared.getLiveQueryGate().resume()
                         feedSyncTimer.scheduleTimer()
                         Deps.shared.getContentPrefetchManager().startBackgroundFetching()
                     case .background:
+                        // Live queries re-run after every write, outside any suspension guard: one
+                        // still reading the app-group database when iOS suspends the app gets it
+                        // killed (0xdead10cc). They resume, with fresh data, when the app is active.
+                        Deps.shared.getLiveQueryGate().pause()
                         audioPlayback.savePosition()
                         feedSyncTimer.invalidate()
                         // Stop prefetch DB writes before suspension: a SQLite lock held on the
                         // app-group container while suspended gets the app killed (0xdead10cc).
                         Deps.shared.getContentPrefetchManager().pauseFetching()
-                        scheduleAppRefresh()
+                        BackgroundRefreshScheduler.schedule()
                         WidgetCenter.shared.reloadAllTimelines()
                     default:
                         break
@@ -195,18 +218,27 @@ struct FeedFlowApp: App {
             }
         #endif
 
-        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        let path = components?.path ?? ""
-
-        let feedId = path.replacing("/", with: "")
-        appState.navigate(route: CommonViewRoute.deepLinkFeed(feedId))
+        if url.host == "feed" {
+            appState.widgetLinks.enqueue(url)
+        }
     }
 
     #if DEBUG
+        private func enqueueE2eSnackbars(queryItems: [URLQueryItem], appState: AppState) {
+            appState.emitGenericError()
+            if queryItems.contains(where: { $0.name == "count" && $0.value == "2" }) {
+                appState.emitGenericError()
+            }
+        }
+
         private func handleE2eURL(_ url: URL, appState: AppState) {
             let action = url.pathComponents
                 .first { $0 != "/" } ?? "reset-and-seed"
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            if action == "snackbar" {
+                enqueueE2eSnackbars(queryItems: components?.queryItems ?? [], appState: appState)
+                return
+            }
             let profileName = components?.queryItems?
                 .first { $0.name == "profile" }?
                 .value
@@ -272,14 +304,6 @@ private func readDevelopmentOPMLFile() -> String? {
     }
     let fileURL = documents.appendingPathComponent("e2e-restore/development.opml")
     return try? String(contentsOf: fileURL, encoding: .utf8)
-}
-
-func scheduleAppRefresh() {
-    let request = BGProcessingTaskRequest(identifier: "com.prof18.feedflow.articlesync")
-    // Schedule for 2 hours from now
-    request.earliestBeginDate = .now.addingTimeInterval(2 * 3_600)
-    request.requiresNetworkConnectivity = true
-    try? BGTaskScheduler.shared.submit(request)
 }
 
 func setupTelemetry() {

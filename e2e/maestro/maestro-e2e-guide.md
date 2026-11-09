@@ -144,7 +144,7 @@ The Android `android-widget` profile also exposes `e2e_open_widget_settings`, wh
 
 REG-177 defaults to an English UI. For a localized device, pass `-e WIDGET_HEADER_TITLE="<localized Show header title label>"` to Maestro.
 
-The fork's REG-183 uses the same `e2e_open_widget_settings` entry point for configurable Card surfaces and freshness. It was renumbered from REG-178 and REG-181 to avoid upstream flow collisions. It is maintained as source coverage; no device execution is permitted during the weekly upstream synchronization.
+The fork's REG-189 uses the same `e2e_open_widget_settings` entry point for configurable Card surfaces and freshness. It was renumbered from REG-178, REG-181 and REG-183 to avoid upstream flow collisions. It is maintained as source coverage; no device execution is permitted during the weekly upstream synchronization.
 
 iOS handles the seed link inside the app. The simulator may show a system confirmation dialog for custom schemes, so keep the `Open` tap optional.
 
@@ -274,7 +274,7 @@ run them sequentially on a compatible test device. `E2E_ANDROID_SUITES=smoke`
 selects the existing smoke subset for either flavor. Restoration remains bound
 to the selected device.
 
-The canonical Android inventory defines 79 logical journeys. F-Droid selects
+The canonical Android inventory defines 80 logical journeys. F-Droid selects
 four capability-specific alternatives under `android/fdroid/regression` for
 REG-118, REG-132, REG-133 and REG-147. Its existing flavor excludes Dropbox,
 Google Drive and crash reporting. The alternatives check provider/reporting

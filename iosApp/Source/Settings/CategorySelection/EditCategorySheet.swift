@@ -75,7 +75,7 @@ struct EditCategorySheet: View {
                                 HStack(spacing: 6) {
                                     Image(systemName: "plus")
                                         .font(.system(size: 16, weight: .medium))
-                                    Text(feedFlowStrings.addFeedCategoryTitle)
+                                    Text(feedFlowStrings.newCategoryButton)
                                         .font(.body)
                                         .fontWeight(.medium)
                                 }
@@ -128,6 +128,7 @@ struct EditCategorySheet: View {
                             Image(systemName: "xmark.circle")
                         }
                     }
+                    .accessibilityLabel(feedFlowStrings.closeButtonContentDescription)
                 }
             }
         }
@@ -146,6 +147,7 @@ struct EditCategorySheet: View {
                         onAddCategory(CategoryName(name: categoryName))
                     }
                 )
+                .snackbarPresentationSurface()
             }
         )
         .confirmationDialog(
@@ -174,17 +176,20 @@ struct EditCategorySheet: View {
                 set: { if !$0 { categoryToEdit = nil } }
             )
         ) {
-            if let category = categoryToEdit {
-                EditCategoryNameSheet(
-                    categoryId: category.id,
-                    categoryName: category.name ?? "",
-                    validateCategoryName: validateCategoryName,
-                    onConfirm: { newName in
-                        onEditCategory(category.id, CategoryName(name: newName))
-                        categoryToEdit = nil
-                    }
-                )
+            Group {
+                if let category = categoryToEdit {
+                    EditCategoryNameSheet(
+                        categoryId: category.id,
+                        categoryName: category.name ?? "",
+                        validateCategoryName: validateCategoryName,
+                        onConfirm: { newName in
+                            onEditCategory(category.id, CategoryName(name: newName))
+                            categoryToEdit = nil
+                        }
+                    )
+                }
             }
+            .snackbarPresentationSurface()
         }
     }
 }
@@ -239,7 +244,7 @@ private struct AddCategoryNameSheet: View {
                 .accessibilityIdentifier(EditCategoryAccessibilityIdentifiers.addCategoryConfirmButton)
             }
             .padding()
-            .navigationTitle(feedFlowStrings.addFeedCategoryTitle)
+            .navigationTitle(feedFlowStrings.newCategoryButton)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

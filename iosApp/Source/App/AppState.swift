@@ -14,13 +14,16 @@ import SwiftUI
 @Observable
 class AppState {
     private let appearance: AppAppearance
+    let widgetLinks: NotificationDeepLinkStore
 
+    @MainActor
     init(appearance: AppAppearance = AppAppearance()) {
         self.appearance = appearance
+        widgetLinks = NotificationDeepLinkStore()
     }
 
     var snackbarQueue: Deque<SnackbarData> = Deque()
-    var snackbarQueueForSheet: Deque<SnackbarData> = Deque()
+    let snackbarPresentation = SnackbarPresentation()
     var regularNavigationPath = NavigationPath()
     var colorScheme: ColorScheme? {
         get { appearance.colorScheme }

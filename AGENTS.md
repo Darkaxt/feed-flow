@@ -94,15 +94,21 @@ For anything deeper — SDK package management (`android sdk ...`), device inter
 
 ### Running & validating the Desktop app
 
-When you need to run the Desktop app for testing, UI iteration, or user-visible validation, prefer the Compose Hot Reload MCP server configured in `.mcp.json`:
+When you need to run the Desktop app for testing, UI iteration, or user-visible validation, drive it through the Compose Hot Reload MCP server configured in `.mcp.json`. The agent harness already starts that server (`:desktopApp:hotMcpServerJvm`); it only attaches to an app launched with hot reload, so start the app yourself, in the background:
 
 ```bash
-./gradlew --quiet --console=plain :desktopApp:hotMcpServerJvm
+./gradlew --quiet --console=plain :desktopApp:hotRunJvm
 ```
+
+Do not start `hotMcpServerJvm` by hand: it launches no app, and the MCP `status` stays `connected: false`. Once the app writes `desktopApp/build/run/jvmMain/jvmMain.pid`, `status` reports `connected: true`.
 
 Use the Gradle daemon for manual local runs so repeated desktop iterations stay fast. The checked-in `.mcp.json` may still pass `--no-daemon` because JetBrains' AI-agent example does that for MCP client-managed server processes.
 
-Use the MCP tools when you need to interact with the running Desktop app: check status, reload code changes, list windows, capture screenshots, inspect the semantic tree, click/type/scroll, or resize windows. The MCP server is experimental in Compose Hot Reload; if it is unavailable or not connected, fall back to `./gradlew --quiet --console=plain desktopApp:run` and note the limitation in handoff.
+Use the MCP tools when you need to interact with the running Desktop app: check status, reload code changes, list windows, inspect the semantic tree, click/type/scroll, or resize windows. Its `take_screenshot` grabs the screen area under the window, so other windows on top show up in it. The MCP server is experimental in Compose Hot Reload; if it is unavailable or not connected, fall back to `./gradlew --quiet --console=plain desktopApp:run` and note the limitation in handoff. Dialog windows (Add feed, Settings, Feed suggestions) are not registered with the MCP: Compose Hot Reload skips a dialog's entry point as nested in the main window's, so `list_windows` shows only the main window.
+
+For dialogs, use `.scripts/desktop-ax.sh`, which reads and presses elements of any app window through macOS Accessibility, in the background and without a computer-use grant: `.scripts/desktop-ax.sh dump "Add feed"` lists the elements, and `.scripts/desktop-ax.sh press "Add feed" AXButton:Cancel` presses one (the optional `AXRole:` prefix picks among same-named elements). It cannot type: Compose ignores Accessibility value writes and drops key events sent to a background window, so a flow that needs text in a dialog field still needs the user.
+
+For visual proof, record the window with sigillum while driving it: `sigillum record start desktop --window-title FeedFlow` (or the dialog's title), act, then `sigillum record stop desktop`. It captures the window itself even when it is covered, and needs no computer-use grant. Don't request computer-use access to drive the app.
 
 Desktop compiles, tests and packages with JBR 25; Gradle and shared/mobile toolchains remain on Java 21. Desktop controls use Jewel, with Material icon vectors allowed; shared/core remain independent of platform UI. See `docs/DESKTOP_UI.md`.
 
@@ -144,7 +150,8 @@ This requires XcodeGen installed (`brew install xcodegen`, or `mint bootstrap` u
 ### Building for iOS Simulator
 
 - If using XcodeBuildMCP, use the installed XcodeBuildMCP skill before calling XcodeBuildMCP tools.
-- The xcodeproj must exist locally. Run `cd iosApp && ./.scripts/generate-project.sh` first if it's missing.
+- The xcodeproj must exist locally and match the checkout. Run `cd iosApp && ./.scripts/generate-project.sh` before building after a pull or branch switch: a project generated from an older checkout misses newly added Swift files and fails to compile.
+- Under Xcode 27.1, XcodeBuildMCP `snapshot_ui` and `axe` HID taps fail silently (SimulatorKit moved to `Contents/SharedFrameworks`). `axe describe-ui` still reads the UI tree; drive input through Maestro instead.
 - XcodeBuildMCP has repo-local defaults in `.xcodebuildmcp/config.yaml`; prefer the current CLI shape:
 
 ```bash
@@ -178,7 +185,8 @@ Before handing off you must:
 3. Run `.scripts/ios-format.sh` to format iOS code - only run if you made changes on the iOS app
 4. If you changed iOS code, run `xcodebuild -project iosApp/FeedFlow.xcodeproj -scheme FeedFlow -destination 'platform=iOS Simulator,name=iPhone 18 Pro' build -quiet` before handoff; rerun without `-quiet` only if you need the full diagnostics
 5. If you changed iOS code, run `.scripts/ios-tests.sh`
-6. Fix any issues found during the above steps
+6. If you changed user-visible behaviour, check whether a website FAQ answer needs updating or a new entry is warranted (see "Website FAQ")
+7. Fix any issues found during the above steps
 
 ### Initial Setup (for building from scratch)
 ```bash
@@ -201,6 +209,8 @@ cp iosApp/Assets/Config.xcconfig.template iosApp/Assets/Config.xcconfig
 
 For compile-only local/CI iOS builds without real sync credentials, you can use `cp config/dummy-config.xcconfig iosApp/Assets/Config.xcconfig` instead.
 
+A fresh git worktree has none of these gitignored files. Before the first build or gate run there, copy `local.properties`, the `google-services.json` files, both `GoogleService-Info*.plist` files and `iosApp/Assets/Config.xcconfig` from the main checkout, or create them with the commands above. Without the iOS files, `allTests` fails in `generate-project.sh`'s XcodeGen spec validation. Don't copy `keystore.properties`: its RevenueCat key makes the Robolectric tests fail.
+
 To read the live Google Play listing locally, run `gplay metadata pull --package com.prof18.feedflow --dir "$(mktemp -d)"` (PollyGlot/google-play-cli; the service account is in the macOS Keychain and no key file is kept on disk). CI still publishes through Gradle Play Publisher with the `PLAY_CONFIG` secret. Run `FEEDFLOW_PLAY_CONFIG_JSON=/path/to/play_config.json ./gradlew --quiet --console=plain :androidApp:bootstrapGooglePlayReleaseListing` only when you deliberately want to overwrite `androidApp/src/googlePlay/play/` from the live store: it resets that directory, including tracked graphics and release notes. Do not assume an uncommitted repo-root `play_config.json` exists in automation worktrees.
 
 ## Adding a feature
@@ -213,7 +223,7 @@ Generic patterns (Screen/ScreenContent split, ViewModel shape, events, SwiftUI f
 - **Android:** wrapper `androidApp/.../android/<feature>/XxxScreen.android.kt`, route (`@Serializable ... : NavKey`) in `androidApp/.../android/Screen.kt`, `entry<Route>` in `MainActivity.FeedFlowNavigation()`. Go back with `popBackStackOrFinish(backStack)` (the `navigateBack` lambda).
 - **Desktop:** wrapper `desktopApp/.../desktop/<feature>/XxxScreen.desktop.kt`. In-window pages get a `NavKey` in `desktopApp/.../desktop/Screen.kt` and an `entry<Route>` in `screens()` in `desktop/main/MainWindow.kt`. Preferences go in the Settings window and other detail pages are dialog windows instead (see "Desktop screens/windows").
 - **ViewModel scope:** no Navigation 3 ViewModel entry decorator is installed, so `koinViewModel()` inside an entry is scoped to the Activity/window. The ViewModel outlives the screen and is reused next time; reset per-screen state explicitly (as `SearchScreen` does with `resetSearch()`).
-- **iOS:** `iosApp/Source/<Feature>/XxxScreen.swift` + `XxxScreenContent.swift`. Add a case to `CommonViewRoute` (`iosApp/Source/App/Model/CommonViewRoute.swift`) and handle it in the `.navigationDestination(for: CommonViewRoute.self)` of **both** `RegularView.swift` and `CompactView.swift`. Navigate with `appState.navigate(route:)`. Surface errors via `appState.snackbarQueue` + `.snackbar(messageQueue:)`.
+- **iOS:** `iosApp/Source/<Feature>/XxxScreen.swift` + `XxxScreenContent.swift`. Add a case to `CommonViewRoute` (`iosApp/Source/App/Model/CommonViewRoute.swift`) and handle it in the `.navigationDestination(for: CommonViewRoute.self)` of `RegularView.swift`, the single root layout for iPhone, iPad and iPhone Duo. Navigate with `appState.navigate(route:)`. Enqueue errors in `appState.snackbarQueue`. The scene presents them above navigation. Apply `.snackbarPresentationSurface()` once at the content root of each app-owned sheet or cover so it can display the scene's banner.
 - **Strings:** `LocalFeedFlowStrings.current` in Compose, `feedFlowStrings` in Swift.
 - **No SwiftUI previews:** the Kotlin framework can't load in Xcode previews.
 
@@ -280,6 +290,7 @@ When creating commits:
 - Direct xcodebuild alternative: `xcodebuild -project iosApp/FeedFlow.xcodeproj -scheme FeedFlow -destination 'platform=iOS Simulator,name=iPhone 18 Pro' build -quiet`
 - The app requires Xcode 27.1 or newer and builds against the iOS 27.1 SDK, with a minimum deployment target of iOS 17 (`iosApp/project.yml`). Gate newer APIs with `#available` checks; do not add `#if compiler(...)` guards for older Xcode versions.
 - Keep app-group database work that may outlive an iOS foreground interval inside `withSuspensionGuard`; it uses `NSProcessInfo` and also works in the widget and share extensions.
+- Every live query in `DatabaseHelper` (`asFlow()` + `mapToList`/`mapToOne…`) must end its SQLDelight chain with `.pausedInBackground()`. iOS pauses the `LiveQueryGate` when the app goes to the background: the re-runs a write triggers happen after its suspension guard is released, and a read still open at suspension gets the app killed (0xdead10cc).
 - Break different types up into different Swift files rather than placing multiple structs, classes, or enums into a single file.
 - Keep accessibility identifier enums in separate `*AccessibilityIdentifiers.swift` files, not appended to view files.
 - Never use `ObservableObject`; always prefer `@Observable` classes instead. The one exception is `VMStoreOwner` held with `@StateObject`: its autoclosure creates the Kotlin ViewModel once per view identity, while `@State` would rebuild it on every parent update.
@@ -302,14 +313,23 @@ When creating commits:
 - The cursor predicate must mirror the query's `ORDER BY` exactly, including SQLite NULL placement for nullable `pub_date`; invalidate the cursor only after a query succeeds.
 
 ### Internationalization
-- Main-to-`localization` sync uses rebase (`.github/workflows/sync-main-to-localization.yml`); resolve translation conflicts during the rebase rather than switching the workflow to merge commits.
+- Translations come from Weblate (project `feedflow`). Weblate tracks `main` through its GitHub App and delivers translations as one pull request it keeps updated and auto-merges with rebase; there is no `localization` branch. Every component is linked to `app-strings`, which owns the repository settings.
+- Each website FAQ entry is its own Weblate component, created by the Component discovery add-on on `app-strings` from `website/content/en/faq/NN-*.md`. Renaming an English FAQ file replaces its component. A language only gets a published FAQ if it is listed in `website/config.toml`.
 - String resources are located in `i18n/src/commonMain/resources/locale/values-[language]/`
 - Run .scripts/refresh-translations.sh after adding a new translation, to re-generate the kotlin code
+- Enabling a new app language takes more than the `values-[language]/` folder. Register it in the `feedFlowStrings` map in `i18n/src/commonMain/kotlin/com/prof18/feedflow/i18n/Locales.kt`, `CFBundleLocalizations` in `iosApp/Info.plist`, `knownRegions` in `iosApp/project.yml`, the macOS localizations in `desktopApp/build.gradle.kts` (`macExtraPlistKeys`), the Windows package languages in `.github/msix-resources-template.xml`, and `FeedFlowStringsLookupTest`. The MSIX list is the one most easily forgotten.
 - Store screenshots for **all** platforms (Android phone/tablet, iPhone, iPad, macOS, Windows) are rendered from repo code by `tools/screenshots/` (`node render.mjs --all`, then `node verify.mjs`), not Figma. Use the repo-local `render-store-screenshots` skill when translations change; it enforces the spacing/padding floors.
 - Use the repo-local `translation-release-audit` skill for weekly or release checks of app translations, store copy, generated Play listing files, live store metadata, and screenshot copy/assets. Do not upload store metadata/screenshots unless the user explicitly asks.
 - Don't hardcode user-visible strings; put them in the i18n resources.
+- Use the terms in `docs/GLOSSARY.md` (feeds, offline copy, Back up now, Uncategorized…). The term list itself is the Weblate glossary, mirrored in `i18n/glossary/*.tbx`.
 - Add only the English strings and don't translate other languages yourself: professional translators handle them later.
 - Write English UI copy without a first-person "we": address the user or describe the state ("Couldn't connect to iCloud", not "We are unable to connect"). Match the tone of the existing strings.
+
+### Website FAQ
+- The FAQ lives in `website/content/en/faq/`, one Markdown file per question, ordered by `weight` (filename number × 10); `featured: true` puts a question in the homepage "Common questions" section. The apps' FAQ entry opens it through `Websites.faqUrl`.
+- When a change alters something an answer describes, update that answer in the same change: setting names or locations, defaults, refresh/background sync, notifications, sync providers and per-build availability (F-Droid, Flathub), reader and link-opening options, import/export, error codes in `ErrorCode.kt`, platforms and minimum OS versions. Remove statements that stop being true.
+- When a new user-visible feature or behaviour is likely to raise questions (non-obvious defaults, platform differences, limits, something users can't find), add an entry or extend the closest one. Ask the user if unsure whether it belongs in the FAQ.
+- Write answers like the UI copy: plain English, no "we", settings as **Settings → Section → Option** with the exact English string names. Don't mention pricing, tips or analytics. Add only the English files; translations go in `content/<lang>/faq/` with the same filename and fall back to English per entry.
 
 ### Flatpak / Linux Desktop
 - `.scripts/flatpak-build-setup.sh` -> Prepare the project for Flatpak builds (sets release props, disables JetBrains JDK vendor, disables toolchain auto-provisioning, comments out Android-only Gradle plugins)

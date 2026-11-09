@@ -6,15 +6,15 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import androidx.browser.customtabs.CustomTabsClient
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.net.toUri
 import co.touchlab.kermit.Logger
+import com.prof18.feedflow.android.ui.utils.feedFlowStringsFor
 import com.prof18.feedflow.core.model.ArticleOpenMode
 import com.prof18.feedflow.core.model.Browser
 import com.prof18.feedflow.core.utils.BrowserIds
-import com.prof18.feedflow.i18n.EnFeedFlowStrings
 import com.prof18.feedflow.i18n.FeedFlowStrings
-import com.prof18.feedflow.i18n.feedFlowStrings
 import com.prof18.feedflow.shared.data.SettingsRepository
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -22,7 +22,6 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import java.util.Locale
 
 class BrowserManager(
     private val context: Context,
@@ -53,50 +52,44 @@ class BrowserManager(
         }
     }
 
-    private fun getCurrentStrings(): FeedFlowStrings {
-        val languageCode = if (settingsRepository.getForceEnglishEnabled()) "en" else Locale.getDefault().language
-        return feedFlowStrings[languageCode] ?: EnFeedFlowStrings
-    }
+    private fun getCurrentStrings(): FeedFlowStrings =
+        feedFlowStringsFor(forceEnglish = settingsRepository.getForceEnglishEnabled())
 
     private fun populateBrowserList() {
         val favouriteBrowserId = settingsRepository.getFavouriteBrowserId()
 
-        val intent = Intent(Intent(Intent.ACTION_VIEW)).apply {
-            data = Uri.parse("https://www.example.com")
-        }
+        val intent = Intent(Intent.ACTION_VIEW, "https://www.example.com".toUri())
+            .addCategory(Intent.CATEGORY_BROWSABLE)
+        // Include browsers other than the system default, but require an activity that can launch.
+        val flags = PackageManager.MATCH_ALL or PackageManager.MATCH_DEFAULT_ONLY
 
         val resolvedInfos = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             context.packageManager.queryIntentActivities(
                 intent,
-                PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_ALL.toLong()),
+                PackageManager.ResolveInfoFlags.of(flags.toLong()),
             )
         } else {
             context.packageManager.queryIntentActivities(
-                Intent(Intent.ACTION_MAIN, null).addCategory(Intent.CATEGORY_LAUNCHER),
-                PackageManager.GET_META_DATA,
+                intent,
+                flags,
             )
         }
+        val selectedBrowserId = favouriteBrowserId
+            ?.takeIf { id -> resolvedInfos.any { it.activityInfo.packageName == id } }
+            ?: BrowserIds.IN_APP_BROWSER
 
         val browserList = listOf(
             Browser(
                 id = BrowserIds.IN_APP_BROWSER,
                 name = getCurrentStrings().inAppBrowser,
-                isFavourite = if (favouriteBrowserId != null) {
-                    favouriteBrowserId == BrowserIds.IN_APP_BROWSER
-                } else {
-                    true
-                },
+                isFavourite = selectedBrowserId == BrowserIds.IN_APP_BROWSER,
             ),
         ) + resolvedInfos.map { info ->
             val id = info.activityInfo.packageName
             Browser(
                 id = id,
                 name = info.activityInfo.loadLabel(context.packageManager).toString(),
-                isFavourite = if (favouriteBrowserId != null) {
-                    favouriteBrowserId == id
-                } else {
-                    false
-                },
+                isFavourite = selectedBrowserId == id,
             )
         }
         browserListMutableState.update { browserList.toImmutableList() }
@@ -113,6 +106,7 @@ class BrowserManager(
     fun openUrlWithFavoriteBrowser(
         url: String,
         context: Context,
+        preferAppHandler: Boolean = true,
     ) {
         try {
             val browserId = getBrowserPackageName()
@@ -121,7 +115,7 @@ class BrowserManager(
                 return
             }
 
-            val appHandlerOpened = tryOpenWithAppHandler(url, context)
+            val appHandlerOpened = preferAppHandler && tryOpenWithAppHandler(url, context)
             if (!appHandlerOpened) {
                 val intent = getFavouriteBrowserIntent(url)
                 context.startActivity(intent)
@@ -135,8 +129,25 @@ class BrowserManager(
     }
 
     fun openWithInAppBrowser(url: String, context: Context) {
+        val uri = url.toUri()
         val intent = CustomTabsIntent.Builder().build()
-        intent.launchUrl(context, url.toUri())
+        getInAppBrowserPackage(uri)?.let { packageName ->
+            intent.intent.setPackage(packageName)
+        }
+        intent.launchUrl(context, uri)
+    }
+
+    // Without a default browser, an unpinned Custom Tab opens the system "Open with" chooser.
+    private fun getInAppBrowserPackage(uri: Uri): String? {
+        val viewIntent = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
+        val packageManager = context.packageManager
+        return inAppBrowserPackage(
+            resolvedPackage = packageManager.resolveActivity(viewIntent, PackageManager.MATCH_DEFAULT_ONLY)
+                ?.activityInfo?.packageName,
+            handlerPackages = packageManager.queryIntentActivities(viewIntent, PackageManager.MATCH_DEFAULT_ONLY)
+                .map { it.activityInfo.packageName },
+            customTabsProvider = { candidates -> CustomTabsClient.getPackageName(context, candidates) },
+        )
     }
 
     private fun tryOpenWithAppHandler(url: String, context: Context): Boolean {
@@ -216,4 +227,17 @@ class BrowserManager(
             logger.e(e) { "Unable to start web browser" }
         }
     }
+}
+
+/**
+ * Returns the Custom Tabs provider to pin when the system has no default handler for the link and
+ * would show a chooser, or null to leave routing (default browser, verified app links) to the system.
+ */
+internal fun inAppBrowserPackage(
+    resolvedPackage: String?,
+    handlerPackages: List<String>,
+    customTabsProvider: (candidates: List<String>) -> String?,
+): String? {
+    val hasDefaultHandler = resolvedPackage != null && resolvedPackage in handlerPackages
+    return if (hasDefaultHandler) null else customTabsProvider(handlerPackages)
 }

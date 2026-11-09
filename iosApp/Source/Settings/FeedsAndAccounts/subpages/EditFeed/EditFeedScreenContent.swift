@@ -16,12 +16,16 @@ struct EditFeedScreenContent: View {
 
     @Binding var feedURL: String
     @Binding var feedName: String
+    /// False for server-synced accounts (FreshRSS, Miniflux, Feedbin, BazQux), where the server owns the URL.
+    let canEditUrl: Bool
     let showError: Bool
     let errorMessage: String
     @Binding var isAddingFeed: Bool
     @Binding var articleOpenMode: ArticleOpenMode
     @Binding var isHidden: Bool
     @Binding var isHideImagesEnabled: Bool
+    let showHideShortsToggle: Bool
+    @Binding var isHideShortsEnabled: Bool
     @Binding var isKeepUnreadOnScrollEnabled: Bool
     var isMarkReadWhenScrollingEnabled: Bool
     @Binding var isPinned: Bool
@@ -36,6 +40,7 @@ struct EditFeedScreenContent: View {
     let updateArticleOpenMode: (ArticleOpenMode) -> Void
     let onHiddenToggled: (Bool) -> Void
     let onHideImagesToggled: (Bool) -> Void
+    let onHideShortsToggled: (Bool) -> Void
     let onKeepUnreadOnScrollToggled: (Bool) -> Void
     let onPinnedToggled: (Bool) -> Void
     let onNotificationToggled: (Bool) -> Void
@@ -58,29 +63,17 @@ struct EditFeedScreenContent: View {
                 },
                 header: {
                     Text(feedFlowStrings.feedName)
-                }
-            )
-
-            Section(
-                content: {
-                    TextField(feedFlowStrings.feedUrl, text: $feedURL)
-                        .keyboardType(.URL)
-                        .textContentType(.URL)
-                        .autocorrectionDisabled()
-                        .hoverEffect()
-                        .focused($isTextFieldFocused)
-                },
-                header: {
-                    Text(feedFlowStrings.feedUrl)
                 },
                 footer: {
-                    if showError {
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundColor(.red)
+                    if !canEditUrl {
+                        errorFooter
                     }
                 }
             )
+
+            if canEditUrl {
+                feedUrlSection
+            }
 
             Section(feedFlowStrings.articleOpenMode) {
                 Picker(
@@ -114,22 +107,38 @@ struct EditFeedScreenContent: View {
                     onHideImagesToggled(isHideImagesEnabled)
                 }
 
+                if showHideShortsToggle {
+                    Toggle(isOn: $isHideShortsEnabled) {
+                        VStack(alignment: .leading) {
+                            Text(feedFlowStrings.hideYoutubeShorts)
+                            Text(feedFlowStrings.hideYoutubeShortsDescription)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .accessibilityIdentifier(EditFeedAccessibilityIdentifiers.hideShortsToggle)
+                    .onChange(of: isHideShortsEnabled) {
+                        onHideShortsToggled(isHideShortsEnabled)
+                    }
+                }
+
                 Toggle(isOn: $isKeepUnreadOnScrollEnabled) {
-                    Text(feedFlowStrings.keepUnreadWhenScrollingForFeed)
+                    VStack(alignment: .leading) {
+                        Text(feedFlowStrings.keepUnreadWhenScrollingForFeed)
+                        Text(
+                            isMarkReadWhenScrollingEnabled
+                                ? feedFlowStrings.keepUnreadWhenScrollingForFeedDescription
+                                : feedFlowStrings.keepUnreadWhenScrollingForFeedDisabled
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
                 }
                 .disabled(!isMarkReadWhenScrollingEnabled)
                 .accessibilityIdentifier(EditFeedAccessibilityIdentifiers.keepUnreadOnScrollToggle)
                 .onChange(of: isKeepUnreadOnScrollEnabled) {
                     onKeepUnreadOnScrollToggled(isKeepUnreadOnScrollEnabled)
                 }
-
-                Text(
-                    isMarkReadWhenScrollingEnabled
-                        ? feedFlowStrings.keepUnreadWhenScrollingForFeedDescription
-                        : feedFlowStrings.keepUnreadWhenScrollingForFeedDisabled
-                )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
 
                 Toggle(isOn: $isPinned) {
                     Text(feedFlowStrings.pinFeedSourceDescription)
@@ -206,6 +215,7 @@ struct EditFeedScreenContent: View {
                 categorySelectorObserver: categorySelectorObserver,
                 onSave: {}
             )
+            .snackbarPresentationSurface()
         }
         .alert(feedFlowStrings.deleteFeedConfirmationTitle, isPresented: $showDeleteFeedDialog) {
             Button(feedFlowStrings.deleteCategoryCloseButton, role: .cancel) { }
@@ -227,6 +237,34 @@ struct EditFeedScreenContent: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 saveButton
             }
+        }
+    }
+
+    private var feedUrlSection: some View {
+        Section(
+            content: {
+                TextField(feedFlowStrings.feedUrl, text: $feedURL)
+                    .keyboardType(.URL)
+                    .textContentType(.URL)
+                    .autocorrectionDisabled()
+                    .accessibilityIdentifier(EditFeedAccessibilityIdentifiers.urlInput)
+                    .hoverEffect()
+                    .focused($isTextFieldFocused)
+            },
+            header: {
+                Text(feedFlowStrings.feedUrl)
+            },
+            footer: {
+                errorFooter
+            }
+        )
+    }
+
+    @ViewBuilder private var errorFooter: some View {
+        if showError {
+            Text(errorMessage)
+                .font(.caption)
+                .foregroundColor(.red)
         }
     }
 

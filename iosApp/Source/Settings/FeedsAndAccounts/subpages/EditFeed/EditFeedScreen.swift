@@ -30,6 +30,8 @@ struct EditFeedScreen: View {
     @State private var articleOpenMode = ArticleOpenMode.default
     @State private var isHidden = false
     @State private var isHideImagesEnabled = false
+    @State private var showHideShortsToggle = false
+    @State private var isHideShortsEnabled = false
     @State private var isKeepUnreadOnScrollEnabled = false
     @State private var isMarkReadWhenScrollingEnabled = true
     @State private var isPinned = false
@@ -39,18 +41,19 @@ struct EditFeedScreen: View {
     @State private var verificationExplanationUrl: String?
 
     var body: some View {
-        @Bindable var appState = appState
-
         NavigationStack {
             EditFeedScreenContent(
                 feedURL: $feedURL,
                 feedName: $feedName,
+                canEditUrl: vmStoreOwner.instance.canEditUrl(),
                 showError: showError,
                 errorMessage: errorMessage,
                 isAddingFeed: $isAddingFeed,
                 articleOpenMode: $articleOpenMode,
                 isHidden: $isHidden,
                 isHideImagesEnabled: $isHideImagesEnabled,
+                showHideShortsToggle: showHideShortsToggle,
+                isHideShortsEnabled: $isHideShortsEnabled,
                 isKeepUnreadOnScrollEnabled: $isKeepUnreadOnScrollEnabled,
                 isMarkReadWhenScrollingEnabled: isMarkReadWhenScrollingEnabled,
                 isPinned: $isPinned,
@@ -74,6 +77,9 @@ struct EditFeedScreen: View {
                 onHideImagesToggled: { hideImages in
                     vmStoreOwner.instance.updateIsHideImagesEnabled(isHideImagesEnabled: hideImages)
                 },
+                onHideShortsToggled: { enabled in
+                    vmStoreOwner.instance.updateHideShortsStatus(status: enabled)
+                },
                 onKeepUnreadOnScrollToggled: { keepUnread in
                     vmStoreOwner.instance.updateIsKeepUnreadOnScrollEnabled(isKeepUnreadOnScrollEnabled: keepUnread)
                 },
@@ -96,7 +102,6 @@ struct EditFeedScreen: View {
                     vmStoreOwner.instance.deleteFeed()
                 }
             )
-            .snackbar(messageQueue: $appState.snackbarQueue)
             .websiteVerificationExplanation(
                 url: verificationExplanationUrl,
                 onCancel: {
@@ -136,7 +141,9 @@ struct EditFeedScreen: View {
                     case let .feedEdited(feedEditedState):
                         self.appState.snackbarQueue.append(
                             SnackbarData(
-                                title: feedFlowStrings.feedEditedMessage(feedEditedState.feedName),
+                                title: feedEditedState.shortsFilterFallback
+                                    ? feedFlowStrings.hideYoutubeShortsEditFallback
+                                    : feedFlowStrings.feedEditedMessage(feedEditedState.feedName),
                                 subtitle: nil,
                                 showBanner: true
                             )
@@ -166,6 +173,9 @@ struct EditFeedScreen: View {
 
                         case .genericError:
                             errorMessage = feedFlowStrings.editFeedGenericError
+
+                        case let .feedAlreadyExists(existing):
+                            errorMessage = feedFlowStrings.feedAlreadyExistsMessage(existing.feedName)
 
                         case let .fetchFailed(fetchFailure):
                             verificationChallengeUrl = fetchFailure.verificationUrl
@@ -197,6 +207,12 @@ struct EditFeedScreen: View {
                     self.isKeepUnreadOnScrollEnabled = state.isKeepUnreadOnScrollEnabled
                     self.isPinned = state.isPinned
                     self.isNotificationEnabled = state.isNotificationEnabled
+                }
+            }
+            .task {
+                for await state in vmStoreOwner.instance.youTubeOptionsState {
+                    self.showHideShortsToggle = state.showHideShortsToggle
+                    self.isHideShortsEnabled = state.hideShorts
                 }
             }
             .task {
