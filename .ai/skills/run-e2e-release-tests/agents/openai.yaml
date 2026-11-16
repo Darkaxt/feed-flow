@@ -1,0 +1,4 @@
+interface:
+  display_name: "Run E2E Release Tests"
+  short_description: "Run all FeedFlow E2E tests on Android, iOS and desktop."
+  default_prompt: "Use $run-e2e-release-tests to run the full FeedFlow E2E release suites on Android, iOS and desktop and report failures."

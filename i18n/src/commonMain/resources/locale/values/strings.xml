@@ -2,7 +2,7 @@
 <resources>
     <string name="feed_added_message">Feed %s added</string>
     <string name="feed_already_exists_message">%s is already in your feeds.</string>
-    <string name="feed_url">Feed URL</string>
+    <string name="feed_url">Feed link</string>
     <string name="feed_url_placeholder">https://myfavouriteblog.com/feed</string>
     <string name="hide_youtube_shorts">Hide Shorts</string>
     <string name="hide_youtube_shorts_description">Only regular videos from this channel will be included. Shorts and live streams are excluded.</string>
@@ -274,6 +274,9 @@
     <string name="feed_name">Feed name</string>
     <string name="feed_edited_message">Feed %s updated</string>
     <string name="open_another_feed">Open another feed</string>
+    <string name="next_feed_button">Next: %s</string>
+    <string name="empty_category_message">No feeds in this category</string>
+    <string name="empty_category_hint">No feeds yet. Drag a feed here.</string>
     <string name="settings_feed_list_title">Feed list</string>
     <string name="settings_feed_list_scale_title">Text scale</string>
     <string name="settings_font_scale_title_example">Article Title</string>
@@ -284,6 +287,10 @@
     <string name="edit_feed_generic_error">Something went wrong while editing the feed. Please retry.</string>
     <string name="feed_fetch_refused_error">Couldn\'t reach this feed. The website might be blocking RSS readers. Please try again later.</string>
     <string name="open_feed_settings">Feed settings</string>
+    <string name="discard_changes_dialog_title">Discard changes?</string>
+    <string name="discard_changes_dialog_message">Changes to the name, link or category won\'t be saved.</string>
+    <string name="discard_changes_confirm_button">Discard</string>
+    <string name="keep_editing_button">Keep editing</string>
     <string name="feed_added_message_without_name">Feed added</string>
     <string name="sync_error_message">There was an error while syncing the feeds - error code: %s :(. Please retry.</string>
     <string name="greader_bad_token_sync_error_message">The server rejected the sync token. If your Google Reader-compatible service is behind a reverse proxy, make sure it forwards the Authorization header.</string>
@@ -383,6 +390,8 @@
     <string name="desktop_delete_selected_feeds_message">Delete %d selected feeds and their articles? This action cannot be undone.</string>
     <string name="adding_feed">Adding feed...</string>
     <string name="error_feed_add">Something went wrong while adding the feed</string>
+    <string name="share_no_feed_link_found">No feed link found in the shared content.</string>
+    <string name="share_open_in_feedflow">Open in FeedFlow</string>
     <string name="widget_check_feed_sources">Add a feed to see its articles here.</string>
     <string name="widget_latest_items">Most Recent</string>
     <string name="widget_configuration_title">Widget Configuration</string>
@@ -458,12 +467,12 @@
     <string name="desktop_settings_preview_title">Preview</string>
     <string name="desktop_settings_search_placeholder">Search settings</string>
     <string name="desktop_settings_search_no_results">No matching settings</string>
-    <string name="settings_left_swipe_action">Left swipe</string>
-    <string name="settings_right_swipe_action">Right swipe</string>
-    <string name="settings_swipe_action_toggle_read">Toggle read</string>
-    <string name="settings_swipe_action_toggle_bookmark">Toggle bookmark</string>
+    <string name="settings_left_swipe_action">Swipe left</string>
+    <string name="settings_right_swipe_action">Swipe right</string>
+    <string name="settings_swipe_action_toggle_read">Mark as read or unread</string>
+    <string name="settings_swipe_action_toggle_bookmark">Add or remove bookmark</string>
     <string name="settings_swipe_action_open_in_browser">Open in preferred browser</string>
-    <string name="settings_swipe_action_none">Disabled</string>
+    <string name="settings_swipe_action_none">None</string>
     <string name="settings_notification_no_feed">Looks like you haven\'t added any feeds yet. Add some to start receiving notifications!</string>
     <string name="settings_notification_check_period">Notification check frequency</string>
     <string name="settings_notifications_enable_all_title">Enable All Notifications</string>
@@ -501,6 +510,7 @@
     <string name="reader_mode_archive_button">Open in archive.is</string>
     <string name="reader_mode_browser_button_content_description">Open in browser</string>
     <string name="reader_mode_comments_button_content_description">Open comments</string>
+    <string name="reader_mode_unnamed_image_link">Open image</string>
     <string name="article_bookmarked_content_description">Bookmarked</string>
     <string name="article_unread_state">Unread</string>
     <string name="article_unread_bookmarked_state">Unread, bookmarked</string>
@@ -542,9 +552,12 @@
     <string name="feed_suggestions_description">Browse and add feeds to your collection</string>
     <string name="feed_suggestions_empty_catalog">No feed suggestions are available.</string>
     <string name="feed_suggestions_empty_category">No feed suggestions in this category.</string>
+    <string name="feed_suggestion_add">Add</string>
+    <string name="feed_suggestion_added">Added</string>
+    <string name="feed_suggestion_added_message">%s added to %s</string>
+    <string name="feed_suggestion_added_to">Added to %s</string>
+    <string name="feed_suggestion_undo">Undo</string>
     <string name="feed_suggestion_add_error">Couldn\'t finish adding this feed. Please try again.</string>
-    <string name="feed_suggestion_update_error">Feed added, but its initial update could not finish. Try refreshing your feeds.</string>
-    <string name="feed_suggestion_refreshing">Refreshing articles…</string>
     <string name="blocked_word_operation_error">Couldn\'t update this blocked word. Please try again.</string>
     <string name="blocked_word_refresh_error">Blocked words saved, but the article list could not update. Try again.</string>
     <string name="blocked_word_saving">Saving blocked word…</string>

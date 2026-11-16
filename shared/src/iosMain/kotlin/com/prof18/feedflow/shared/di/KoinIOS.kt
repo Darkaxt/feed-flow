@@ -21,8 +21,10 @@ import com.prof18.feedflow.feedsync.icloud.ICloudDataSourceImpl
 import com.prof18.feedflow.i18n.EnFeedFlowStrings
 import com.prof18.feedflow.i18n.FeedFlowStrings
 import com.prof18.feedflow.i18n.feedFlowStrings
+import com.prof18.feedflow.shared.data.FeedAppearanceSettingsRepository
 import com.prof18.feedflow.shared.data.KeychainSettingsWrapper
 import com.prof18.feedflow.shared.data.SettingsRepository
+import com.prof18.feedflow.shared.data.saveWidgetDateSettings
 import com.prof18.feedflow.shared.domain.BackgroundSyncScheduler
 import com.prof18.feedflow.shared.domain.audio.AudioPlaybackPositionRepository
 import com.prof18.feedflow.shared.domain.contentprefetch.BackgroundPrefetchScheduler
@@ -56,7 +58,9 @@ import com.prof18.feedflow.shared.domain.recovery.WebsiteProfileCleaner
 import com.prof18.feedflow.shared.domain.recovery.WebsiteSessionHttp
 import com.prof18.feedflow.shared.domain.recovery.toRecoveryBytes
 import com.prof18.feedflow.shared.domain.tts.ReaderSpeechText
+import com.prof18.feedflow.shared.domain.widget.WidgetDateSettingsStore
 import com.prof18.feedflow.shared.e2e.E2eSeedRunner
+import com.prof18.feedflow.shared.logging.GatedLogWriter
 import com.prof18.feedflow.shared.presentation.AboutAndSupportSettingsViewModel
 import com.prof18.feedflow.shared.presentation.AccountsViewModel
 import com.prof18.feedflow.shared.presentation.AddFeedViewModel
@@ -114,6 +118,7 @@ fun initKoinIos(
     telemetry: Telemetry,
     notifier: Notifier,
     feedUrlProtocolClasses: List<*>,
+    isCrashReportingConfigured: () -> Boolean,
     websiteSessionBridge: IosWebsiteSessionBridge? = null,
     websiteProfileCleaner: WebsiteProfileCleaner? = null,
 ): KoinApplication = initKoin(
@@ -127,7 +132,10 @@ fun initKoinIos(
         platformName = UIDevice.currentDevice.systemName(),
         platformVersion = UIDevice.currentDevice.systemVersion,
     ),
-    crashReportingLogWriter = CrashlyticsLogWriter(),
+    crashReportingLogWriter = GatedLogWriter(
+        delegate = CrashlyticsLogWriter(),
+        isEnabled = isCrashReportingConfigured,
+    ),
     modules = listOf(
         module {
             single { dropboxDataSource }
@@ -168,7 +176,13 @@ fun initKoinIos(
         websiteSessionBridge?.let { recoveryModule(it, feedUrlProtocolClasses) },
         websiteProfileCleaner?.let { cleaner -> module { single<WebsiteProfileCleaner> { cleaner } } },
     ),
-)
+).also { koinApplication ->
+    // Installs that chose their formats before the widget copy existed
+    if (!WidgetDateSettingsStore().hasSavedSettings()) {
+        val repository = koinApplication.koin.get<FeedAppearanceSettingsRepository>()
+        saveWidgetDateSettings(repository.getDateFormat(), repository.getTimeFormat())
+    }
+}
 
 // Only the app passes a bridge: tests and extensions never get website recovery
 private fun recoveryModule(bridge: IosWebsiteSessionBridge, feedUrlProtocolClasses: List<*>) = module {

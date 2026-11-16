@@ -130,12 +130,19 @@ Full automated E2E checks before release:
 - `e2e/scripts/run-android.sh`
 - `e2e/scripts/run-ios.sh`
 
-When the user asks for the full Maestro release gate or a failure summary, use the repo-local `run-maestro-release-tests` skill. Its runner builds/installs both platforms, runs smoke + regression flows, continues after failures, and writes `report.html`, `report.md`, and logs under `.tmp/maestro-release-tests/<timestamp>/`.
+When the user asks for the full E2E release gate (Maestro or desktop) or a failure summary, use the repo-local `run-e2e-release-tests` skill. Its runner builds/installs Android and iOS, runs the desktop suite too, runs smoke + regression flows, continues after failures, and writes `report.html`, `report.md`, and logs under `.tmp/e2e-release-tests/<timestamp>/`.
 Each Maestro flow has a three-minute limit and the runner retries only driver/transport failures (up to three attempts). Treat a timeout or device-server failure as infrastructure first; inspect the archived per-attempt logs before changing app code.
 
 After any local Maestro run, restore the development subscriptions before handoff with `feedflow-restore-dev-feeds --platform android` or `--platform ios`. The all-platform wrapper and release runner do this automatically when the command is installed; run it explicitly after a single flow or a failed run.
 
 Use the debug seeding deep links documented in that guide. Do not depend on live feeds, OAuth, or previous app state in smoke or regression flows.
+
+### Desktop E2E tests
+
+- The desktop suite lives in `desktopApp/src/jvmTest/kotlin/com/prof18/feedflow/desktop/e2e` and runs with `e2e/scripts/run-desktop.sh [smoke|regression|desktoponly|all]` or `./gradlew --quiet --console=plain :desktopApp:desktopE2eTest`; macOS only, local only, never on CI. It opens real FeedFlow windows, so run one at a time.
+- Follow `e2e/desktop/README.md` to write or run flows; flows reuse the mobile IDs and the shared `E2eSeedRunner` profiles.
+- `allTests` and `check` do not run it; `jvmTest` excludes the `e2e` package.
+- When adding or changing a user-visible feature that exists on desktop, add or update its desktop flow alongside the Maestro coverage, if the behavior can be exercised with existing app UI, the `feedflow.e2e.seed` profiles, fixtures, or test tooling without adding production-only code paths. A desktop-only feature gets a `DSK-` flow in `desktoponly`. If desktop coverage is not feasible, record why in `e2e/desktop/README.md`, and keep the Desktop column of `e2e/maestro/maestro-e2e-tests.md` current. Do not mark a test done until the desktop flow passes.
 
 ### iOS Project Generation
 
@@ -186,7 +193,8 @@ Before handing off you must:
 4. If you changed iOS code, run `xcodebuild -project iosApp/FeedFlow.xcodeproj -scheme FeedFlow -destination 'platform=iOS Simulator,name=iPhone 18 Pro' build -quiet` before handoff; rerun without `-quiet` only if you need the full diagnostics
 5. If you changed iOS code, run `.scripts/ios-tests.sh`
 6. If you changed user-visible behaviour, check whether a website FAQ answer needs updating or a new entry is warranted (see "Website FAQ")
-7. Fix any issues found during the above steps
+7. If you added or changed a user-visible feature, add or update its Maestro flows and, when the feature exists on desktop, its desktop E2E flow (see "Maestro E2E tests" and "Desktop E2E tests"), and run the flows you touched
+8. Fix any issues found during the above steps
 
 ### Initial Setup (for building from scratch)
 ```bash

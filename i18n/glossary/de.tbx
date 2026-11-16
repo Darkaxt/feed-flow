@@ -23,17 +23,17 @@
             <termEntry weblate-flags="terminology">
                 <descrip>Feeds and categories the user keeps at the top of the sidebar. Avoid: Pinned Feed Sources, favorites.</descrip>
                 <langSet xml:lang="en"><tig><term>Pinned feeds</term></tig></langSet>
-                <langSet xml:lang="de"><tig><term/></tig></langSet>
+                <langSet xml:lang="de"><tig><term>Angepinnte Feeds</term></tig></langSet>
             </termEntry>
             <termEntry weblate-flags="terminology">
                 <descrip>Only for OPML import and export: the feed list as stored in an OPML file. Everywhere else say feeds.</descrip>
                 <langSet xml:lang="en"><tig><term>subscriptions</term></tig></langSet>
-                <langSet xml:lang="de"><tig><term/></tig></langSet>
+                <langSet xml:lang="de"><tig><term>Abonnements</term></tig></langSet>
             </termEntry>
             <termEntry weblate-flags="terminology">
                 <descrip>The title of a feed, shown on each article. Avoid: feed source.</descrip>
                 <langSet xml:lang="en"><tig><term>feed name</term></tig></langSet>
-                <langSet xml:lang="de"><tig><term/></tig></langSet>
+                <langSet xml:lang="de"><tig><term>Name des Feeds</term></tig></langSet>
             </termEntry>
             <termEntry weblate-flags="terminology">
                 <descrip>One entry of a feed: title, summary and link, which FeedFlow gets when it refreshes feeds. Avoid: item, post, entry, story.</descrip>
@@ -68,7 +68,7 @@
             <termEntry weblate-flags="terminology">
                 <descrip>Button that copies feeds, read status and bookmarks to a backup account (iCloud, Dropbox, Google Drive) right away. Verb: back up; noun: backup. Avoid: Upload changes.</descrip>
                 <langSet xml:lang="en"><tig><term>Back up now</term></tig></langSet>
-                <langSet xml:lang="de"><tig><term>Backup jetzt erstellen</term></tig></langSet>
+                <langSet xml:lang="de"><tig><term>Jetzt sichern</term></tig></langSet>
             </termEntry>
             <termEntry weblate-flags="terminology">
                 <descrip>A connected iCloud, Dropbox, Google Drive, FreshRSS, Miniflux, Feedbin or BazQux account. Avoid: service, provider.</descrip>

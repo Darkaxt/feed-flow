@@ -28,6 +28,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.ComposeWindow
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.FrameWindowScope
 import androidx.compose.ui.window.WindowPlacement
@@ -65,8 +66,12 @@ import com.prof18.feedflow.desktop.reaadermode.ReaderModeScreen
 import com.prof18.feedflow.desktop.settings.DesktopSettingsCategory
 import com.prof18.feedflow.desktop.settings.DesktopSettingsSection
 import com.prof18.feedflow.desktop.settings.SettingsWindow
+import com.prof18.feedflow.desktop.startup.addFeedLinkInbox
+import com.prof18.feedflow.desktop.testing.MainWindowE2eIds
 import com.prof18.feedflow.desktop.toReaderMode
+import com.prof18.feedflow.desktop.ui.DesktopFeedbackDuration
 import com.prof18.feedflow.desktop.ui.DesktopFeedbackState
+import com.prof18.feedflow.desktop.ui.DesktopFeedbackTone
 import com.prof18.feedflow.desktop.ui.LocalFeedFlowStrings
 import com.prof18.feedflow.desktop.ui.LocalReduceMotion
 import com.prof18.feedflow.desktop.ui.components.ConfirmationDialog
@@ -226,10 +231,12 @@ private fun MainWindowEffects(
             if (message is SyncResult.GoogleDriveNeedReAuth) {
                 snackbarHostState.showFeedback(
                     message = flowStrings.googleDriveAuthRetry,
+                    duration = DesktopFeedbackDuration.Long,
                 )
             } else if (message is SyncResult.Error) {
                 snackbarHostState.showFeedback(
                     message = flowStrings.errorAccountSync(message.errorCode.code),
+                    tone = DesktopFeedbackTone.Error,
                 )
             }
         }
@@ -241,6 +248,7 @@ private fun MainWindowEffects(
                 DesktopDatabaseErrorState.clear()
                 snackbarHostState.showFeedback(
                     message = flowStrings.databaseRecoveredFromCorruption,
+                    duration = DesktopFeedbackDuration.Long,
                 )
             }
         }
@@ -281,10 +289,20 @@ private fun FrameWindowScope.MainWindowContent(
             },
         )
 
+        val pendingAddFeedUrl by addFeedLinkInbox.links.collectAsState()
+        SideEffect(pendingAddFeedUrl) {
+            pendingAddFeedUrl?.let { feedUrl ->
+                dialogWindowNavigator.openAddFeed(feedUrl)
+                addFeedLinkInbox.consume(feedUrl)
+            }
+        }
+
         if (dialogWindowNavigator.isOpen(DesktopDialogWindowDestination.AddFeed)) {
             AddFeedScreen(
                 onCloseRequest = { dialogWindowNavigator.close(DesktopDialogWindowDestination.AddFeed) },
                 onFeedAdded = { homeViewModel.getNewFeeds() },
+                initialUrl = dialogWindowNavigator.addFeedInitialUrl,
+                requestRevision = dialogWindowNavigator.addFeedRequestRevision,
             )
         }
 
@@ -341,7 +359,10 @@ private fun FrameWindowScope.MainWindowContent(
             } else {
                 null
             }
-            MainWindowSurface(modifier = Modifier.fillMaxSize(), onSearch = onSearch) {
+            MainWindowSurface(
+                modifier = Modifier.fillMaxSize().testTag(MainWindowE2eIds.SURFACE),
+                onSearch = onSearch,
+            ) {
                 Box {
                     NavDisplay(
                         backStack = backStack,

@@ -65,6 +65,30 @@
                     android:host="feedsourcefilter"
                     android:scheme="feedflow"/>
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:host="add"
+                    android:scheme="feedflow"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="feed"/>
+                <data android:scheme="feeds"/>
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"/>
+                <data android:host="www.feedflow.dev"/>
+                <data android:path="/add"/>
+                <data android:path="/add/"/>
+            </intent-filter>
 
         </activity>
 
@@ -106,12 +130,13 @@
 
         <activity
             android:name=".addfeed.AddFeedExtensionActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:exported="true"
             android:theme="@style/Theme.Transparent">
             <intent-filter>
                 <action android:name="android.intent.action.SEND"/>
                 <category android:name="android.intent.category.DEFAULT"/>
-                <data android:mimeType="text/*"/>
+                <data android:mimeType="text/plain"/>
             </intent-filter>
         </activity>
 

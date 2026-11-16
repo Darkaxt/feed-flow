@@ -2,11 +2,13 @@ package com.prof18.feedflow.desktop.addfeed
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -16,15 +18,29 @@ import com.prof18.feedflow.desktop.feedforms.AddFeedForm
 import com.prof18.feedflow.desktop.feedforms.FeedCategoryActions
 import com.prof18.feedflow.desktop.ui.DesktopFeedbackDuration
 import com.prof18.feedflow.desktop.ui.DesktopFeedbackState
+import com.prof18.feedflow.desktop.ui.DesktopFeedbackTone
 import com.prof18.feedflow.desktop.ui.LocalFeedFlowStrings
 import com.prof18.feedflow.desktop.ui.components.Dialog
 import com.prof18.feedflow.shared.domain.model.FeedAddedState
 import com.prof18.feedflow.shared.presentation.AddFeedViewModel
+import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
-internal fun AddFeedScreen(onCloseRequest: () -> Unit, onFeedAdded: () -> Unit) {
-    AddFeedWindow(onCloseRequest) { AddFeedScreenContent(onFeedAdded, onCancel = onCloseRequest) }
+internal fun AddFeedScreen(
+    onCloseRequest: () -> Unit,
+    onFeedAdded: () -> Unit,
+    initialUrl: String?,
+    requestRevision: Int,
+) {
+    AddFeedWindow(onCloseRequest) {
+        AddFeedScreenContent(
+            onFeedAdded,
+            onCancel = onCloseRequest,
+            initialUrl = initialUrl.orEmpty(),
+            requestRevision = requestRevision,
+        )
+    }
 }
 
 @Composable
@@ -42,16 +58,22 @@ fun AddFeedScreenContent(
     modifier: Modifier = Modifier,
     topAppBar: @Composable () -> Unit = {},
     onCancel: (() -> Unit)? = null,
+    initialUrl: String = "",
+    requestRevision: Int = 0,
 ) {
-    var feedUrl by remember { mutableStateOf("") }
+    var feedUrl by remember(initialUrl, requestRevision) { mutableStateOf(initialUrl) }
     var showError by remember { mutableStateOf(false) }
     var showLoading by remember { mutableStateOf(false) }
     var completionRevision by remember { mutableIntStateOf(0) }
     var errorMessage by remember { mutableStateOf("") }
     var canForceAdd by remember { mutableStateOf(false) }
     val viewModel = koinViewModel<AddFeedViewModel>()
+    SideEffect(initialUrl, requestRevision) {
+        if (initialUrl.isNotEmpty()) viewModel.updateFeedUrlTextFieldValue(initialUrl)
+    }
     val latestOnFeedAdded by rememberUpdatedState(onFeedAdded)
-    val snackbarHostState = remember { DesktopFeedbackState() }
+    val feedbackState = remember { DesktopFeedbackState() }
+    val feedbackScope = rememberCoroutineScope()
     val strings = LocalFeedFlowStrings.current
     LaunchedEffect(Unit) {
         viewModel.feedAddedState.collect { state ->
@@ -80,7 +102,15 @@ fun AddFeedScreenContent(
                     } else {
                         strings.feedAddedMessageWithoutName
                     }
-                    snackbarHostState.showFeedback(message, duration = DesktopFeedbackDuration.Short)
+                    val tone = if (state is FeedAddedState.FeedAdded && !state.shortsFilterFallback) {
+                        DesktopFeedbackTone.Success
+                    } else {
+                        DesktopFeedbackTone.Info
+                    }
+                    // showFeedback suspends until the message goes away: the form must reset right now.
+                    feedbackScope.launch {
+                        feedbackState.showFeedback(message, duration = DesktopFeedbackDuration.Short, tone = tone)
+                    }
                     showLoading = false
                     feedUrl = ""
                     viewModel.updateFeedUrlTextFieldValue(feedUrl)
@@ -131,6 +161,6 @@ fun AddFeedScreenContent(
         onHideShortsToggleChanged = viewModel::updateHideShortsStatus,
         completionRevision = completionRevision,
         topAppBar = topAppBar,
-        snackbarHostState = snackbarHostState,
+        feedbackState = feedbackState,
     )
 }

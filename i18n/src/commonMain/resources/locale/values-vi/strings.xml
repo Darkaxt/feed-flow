@@ -174,10 +174,10 @@
     <string name="settings_sync_period_one_day">Mỗi ngày</string>
     <string name="settings_left_swipe_action">Vuốt trái</string>
     <string name="settings_right_swipe_action">Vuốt phải</string>
-    <string name="settings_swipe_action_toggle_read">Đánh dấu đã đọc</string>
+    <string name="settings_swipe_action_toggle_read">Đánh dấu đã đọc/chưa đọc</string>
     <string name="settings_swipe_action_none">Không dùng</string>
     <string name="settings_sync_period_fifteen_minutes">Mỗi 15 phút</string>
-    <string name="settings_swipe_action_toggle_bookmark">Đánh dấu lưu</string>
+    <string name="settings_swipe_action_toggle_bookmark">Thêm hoặc bỏ đánh dấu</string>
     <string name="settings_notification_no_feed">Có vẻ như bạn chưa thêm bất kỳ nguồn tin nào. Thêm ngay để bắt đầu nhận thông báo!</string>
     <string name="settings_notification_check_period">Tần suất gửi thông báo</string>
     <string name="settings_notifications_enable_all_title">Bật tất cả thông báo</string>
@@ -524,8 +524,6 @@
     <string name="feed_suggestions_empty_catalog">Không có nguồn tin đề xuất nào.</string>
     <string name="feed_suggestions_empty_category">Không có nguồn tin đề xuất nào trong danh mục này.</string>
     <string name="feed_suggestion_add_error">Không thể hoàn tất thêm nguồn tin này. Vui lòng thử lại.</string>
-    <string name="feed_suggestion_update_error">Đã thêm nguồn tin, nhưng quá trình cập nhật ban đầu chưa hoàn tất. Hãy thử làm mới những nguồn tin của bạn.</string>
-    <string name="feed_suggestion_refreshing">Đang làm mới các bài viết…</string>
     <string name="blocked_word_operation_error">Không thể cập nhật lọc từ khóa này. Vui lòng thử lại.</string>
     <string name="blocked_word_refresh_error">Đã lưu những từ khóa sẽ lọc, nhưng không thể cập nhật danh sách bài viết. Thử lại.</string>
     <string name="blocked_word_saving">Đang lưu từ khóa…</string>
@@ -596,4 +594,19 @@
     <string name="article_unread_state">Chưa đọc</string>
     <string name="article_unread_bookmarked_state">Chưa đọc, đã lưu</string>
     <string name="unread_count_accessibility">%s chưa đọc</string>
+    <string name="reader_mode_unnamed_image_link">Mở hình ảnh</string>
+    <string name="feed_suggestion_add">Thêm</string>
+    <string name="feed_suggestion_added">Đã thêm</string>
+    <string name="feed_suggestion_added_message">%s đã được thêm vào %s</string>
+    <string name="feed_suggestion_added_to">Đã thêm vào %s</string>
+    <string name="feed_suggestion_undo">Hoàn tác</string>
+    <string name="share_no_feed_link_found">Không tìm thấy nguồn tin trong nội dung được chia sẻ.</string>
+    <string name="share_open_in_feedflow">Mở trong FeedFlow</string>
+    <string name="next_feed_button">Kế tiếp: %s</string>
+    <string name="empty_category_message">Không có nguồn tin trong danh mục này</string>
+    <string name="empty_category_hint">Chưa có nguồn tin. Kéo thả một nguòin tin vào đây.</string>
+    <string name="discard_changes_dialog_title">Hủy bỏ các thay đổi?</string>
+    <string name="discard_changes_dialog_message">Những thay đổi với tên, liên kết hoặc danh mục sẽ không được lưu.</string>
+    <string name="discard_changes_confirm_button">Bỏ hết</string>
+    <string name="keep_editing_button">Giữ nguyên chỉnh sửa</string>
 </resources>

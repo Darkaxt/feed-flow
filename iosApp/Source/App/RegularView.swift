@@ -38,7 +38,7 @@ struct RegularView: View {
     @State private var scrollUpTrigger = false
     @State private var showSettings = false
     @State private var showSidebarSettingsSheet = false
-    @State private var showAddFeedSheet = false
+    @State private var addFeedSheet: AddFeedSheetRequest?
     @State private var showImportExportSheet = false
 
     @State private var indexHolder: HomeListIndexHolder
@@ -75,6 +75,7 @@ struct RegularView: View {
             SidebarDrawer(
                 selectedSidebarItem: $selectedSidebarItem,
                 navDrawerState: navDrawerState,
+                isCompactPhone: horizontalSizeClass == .compact,
                 onFeedFilterSelected: { feedFilter in
                     indexHolder.clear()
                     scrollUpTrigger.toggle()
@@ -95,7 +96,7 @@ struct RegularView: View {
                     showSidebarSettingsSheet.toggle()
                 },
                 onAddFeedClick: {
-                    showAddFeedSheet.toggle()
+                    addFeedSheet = AddFeedSheetRequest(initialUrl: nil)
                 },
                 onImportExportClick: {
                     showImportExportSheet.toggle()
@@ -214,17 +215,17 @@ struct RegularView: View {
                 }
             }
         }
-        .sheet(isPresented: $showAddFeedSheet) {
-            AddFeedScreen(showCloseButton: true)
+        .sheet(item: $addFeedSheet) { request in
+            AddFeedScreen(showCloseButton: true, initialUrl: request.initialUrl)
                 .environment(appState)
                 .environment(browserSelector)
                 .toggleStyle(BlueToggleStyle())
                 .snackbarPresentationSurface()
         }
+        .modifier(AddFeedLinkPresenter(addFeedSheet: $addFeedSheet, closeOtherSheets: closeSheetsForAddFeedLink))
         .sheet(isPresented: $showSidebarSettingsSheet) {
             SettingsScreen(
-                fetchFeeds: { homeViewModel.getNewFeeds(isFirstLaunch: false, forceRefresh: false) },
-                onDone: { homeViewModel.reloadFeedState() }
+                fetchFeeds: { homeViewModel.getNewFeeds(isFirstLaunch: false, forceRefresh: false) }
             )
                 .environment(appState)
                 .environment(browserSelector)
@@ -275,7 +276,7 @@ struct RegularView: View {
             for: .didReceiveNotificationDeepLink,
             object: appState.widgetLinks.dismissalSender
         )) { _ in
-            showAddFeedSheet = false
+            addFeedSheet = nil
             feedSourceToEdit = nil
             showSettings = false
             showSidebarSettingsSheet = false
@@ -338,5 +339,13 @@ private extension RegularView {
         homeViewModel.getLargeScreenSidebarVisible().map {
             $0.boolValue ? .all : .detailOnly
         } ?? .automatic
+    }
+}
+
+private extension RegularView {
+    func closeSheetsForAddFeedLink() {
+        showSidebarSettingsSheet = false
+        showImportExportSheet = false
+        feedSourceToEdit = nil
     }
 }

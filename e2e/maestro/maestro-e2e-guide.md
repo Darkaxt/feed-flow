@@ -144,7 +144,7 @@ The Android `android-widget` profile also exposes `e2e_open_widget_settings`, wh
 
 REG-177 defaults to an English UI. For a localized device, pass `-e WIDGET_HEADER_TITLE="<localized Show header title label>"` to Maestro.
 
-The fork's REG-189 uses the same `e2e_open_widget_settings` entry point for configurable Card surfaces and freshness. It was renumbered from REG-178, REG-181 and REG-183 to avoid upstream flow collisions. It is maintained as source coverage; no device execution is permitted during the weekly upstream synchronization.
+The fork's REG-191 uses the same `e2e_open_widget_settings` entry point for configurable Card surfaces and freshness. It was renumbered from REG-178, REG-181, REG-183 and REG-189 to avoid upstream flow collisions. It is maintained as source coverage; no device execution is permitted during the weekly upstream synchronization.
 
 iOS handles the seed link inside the app. The simulator may show a system confirmation dialog for custom schemes, so keep the `Open` tap optional.
 

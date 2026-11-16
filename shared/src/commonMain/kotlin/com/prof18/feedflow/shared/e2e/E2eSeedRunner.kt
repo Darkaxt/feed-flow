@@ -32,9 +32,11 @@ import com.prof18.feedflow.shared.data.SettingsRepository
 import com.prof18.feedflow.shared.domain.audio.AudioPlaybackPositionRepository
 import com.prof18.feedflow.shared.domain.feed.FeedStateRepository
 import com.prof18.feedflow.shared.domain.feeditem.FeedItemContentFileHandler
+import com.prof18.feedflow.shared.domain.feeditem.ReaderContentCacheMigration
 import com.prof18.feedflow.shared.domain.feedsync.AccountsRepository
 import com.prof18.feedflow.shared.domain.feedsync.FeedSyncRepository
 import com.prof18.feedflow.shared.domain.model.SyncPeriod
+import com.prof18.klead.KleadOutput
 import com.russhwolf.settings.Settings
 
 class E2eSeedRunner internal constructor(
@@ -52,6 +54,7 @@ class E2eSeedRunner internal constructor(
     private val audioPositions: AudioPlaybackPositionRepository,
     private val appEnvironment: AppEnvironment,
     private val settings: Settings,
+    private val readerContentFormat: KleadOutput,
 ) {
     suspend fun reset() {
         databaseHelper.deleteAllE2eData()
@@ -206,6 +209,9 @@ class E2eSeedRunner internal constructor(
         settingsRepository.setForceEnglishEnabled(false)
         settingsRepository.setRefreshFeedsOnLaunch(false)
         settingsRepository.setNotificationMode(NotificationMode.FEED_SOURCE)
+        // Seeded reader content is written in the current format; without this, a seed applied before the
+        // home screen starts (desktop startup seed) is wiped by the cache migration that runs afterwards.
+        settingsRepository.setReaderContentCacheVersion(ReaderContentCacheMigration.CURRENT_VERSION)
 
         feedAppearanceSettingsRepository.setFeedOrder(FeedOrder.NEWEST_FIRST)
         feedAppearanceSettingsRepository.setRemoveTitleFromDescription(false)
@@ -273,10 +279,17 @@ class E2eSeedRunner internal constructor(
         }
     }
 
+    // Each platform caches reader content in its own format (readerContentFormat): Desktop renders
+    // Markdown, Android and iOS render HTML. The seed stores the same article in the cached format.
+    private fun readerContent(html: String, markdown: String): String = when (readerContentFormat) {
+        KleadOutput.HTML -> html
+        KleadOutput.MARKDOWN -> markdown
+    }
+
     private suspend fun seedReaderContent() {
         feedItemContentFileHandler.saveFeedItemContentToFile(
             feedItemId = READER_SUCCESS_ARTICLE_ID,
-            content = READER_SUCCESS_HTML,
+            content = readerContent(html = READER_SUCCESS_HTML, markdown = READER_SUCCESS_MARKDOWN),
         )
         databaseHelper.updateContentFetchedStatus(
             feedItemId = READER_SUCCESS_ARTICLE_ID,
@@ -285,7 +298,7 @@ class E2eSeedRunner internal constructor(
 
         feedItemContentFileHandler.saveFeedItemContentToFile(
             feedItemId = READER_FALLBACK_ARTICLE_ID,
-            content = READER_FALLBACK_HTML,
+            content = readerContent(html = READER_FALLBACK_HTML, markdown = READER_FALLBACK_MARKDOWN),
         )
         databaseHelper.updateContentFetchedStatus(
             feedItemId = READER_FALLBACK_ARTICLE_ID,
@@ -294,7 +307,7 @@ class E2eSeedRunner internal constructor(
 
         feedItemContentFileHandler.saveFeedItemContentToFile(
             feedItemId = READER_LONG_ARTICLE_ID,
-            content = READER_LONG_HTML,
+            content = readerContent(html = READER_LONG_HTML, markdown = READER_LONG_MARKDOWN),
         )
         databaseHelper.updateContentFetchedStatus(
             feedItemId = READER_LONG_ARTICLE_ID,
@@ -1125,6 +1138,25 @@ class E2eSeedRunner internal constructor(
               <p><a href="https://example.com/e2e-reader-link">E2E long reader tail link</a></p>
             </article>
         """
+
+        private const val READER_SUCCESS_MARKDOWN =
+            "![E2E reader image]($READER_SUCCESS_IMAGE_URL)\n\n" +
+                "E2E cached reader content loaded from the seed fixture.\n"
+
+        private const val READER_FALLBACK_MARKDOWN = "E2E fallback reader content loaded from the seed fixture.\n"
+
+        private val READER_LONG_MARKDOWN = buildString {
+            append("# E2E Reader Mode Long Article Heading\n\n")
+            append("E2E long reader head anchor.\n\n")
+            for (index in 1..14) {
+                val number = index.toString().padStart(2, '0')
+                append("E2E long reader filler paragraph $number. It exists only to make the seeded article tall ")
+                append("enough that the reader has somewhere to scroll to, so a test can prove the scroll position ")
+                append("survives.\n\n")
+            }
+            append("E2E long reader tail anchor.\n\n")
+            append("[E2E long reader tail link](https://example.com/e2e-reader-link)\n")
+        }
 
         private const val READER_FALLBACK_HTML = """
             <article>

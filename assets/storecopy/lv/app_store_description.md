@@ -12,8 +12,8 @@ Lasīt pa savam
   anywhere without a connection.
 
 Sync That Fits Your Setup
-- iCloud sync keeps your feeds, read status, and bookmarks in sync across
-  iPhone, iPad, and Mac — effortlessly.
+- iCloud ļauj ērti sinhronizēt jūsu ziņu plūsmas, rakstu lasīšanas statusu un
+  saglabātos rakstus iPhone, iPad un Mac ierīcēs.
 - Or choose another backend: Dropbox, Google Drive, or self-hosted services like
   FreshRSS, Miniflux, Feedbin, and BazQux.
 - Your reading progress follows you everywhere.
@@ -21,7 +21,7 @@ Sync That Fits Your Setup
 Uztur kārtību
 - Ievietot un izgūt ziņu plūsmas, izmantojot OPML.
 - Bloķēt atslēgvārdus, lai nerādītu traucējošās, nevēlamās, tēmas.
-- Categories, bookmarks, and search keep everything at your fingertips.
+- Kategorijas, saglabātie raksti un meklēšana — viss pa rokai.
 
 Make It Yours
 - Tumšs un gaišs motīvi.

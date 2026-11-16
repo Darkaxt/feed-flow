@@ -20,15 +20,16 @@ Ziņu plūsmu sinhronizācija visās jūsu ierīcēs
 - Mākoņkrātuves sinhronizācija ar Dropbox vai Google disku.
 - Pašizmitināta pakalpojuma un servera sinhronizācijas iespējas ar FreshRSS,
   Miniflux, Feedbin vai BazQux.
-- Your feeds, read status, and bookmarks stay in sync across Android, iOS,
-  macOS, Windows, and Linux.
+- Jūsu ziņu plūsmas, rakstu lasīšanas statuss un saglabātie raksti tiek
+  sinhronizēti visās operētājsistēmās — Android, iOS, macOS, Windows un Linux.
 - Switch between phone, tablet, and desktop without losing your place.
 
 Stay Organized with Feeds and Categories
 - Import and export feeds with OPML — migrate from any other RSS reader or news
   reader in minutes.
 - Block noisy keywords to filter out unwanted content from your feed.
-- Organize RSS feeds into categories and bookmark articles to read later.
+- Kārtojiet RSS ziņu plūsmas kategorijās un pievienojiet rakstus saglabāto
+  rakstu kolekcijai.
 - Search across all your feeds and articles to quickly find the content you
   need.
 

@@ -25,23 +25,30 @@ import androidx.compose.ui.window.rememberWindowState
 import app.cash.sqldelight.db.SqlDriver
 import co.touchlab.kermit.Logger
 import com.prof18.feedflow.core.model.ThemeMode
+import com.prof18.feedflow.core.utils.AddFeedLinkParser
 import com.prof18.feedflow.core.utils.AppDataPathBuilder
 import com.prof18.feedflow.core.utils.AppEnvironment
 import com.prof18.feedflow.core.utils.DesktopOS
 import com.prof18.feedflow.core.utils.getDesktopOS
 import com.prof18.feedflow.core.utils.isMacOs
+import com.prof18.feedflow.database.DesktopDatabaseFailure
 import com.prof18.feedflow.desktop.di.DI
+import com.prof18.feedflow.desktop.main.applyMainWindowMinimumSize
+import com.prof18.feedflow.desktop.main.restoredMainWindowSize
 import com.prof18.feedflow.desktop.resources.Res
 import com.prof18.feedflow.desktop.resources.icon
 import com.prof18.feedflow.desktop.startup.AlreadyRunningWindow
+import com.prof18.feedflow.desktop.startup.DatabaseFailureUncaughtHandler
 import com.prof18.feedflow.desktop.startup.DatabaseStartupErrorWindow
 import com.prof18.feedflow.desktop.startup.DesktopStartupCoordinator
 import com.prof18.feedflow.desktop.startup.InstanceActivation
 import com.prof18.feedflow.desktop.startup.SingleInstanceLock
 import com.prof18.feedflow.desktop.startup.StartupState
+import com.prof18.feedflow.desktop.startup.addFeedLinkInbox
 import com.prof18.feedflow.desktop.startup.bringToFront
 import com.prof18.feedflow.desktop.startup.handleStartupCrash
 import com.prof18.feedflow.desktop.telemetry.TelemetryDeckClient
+import com.prof18.feedflow.desktop.testing.DesktopE2eHooks
 import com.prof18.feedflow.desktop.ui.DesktopWindowBackground
 import com.prof18.feedflow.desktop.ui.components.restoreInitialLinuxWindowSize
 import com.prof18.feedflow.desktop.ui.desktopMainWindowTitle
@@ -54,6 +61,7 @@ import com.prof18.feedflow.shared.data.SettingsRepository
 import com.prof18.feedflow.shared.domain.DatabaseCloser
 import com.prof18.feedflow.shared.domain.DesktopAutoRefreshScheduler
 import com.prof18.feedflow.shared.domain.feedsync.FeedSyncRepository
+import com.prof18.feedflow.shared.e2e.E2eSeedRunner
 import com.prof18.feedflow.shared.logging.DatabaseFailureReporterConfig
 import com.prof18.feedflow.shared.logging.reportDesktopDatabaseFailure
 import io.sentry.Sentry
@@ -62,9 +70,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.painterResource
+import java.awt.Desktop
 import java.awt.Toolkit
 import java.io.File
 import java.io.InputStream
@@ -72,36 +82,66 @@ import java.util.Properties
 import kotlin.system.exitProcess
 import kotlin.time.Duration.Companion.milliseconds
 
-fun main() {
+private const val SEED_FAILED_EXIT_CODE = 86
+private const val SEED_FAILED_MARKER = "FEEDFLOW_E2E_SEED_FAILED"
+
+fun main(args: Array<String>) {
+    installDatabaseFailureHandler()
     var appConfig: DesktopConfig? = null
     try {
-        runDesktopApp(onConfigReady = { appConfig = it })
+        runDesktopApp(args, onConfigReady = { appConfig = it })
     } catch (e: Throwable) {
         reportStartupCrash(e, appConfig)
         exitProcess(1)
     }
 }
 
+private suspend fun runE2eStartupSeed() {
+    try {
+        val spec = DesktopE2eHooks.seedSpec() ?: return
+        DI.koin.get<E2eSeedRunner>().run(
+            action = spec.action,
+            profileName = spec.profile,
+            accountName = spec.account,
+            audioUrl = spec.audioUrl,
+        )
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        System.err.println(SEED_FAILED_MARKER)
+        System.err.println(e.stackTraceToString())
+        System.err.flush()
+        exitProcess(SEED_FAILED_EXIT_CODE)
+    }
+}
+
 @OptIn(ExperimentalComposeUiApi::class)
-private fun runDesktopApp(onConfigReady: (DesktopConfig) -> Unit) {
+private fun runDesktopApp(args: Array<String>, onConfigReady: (DesktopConfig) -> Unit) {
     integrateAppImageIfNeeded()
     setupSandboxEnvironment()
+    installMacOpenUriHandler()
+    val launchLink = args.firstOrNull { AddFeedLinkParser.parse(it) != null }
+    launchLink?.let(AddFeedLinkParser::parse)?.let(addFeedLinkInbox::offer)
 
     val appConfig = createAppConfig(loadProperties(), isIcloudEnabled = setupICloudSupport())
+    DesktopE2eHooks.install(appConfig.appEnvironment)
     onConfigReady(appConfig)
     val dataFolder = File(AppDataPathBuilder.getAppDataPath(appConfig.appEnvironment))
     val lockResult = singleInstanceLock.acquire(dataFolder)
     DatabaseFailureReporterConfig.singleInstanceLockState = singleInstanceLock.state
 
     if (lockResult == SingleInstanceLock.Result.HeldByOther) {
-        if (InstanceActivation.requestActivation(dataFolder)) return
+        if (InstanceActivation.requestActivation(dataFolder, link = launchLink)) return
         application {
             AlreadyRunningWindow(onQuit = ::exitApplication)
         }
         return
     }
     if (lockResult == SingleInstanceLock.Result.Acquired) {
-        instanceActivation.listen(dataFolder) { activationRequests.tryEmit(Unit) }
+        instanceActivation.listen(dataFolder) { feedUrl ->
+            feedUrl?.let(addFeedLinkInbox::offer)
+            activationRequests.tryEmit(Unit)
+        }
     }
 
     application {
@@ -118,6 +158,7 @@ private fun runDesktopApp(onConfigReady: (DesktopConfig) -> Unit) {
                     DI.koin.get<SqlDriver>()
                 },
                 afterDatabaseReady = {
+                    runE2eStartupSeed()
                     DI.koin.get<DesktopAutoRefreshScheduler>().start()
                     @Suppress("MagicNumber")
                     withContext(Dispatchers.Main) { initProgress = 0.6f }
@@ -130,6 +171,7 @@ private fun runDesktopApp(onConfigReady: (DesktopConfig) -> Unit) {
             )
         }
         val startupState by startupCoordinator.state.collectAsState()
+        val runtimeFailure by runtimeDatabaseFailure.collectAsState()
 
         @Suppress("MagicNumber")
         LaunchedEffect(Unit) {
@@ -160,16 +202,17 @@ private fun runDesktopApp(onConfigReady: (DesktopConfig) -> Unit) {
             )
         }
 
-        (startupState as? StartupState.DatabaseFailed)?.let { failed ->
+        databaseFailureToShow(startupState, runtimeFailure)?.let { failure ->
             DatabaseStartupErrorWindow(
-                failure = failed.failure,
+                failure = failure,
                 dataFolder = File(AppDataPathBuilder.getAppDataPath(appConfig.appEnvironment)),
+                // The database is unusable, so skip the backup the main window runs on close.
                 onQuit = ::exitApplication,
                 activationRequests = activationRequests,
             )
         }
 
-        if (startupState == StartupState.Ready) {
+        if (startupState == StartupState.Ready && runtimeFailure == null) {
             val desktopWindowSettingsRepository = remember { DI.koin.get<DesktopWindowSettingsRepository>() }
             val settingsRepository = remember { DI.koin.get<SettingsRepository>() }
             val windowState = windowState(desktopWindowSettingsRepository)
@@ -201,6 +244,7 @@ private fun runDesktopApp(onConfigReady: (DesktopConfig) -> Unit) {
                 title = desktopMainWindowTitle(),
                 state = windowState,
                 init = { window ->
+                    window.applyMainWindowMinimumSize()
                     window.restoreInitialLinuxWindowSize(windowState.size) {
                         windowState.placement == WindowPlacement.Floating
                     }
@@ -242,6 +286,25 @@ private fun reportStartupCrash(error: Throwable, appConfig: DesktopConfig?) {
 }
 
 private const val SENTRY_FLUSH_TIMEOUT_MILLIS = 2_000L
+
+// Set when the database stops working after startup; the first failure wins.
+private val runtimeDatabaseFailure = MutableStateFlow<DesktopDatabaseFailure?>(null)
+
+private fun databaseFailureToShow(
+    startupState: StartupState,
+    runtimeFailure: DesktopDatabaseFailure?,
+): DesktopDatabaseFailure? = (startupState as? StartupState.DatabaseFailed)?.failure ?: runtimeFailure
+
+// Runs before Sentry starts, so Sentry wraps it and still sees every crash first.
+private fun installDatabaseFailureHandler() {
+    Thread.setDefaultUncaughtExceptionHandler(
+        DatabaseFailureUncaughtHandler(
+            next = Thread.getDefaultUncaughtExceptionHandler(),
+            report = { error -> runCatching { reportDesktopDatabaseFailure("uncaught", error) } },
+            onFatalFailure = { failure -> runtimeDatabaseFailure.compareAndSet(null, failure) },
+        ),
+    )
+}
 
 // Held for the whole process lifetime so the OS keeps the lock until FeedFlow exits.
 private val singleInstanceLock = SingleInstanceLock()
@@ -399,8 +462,7 @@ private fun windowState(desktopWindowSettingsRepository: DesktopWindowSettingsRe
     val maxWidth = screenSize.width.dp
     val maxHeight = screenSize.height.dp
 
-    val width = savedWidthDp.dp.coerceAtMost(maxWidth)
-    val height = savedHeightDp.dp.coerceAtMost(maxHeight)
+    val (width, height) = restoredMainWindowSize(savedWidthDp, savedHeightDp, DpSize(maxWidth, maxHeight))
 
     val xPos = savedPositionX?.dp
         ?.coerceIn(0.dp, (maxWidth - width).coerceAtLeast(minimumValue = 0.dp))
@@ -441,3 +503,13 @@ data class DesktopConfig(
     val isDropboxEnabled: Boolean,
     val isGoogleDriveEnabled: Boolean,
 )
+
+private fun installMacOpenUriHandler() {
+    if (!Desktop.isDesktopSupported()) return
+    val desktop = Desktop.getDesktop()
+    if (!desktop.isSupported(Desktop.Action.APP_OPEN_URI)) return
+    desktop.setOpenURIHandler { event ->
+        AddFeedLinkParser.parse(event.uri.toString())?.let(addFeedLinkInbox::offer)
+        activationRequests.tryEmit(Unit)
+    }
+}

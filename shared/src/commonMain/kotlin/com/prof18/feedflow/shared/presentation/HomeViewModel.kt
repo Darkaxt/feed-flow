@@ -174,8 +174,12 @@ class HomeViewModel internal constructor(
         viewModelScope.launch {
             readerContentCacheMigration.clearOutdatedContent()
         }
+        val refreshesOnLaunch = settingsRepository.getRefreshFeedsOnLaunch()
         viewModelScope.launch {
             feedStateRepository.getFeeds()
+            if (!refreshesOnLaunch) {
+                feedStateRepository.finishLaunchLoading()
+            }
         }
         getNewFeeds(isFirstLaunch = true)
     }
@@ -414,12 +418,6 @@ class HomeViewModel internal constructor(
     fun refreshFeeds() {
         refreshTriggerMutableState.update { it + 1 }
         refreshCurrentFilter()
-    }
-
-    fun reloadFeedState() {
-        launchAfterFlushingScrollReadState {
-            feedStateRepository.getFeeds()
-        }
     }
 
     fun onShowNewArticlesClicked() {

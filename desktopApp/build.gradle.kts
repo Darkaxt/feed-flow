@@ -145,6 +145,8 @@ kotlin {
                 implementation(kotlin("test"))
                 implementation(libs.kotlinx.coroutines.test)
                 implementation(libs.turbine)
+                implementation(libs.sqlite.jdbc)
+                implementation(libs.sqldelight.sqlite.driver)
                 implementation(compose.desktop.uiTestJUnit4)
                 implementation(compose.desktop.currentOs) {
                     exclude(group = "org.jetbrains.compose.material", module = "material")
@@ -152,6 +154,8 @@ kotlin {
                 implementation(libs.spectre.core)
                 implementation(libs.spectre.recording)
                 implementation(libs.spectre.testing)
+                implementation(libs.spectre.agent)
+                runtimeOnly(libs.spectre.agent.runtime)
                 when {
                     isMacOS -> runtimeOnly(libs.spectre.recording.macos)
                     isLinux -> runtimeOnly(libs.spectre.recording.linux)
@@ -184,6 +188,30 @@ tasks.withType<Test>().configureEach {
         maxParallelForks = 1
         systemProperty("skiko.renderApi", "SOFTWARE")
     }
+}
+
+// Desktop E2E flows launch the real app (e2e/desktop/README.md). They run only through desktopE2eTest.
+val desktopE2ePackage = "com.prof18.feedflow.desktop.e2e.*"
+tasks.named<Test>("jvmTest") {
+    filter { excludeTestsMatching(desktopE2ePackage) }
+}
+val jvmTestCompilation = kotlin.jvm().compilations.getByName("test")
+tasks.register<Test>("desktopE2eTest") {
+    description = "Runs the desktop E2E flows against the real app (macOS, local only)."
+    group = "verification"
+    testClassesDirs = jvmTestCompilation.output.classesDirs
+    classpath = files(jvmTestCompilation.output.allOutputs, jvmTestCompilation.runtimeDependencyFiles)
+    val suite = providers.gradleProperty("feedflow.e2eSuite").orElse("all").get()
+    filter {
+        if (suite == "all") {
+            includeTestsMatching(desktopE2ePackage)
+        } else {
+            includeTestsMatching("com.prof18.feedflow.desktop.e2e.$suite.*")
+        }
+    }
+    maxParallelForks = 1
+    outputs.upToDateWhen { false }
+    systemProperty("feedflow.e2e.repoRoot", rootProject.projectDir.absolutePath)
 }
 
 val isAppStoreRelease = project.property("macOsAppStoreRelease").toString().toBoolean()
@@ -397,6 +425,19 @@ val macExtraPlistKeys: String
                 <string>Any</string>
             </dict>
         </dict>
+        <key>CFBundleURLTypes</key>
+        <array>
+          <dict>
+            <key>CFBundleURLName</key>
+            <string>com.prof18.feedflow</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+              <string>feedflow</string>
+              <string>feed</string>
+              <string>feeds</string>
+            </array>
+          </dict>
+        </array>
     """.trimIndent()
 
 // Copy the Liquid Glass asset catalog (Assets.car) into Contents/Resources/ of the
