@@ -170,9 +170,7 @@
     <string name="no_google_drive_sync_yet">Belum dicadangkan ke Google Drive. Pilih Cadangkan sekarang untuk memulai.</string>
     <string name="google_drive_connect_button">Hubungkan Google Drive</string>
     <string name="google_drive_desktop_sync_description">Klik tombol di bawah untuk menghubungkan akun Google Drive Anda. Jendela browser akan terbuka untuk autentikasi. Setelah Anda menyelesaikan masuk, Anda dapat kembali ke aplikasi ini.</string>
-    <string name="settings_hide_description">Sembunyikan deskripsi artikel</string>
     <string name="settings_hide_images">Sembunyikan gambar artikel</string>
-    <string name="settings_hide_date">Sembunyikan tanggal artikel</string>
     <string name="open_feed_settings">Pengaturan feed</string>
     <string name="delete_feed_source_error">Tidak dapat menghapus feed. Silakan coba lagi.</string>
     <string name="fresh_rss_password_hint">Kata sandi API FreshRSS (Pengaturan &gt; Profil)</string>
@@ -245,12 +243,8 @@
     <string name="settings_swipe_action_toggle_bookmark">Alihkan penanda</string>
     <string name="settings_swipe_action_none">Dinonaktifkan</string>
     <string name="settings_notification_no_feed">Sepertinya Anda belum menambahkan feed apa pun. Tambahkan beberapa untuk mulai menerima notifikasi!</string>
-    <string name="settings_notification_check_period">Frekuensi pemeriksaan notifikasi</string>
     <string name="settings_notifications_enable_all_title">Aktifkan Semua Notifikasi</string>
     <string name="notification_channel_description">Notifikasi untuk artikel baru di feed Anda</string>
-    <string name="settings_notifications_permission_status_title">Status Izin</string>
-    <string name="settings_notifications_permission_status_granted">Diizinkan</string>
-    <string name="settings_notifications_permission_status_denied">Ditolak</string>
     <string name="settings_notifications_permission_request_button">Minta Izin</string>
     <string name="new_articles_notification_title">Artikel baru tersedia</string>
     <string name="notification_channel_name">Artikel Baru</string>
@@ -304,8 +298,6 @@
     <string name="confirm_button">Konfirmasi</string>
     <string name="cancel_button">Batal</string>
     <string name="reset_button">Atur ulang</string>
-    <string name="settings_danger_title">Berbahaya</string>
-    <string name="settings_feeds_and_accounts">Umpan &amp; akun</string>
     <string name="settings_reading_behavior">Perilaku membaca</string>
     <string name="settings_sync_and_storage">Sinkronisasi &amp; penyimpanan</string>
     <string name="settings_about_and_support">Tentang &amp; dukungan</string>
@@ -335,9 +327,6 @@
     <string name="drawer_title_library">Pustaka</string>
     <string name="settings_desktop_multi_pane_layout">Gunakan tata letak beranda multi-panel</string>
     <string name="select_article_to_read">Pilih artikel untuk dibaca</string>
-    <string name="settings_hide_read_items">Sembunyikan otomatis artikel saat ditandai sudah dibaca</string>
-    <string name="settings_hide_unread_dot">Sembunyikan indikator belum dibaca</string>
-    <string name="settings_hide_feed_source">Sembunyikan nama umpan</string>
     <string name="settings_description_max_lines">Baris deskripsi</string>
     <string name="settings_description_lines_three">3 baris</string>
     <string name="settings_description_lines_five">5 baris</string>
@@ -424,7 +413,6 @@
     <string name="hide_youtube_shorts_description">Hanya video reguler dari kanal ini yang akan disertakan. Shorts dan siaran langsung tidak disertakan.</string>
     <string name="hide_youtube_shorts_fallback">Shorts tidak dapat disembunyikan untuk kanal ini, sehingga umpan lengkap ditambahkan sebagai gantinya.</string>
     <string name="hide_youtube_shorts_edit_fallback">Shorts tidak dapat disembunyikan untuk kanal ini. Perubahan Anda yang lain telah disimpan.</string>
-    <string name="settings_filters">Filter</string>
     <string name="database_save_error">Tidak dapat menyimpan perubahan Anda. Coba lagi sebentar - kode kesalahan: %s</string>
     <string name="database_recovered_from_corruption">Data lokal Anda rusak, sehingga FeedFlow dimulai dengan basis data baru. Salinan data lama disimpan di folder data FeedFlow.</string>
     <string name="database_startup_locked">FeedFlow tidak dapat membuka datanya karena sedang digunakan oleh program lain. Tutup jendela FeedFlow lainnya, lalu buka kembali FeedFlow.</string>
@@ -441,7 +429,6 @@
     <string name="desktop_pane_width">Lebar %s piksel</string>
     <string name="desktop_expand_reader">Perluas pembaca</string>
     <string name="desktop_restore_reader_layout">Pulihkan daftar artikel</string>
-    <string name="settings_hide_read_items_disabled_while_scrolling">Sembunyikan otomatis dinonaktifkan saat “Tandai sudah dibaca saat menggulir” aktif, agar artikel tetap di tempatnya saat Anda menggulir. Nonaktifkan pengaturan tersebut untuk menggunakan sembunyikan otomatis.</string>
     <string name="audio_episode_badge_content_description">Episode audio</string>
     <string name="audio_episode_label">Audio</string>
     <string name="menu_open_audio">Buka audio</string>

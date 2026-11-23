@@ -21,6 +21,8 @@ struct EditFeedScreen: View {
     var feedSource: FeedSource
 
     @State private var categorySelectorObserver = CategorySelectorObserver()
+    // Owned here: environment values are not re-injected into every navigation destination.
+    @State private var browserSelector = BrowserSelector()
 
     @State private var showError = false
     @State private var errorMessage = ""
@@ -35,7 +37,7 @@ struct EditFeedScreen: View {
     @State private var isKeepUnreadOnScrollEnabled = false
     @State private var isMarkReadWhenScrollingEnabled = true
     @State private var isPinned = false
-    @State private var showNotificationToggle = false
+    @State private var notificationPermissionDenied = false
     @State private var isNotificationEnabled = false
     @State private var hasUnsavedChanges = false
     @State private var verificationChallengeUrl: String?
@@ -51,6 +53,9 @@ struct EditFeedScreen: View {
                 errorMessage: errorMessage,
                 isAddingFeed: $isAddingFeed,
                 articleOpenMode: $articleOpenMode,
+                articleBrowserName: browserSelector.articleBrowserId() == BrowserIds.shared.IN_APP_BROWSER
+                    ? feedFlowStrings.inAppBrowser
+                    : browserSelector.articleBrowserName(),
                 isHidden: $isHidden,
                 isHideImagesEnabled: $isHideImagesEnabled,
                 showHideShortsToggle: showHideShortsToggle,
@@ -58,7 +63,7 @@ struct EditFeedScreen: View {
                 isKeepUnreadOnScrollEnabled: $isKeepUnreadOnScrollEnabled,
                 isMarkReadWhenScrollingEnabled: isMarkReadWhenScrollingEnabled,
                 isPinned: $isPinned,
-                showNotificationToggle: showNotificationToggle,
+                notificationPermissionDenied: notificationPermissionDenied,
                 isNotificationEnabled: $isNotificationEnabled,
                 categorySelectorObserver: categorySelectorObserver,
                 viewModel: vmStoreOwner.instance,
@@ -89,6 +94,16 @@ struct EditFeedScreen: View {
                 },
                 onNotificationToggled: { enabled in
                     vmStoreOwner.instance.updateIsNotificationEnabled(isNotificationEnabled: enabled)
+                    if enabled {
+                        Task {
+                            notificationPermissionDenied = await NotificationPermissionRequester.requestIfNeeded() == .denied
+                        }
+                    }
+                },
+                onOpenSettings: {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
                 },
                 addFeed: {
                     vmStoreOwner.instance.editFeed()
@@ -221,8 +236,11 @@ struct EditFeedScreen: View {
                 }
             }
             .task {
-                for await show in vmStoreOwner.instance.showNotificationToggleState {
-                    self.showNotificationToggle = show as? Bool ?? false
+                notificationPermissionDenied = await NotificationPermissionRequester.currentStatus() == .denied
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                Task {
+                    notificationPermissionDenied = await NotificationPermissionRequester.currentStatus() == .denied
                 }
             }
             .task {

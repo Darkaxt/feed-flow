@@ -9,16 +9,17 @@ import com.prof18.feedflow.core.model.FeedSource
 import com.prof18.feedflow.core.model.SyncAccounts
 import com.prof18.feedflow.database.DatabaseHelper
 import com.prof18.feedflow.feedsync.networkcore.NetworkSettings
+import com.prof18.feedflow.shared.data.SettingsRepository
 import com.prof18.feedflow.shared.domain.HtmlRetriever
 import com.prof18.feedflow.shared.domain.feed.RssParserWrapper
 import com.prof18.feedflow.shared.domain.feedsync.AccountsRepository
 import com.prof18.feedflow.shared.domain.model.FeedAddedState
+import com.prof18.feedflow.shared.domain.model.SyncPeriod
 import com.prof18.feedflow.shared.test.KoinTestBase
 import com.prof18.feedflow.shared.test.TestDispatcherProvider.testDispatcher
 import com.prof18.feedflow.shared.test.generators.FeedSourceGenerator
 import com.prof18.feedflow.shared.test.generators.RssChannelGenerator
 import com.prof18.feedflow.shared.test.generators.RssItemGenerator
-import com.prof18.feedflow.shared.test.toParsedFeedSource
 import com.prof18.feedflow.shared.test.unexpectedRequestHttpClient
 import com.prof18.rssparser.model.RssChannel
 import io.ktor.client.HttpClient
@@ -42,6 +43,7 @@ import kotlin.test.assertTrue
 class AddFeedViewModelTest : KoinTestBase() {
 
     private val databaseHelper: DatabaseHelper by inject()
+    private val settingsRepository: SettingsRepository by inject()
 
     @Test
     fun `Shorts option is available for every remote sync account`() = runTest(testDispatcher) {
@@ -370,15 +372,31 @@ class AddFeedViewModelTest : KoinTestBase() {
     }
 
     @Test
-    fun `showNotificationToggleState reflects enabled notifications`() = runTest(testDispatcher) {
-        val feedSource = createFeedSource(id = "source-1", title = "Feed One")
-        databaseHelper.insertFeedSource(listOf(feedSource.toParsedFeedSource()))
-        databaseHelper.updateNotificationEnabledStatus(feedSource.id, true)
-
+    fun `switching notifications on at Never turns refresh on and announces it`() = runTest(testDispatcher) {
+        settingsRepository.setSyncPeriod(SyncPeriod.NEVER)
         val viewModel = getViewModel()
-        advanceUntilIdle()
 
-        assertTrue(viewModel.showNotificationToggleState.value)
+        viewModel.backgroundRefreshTurnedOn.test {
+            viewModel.updateNotificationStatus(true)
+            advanceUntilIdle()
+
+            assertEquals(SyncPeriod.ONE_HOUR, awaitItem())
+            assertEquals(SyncPeriod.ONE_HOUR, settingsRepository.getSyncPeriod())
+        }
+    }
+
+    @Test
+    fun `switching notifications off keeps refresh off silently`() = runTest(testDispatcher) {
+        settingsRepository.setSyncPeriod(SyncPeriod.NEVER)
+        val viewModel = getViewModel()
+
+        viewModel.backgroundRefreshTurnedOn.test {
+            viewModel.updateNotificationStatus(false)
+            advanceUntilIdle()
+
+            expectNoEvents()
+            assertEquals(SyncPeriod.NEVER, settingsRepository.getSyncPeriod())
+        }
     }
 
     private fun getViewModel(): AddFeedViewModel = get()

@@ -90,7 +90,6 @@
     <string name="icloud_sync_success">Váš účet iCloud je úspěšně připojen</string>
     <string name="no_icloud_sync_yet">Údaje nejsou synchronizovány s iCloud. Klepnutím na tlačítko zálohovat nyní spustíte synchronizaci.</string>
     <string name="settings_hide_duplicated_title_from_desc">Skrýt název z popisu článku</string>
-    <string name="settings_hide_description">Skrýt popis článku</string>
     <string name="settings_hide_images">Skrýt obrázek článku</string>
     <string name="reader_mode_font_size">Velikost písma čtečky</string>
     <string name="edit_feed_source_name_button">Editovat</string>
@@ -170,12 +169,8 @@
     <string name="link_with_error_report_title">Následující zdroje nebyly přidány kvůli chybě</string>
     <string name="database_error">Při načítání zdrojů něco pokazilo. Zkuste to prosím znovu nebo aplikaci restartujte - error code: %s :(</string>
     <string name="settings_notification_no_feed">Vypadá to, že jste dosud nepřidali žádné zdroje. Přidejte nějaké, abyste začali odebírat upozornění!</string>
-    <string name="settings_notification_check_period">Frekvence kontroly upozornění</string>
     <string name="settings_notifications_enable_all_title">Povolit všechna upozornění</string>
     <string name="notification_channel_description">Oznámení o nových článcích ve vašich zdrojích</string>
-    <string name="settings_notifications_permission_status_title">Stav povolení</string>
-    <string name="settings_notifications_permission_status_granted">Schváleno</string>
-    <string name="settings_notifications_permission_status_denied">Zamítnuto</string>
     <string name="settings_notifications_permission_request_button">Žádost o povolení</string>
     <string name="new_articles_notification_title">Dostupné nové články</string>
     <string name="notification_channel_name">Nové články</string>
@@ -226,7 +221,6 @@
     <string name="settings_save_reader_mode_content">Uchovejte offline kopie článků, které otevřete</string>
     <string name="settings_prefetch_article_content">Vytvořte offline kopie při obnovování zdrojů</string>
     <string name="settings_prefetch_article_content_warning">Povolení této možnosti zpomalí obnovování a zvýší využití dat, protože celý obsah článku z každé webové stránky bude stažen během aktualizace zdrojů. Pokud máte velké množství článků, může to také ovlivnit výkon. Zapněte to pouze v případě, že potřebujete číst články bez připojení.</string>
-    <string name="settings_hide_date">Skrýt datum článku</string>
     <string name="settings_auto_delete_period_one_day">Automatické mazání den starých článků</string>
     <string name="time_format_title">Formát času</string>
     <string name="time_format_hours_24">24 hodin</string>
@@ -235,7 +229,6 @@
     <string name="reader_mode_comments_button_content_description">Otevřít komentáře</string>
     <string name="previous_article">Předchozí článek</string>
     <string name="next_article">Další článek</string>
-    <string name="settings_danger_title">Nebezpečná nastavení</string>
     <string name="settings_clear_downloaded_articles">Smazat offline kopie článků</string>
     <string name="settings_clear_downloaded_articles_dialog_title">Smazat offline kopie článků?</string>
     <string name="settings_clear_downloaded_articles_dialog_message">Tímto se odstraní všechny offline kopie celých článků. Tuto akci nelze vrátit zpět.</string>
@@ -314,7 +307,6 @@
     <string name="feed_suggestions_title">Návrhy zdrojů</string>
     <string name="feed_suggestions_description">Procházejte a přidávejte zdroje do své sbírky</string>
     <string name="reset_button">Resetovat</string>
-    <string name="settings_feeds_and_accounts">Zdroje &amp; účty</string>
     <string name="settings_reading_behavior">Způsob čtení</string>
     <string name="settings_sync_and_storage">Synchronizace &amp; ukládání</string>
     <string name="settings_about_and_support">O nás &amp; podpora</string>
@@ -328,7 +320,6 @@
     <string name="settings_notification_mode_category">Podle kategorie</string>
     <string name="settings_notification_mode_grouped">Vše dohromady</string>
     <string name="open_feed_website_button">Otevřít webovou stránku</string>
-    <string name="settings_hide_read_items">Automaticky skrývat články označené jako přečtené</string>
     <string name="exit_menu">Ukončit</string>
     <string name="browser_launch_error">Nelze otevřít odkaz. Zkontrolujte nastavení prohlížeče.</string>
     <string name="choose_another_file_button">Vyberte jiný soubor</string>
@@ -337,8 +328,6 @@
     <string name="drawer_title_library">Knihovna</string>
     <string name="settings_desktop_multi_pane_layout">Použít rozložení ve vícero blocích</string>
     <string name="select_article_to_read">Vyberte článek pro čtení</string>
-    <string name="settings_hide_unread_dot">Skrýt indikátor nepřečtených</string>
-    <string name="settings_hide_feed_source">Skrýt název zdroje</string>
     <string name="settings_description_max_lines">Popis řádků</string>
     <string name="settings_description_lines_three">3 řádky</string>
     <string name="settings_description_lines_five">5 řádků</string>
@@ -417,7 +406,6 @@
     <string name="hide_youtube_shorts_description">Pouze běžná videa z tohoto kanálu budou zahrnuty. Jsou vyloučeny Shorts a živé streamy.</string>
     <string name="hide_youtube_shorts_fallback">Shorts nemohly být ukryty pro tento kanál, takže byl místo toho přidán celý zdroj.</string>
     <string name="hide_youtube_shorts_edit_fallback">Shorts nemohly být skryty pro tento kanál. Vaše další změny byly uloženy.</string>
-    <string name="settings_filters">Filtry</string>
     <string name="database_save_error">Nelze uložit vaše změny. Zkuste znovu za chvíli - kód chyby: %s</string>
     <string name="database_recovered_from_corruption">Vaše místní údaje byly poškozeny, takže FeedFlow začal s čerstvou databází. Kopie starých dat byla uložena ve složce FeedFlow.</string>
     <string name="database_startup_locked">FeedFlow nemůže otevřít své údaje, protože je jiný program používá. Zavřete další FeedFlow okna, poté otevřete FeedFlow znovu.</string>
@@ -434,7 +422,6 @@
     <string name="desktop_pane_width">%s šířka v pixelech</string>
     <string name="desktop_expand_reader">Rozbalit čtečku</string>
     <string name="desktop_restore_reader_layout">Obnovit seznam článku</string>
-    <string name="settings_hide_read_items_disabled_while_scrolling">Automatické skrývání je vypnuto, když \"Označ jako přečtené při posouvání\" ja zapnuto, takže články zůstanou na místě, když je posouváte. Vypněte to pomocí automatického skrytí.</string>
     <string name="audio_episode_badge_content_description">Audio epizoda</string>
     <string name="audio_episode_label">Audio</string>
     <string name="menu_open_audio">Otevřete audio</string>

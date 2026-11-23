@@ -6,6 +6,7 @@ import com.prof18.feedflow.core.model.AutoDeletePeriod
 import com.prof18.feedflow.core.model.FeedItemId
 import com.prof18.feedflow.core.model.FeedOrder
 import com.prof18.feedflow.core.model.ParsedFeedSource
+import com.prof18.feedflow.core.model.ReadArticlesVisibility
 import com.prof18.feedflow.core.model.ThemeMode
 import com.prof18.feedflow.database.DatabaseHelper
 import com.prof18.feedflow.shared.data.SettingsRepository
@@ -15,6 +16,7 @@ import com.prof18.feedflow.shared.domain.feed.FeedStateRepository
 import com.prof18.feedflow.shared.domain.feeditem.FeedItemContentFileHandler
 import com.prof18.feedflow.shared.domain.model.SyncPeriod
 import com.prof18.feedflow.shared.test.ContentPrefetchRepositoryFake
+import com.prof18.feedflow.shared.test.FeedItemContentFileHandlerTestImpl
 import com.prof18.feedflow.shared.test.KoinTestBase
 import com.prof18.feedflow.shared.test.generators.FeedItemGenerator
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -48,7 +50,7 @@ class MenuBarViewModelTest : KoinTestBase() {
         assertEquals(ThemeMode.SYSTEM, state.themeMode)
         assertTrue(state.isMarkReadWhenScrollingEnabled)
         assertFalse(state.isShowReadItemsEnabled)
-        assertFalse(state.isHideReadItemsEnabled)
+        assertEquals(ReadArticlesVisibility.HIDE_ON_REFRESH, state.readArticlesVisibility)
         assertEquals(ArticleOpenMode.FULL_ARTICLE, state.articleOpenMode)
         assertFalse(state.isSaveReaderModeContentEnabled)
         assertFalse(state.isPrefetchArticleContentEnabled)
@@ -170,15 +172,6 @@ class MenuBarViewModelTest : KoinTestBase() {
     }
 
     @Test
-    fun `updateHideReadItems updates state`() = runTest {
-        viewModel.updateHideReadItems(true)
-        assertTrue(viewModel.state.value.isHideReadItemsEnabled)
-
-        viewModel.updateHideReadItems(false)
-        assertFalse(viewModel.state.value.isHideReadItemsEnabled)
-    }
-
-    @Test
     fun `clearDownloadedArticleContent calls file handler`() = runTest {
         feedItemContentFileHandler.saveFeedItemContentToFile("1", "content")
         assertTrue(feedItemContentFileHandler.isContentAvailable("1"))
@@ -186,6 +179,66 @@ class MenuBarViewModelTest : KoinTestBase() {
         viewModel.clearDownloadedArticleContent()
 
         assertFalse(feedItemContentFileHandler.isContentAvailable("1"))
+    }
+
+    @Test
+    fun `clearDownloadedArticleContent emits true when content is deleted`() = runTest {
+        viewModel.downloadedArticlesCleared.test {
+            viewModel.clearDownloadedArticleContent()
+
+            assertTrue(awaitItem())
+        }
+    }
+
+    @Test
+    fun `clearDownloadedArticleContent emits false when deletion fails`() = runTest {
+        (feedItemContentFileHandler as FeedItemContentFileHandlerTestImpl).failClear = true
+
+        viewModel.downloadedArticlesCleared.test {
+            viewModel.clearDownloadedArticleContent()
+
+            assertFalse(awaitItem())
+        }
+    }
+
+    @Test
+    fun `updateReadArticlesVisibility ignores hide right away while scroll marking is on`() = runTest {
+        settingsRepository.setMarkFeedAsReadWhenScrolling(true)
+
+        viewModel.updateReadArticlesVisibility(ReadArticlesVisibility.HIDE_RIGHT_AWAY)
+        advanceUntilIdle()
+
+        assertFalse(settingsRepository.getHideReadItems())
+        assertEquals(ReadArticlesVisibility.HIDE_ON_REFRESH, viewModel.state.value.readArticlesVisibility)
+    }
+
+    @Test
+    fun `updateReadArticlesVisibility to keep in list updates state and triggers getFeeds`() = runTest {
+        populateDatabase()
+
+        feedStateRepository.feedState.test {
+            assertEquals(emptyList(), awaitItem())
+            viewModel.updateReadArticlesVisibility(ReadArticlesVisibility.KEEP_IN_LIST)
+            awaitItem()
+            assertEquals(ReadArticlesVisibility.KEEP_IN_LIST, viewModel.state.value.readArticlesVisibility)
+        }
+    }
+
+    @Test
+    fun `updateReadArticlesVisibility to hide right away removes read articles from the current list`() = runTest {
+        populateDatabase()
+        settingsRepository.setMarkFeedAsReadWhenScrolling(false)
+        feedStateRepository.getFeeds()
+        val itemId = FeedItemId(feedStateRepository.feedState.value.single().id)
+        databaseHelper.updateReadStatus(itemId, isRead = true)
+        feedStateRepository.markAsRead(hashSetOf(itemId))
+        assertEquals(1, feedStateRepository.feedState.value.size)
+
+        viewModel.updateReadArticlesVisibility(ReadArticlesVisibility.HIDE_RIGHT_AWAY)
+        advanceUntilIdle()
+
+        assertTrue(feedStateRepository.feedState.value.isEmpty())
+        assertEquals(ReadArticlesVisibility.HIDE_RIGHT_AWAY, viewModel.state.value.readArticlesVisibility)
     }
 
     private suspend fun populateDatabase() {

@@ -183,6 +183,7 @@ class E2eSeedRunner internal constructor(
 
     private fun applyBaseSettings() {
         settingsRepository.clearFavouriteBrowserId()
+        settingsRepository.clearArticleBrowserId()
         settingsRepository.setMarkFeedAsReadWhenScrolling(true)
         settingsRepository.setShowReadArticlesTimeline(false)
         settingsRepository.setHideReadItems(false)

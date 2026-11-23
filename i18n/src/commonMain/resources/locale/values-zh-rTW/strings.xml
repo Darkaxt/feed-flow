@@ -114,9 +114,7 @@
     <string name="icloud_sync_success">已成功連接您的iCloud帳號</string>
     <string name="no_icloud_sync_yet">資料尚未與iCloud同步，請點擊備份按鈕觸發同步</string>
     <string name="settings_hide_duplicated_title_from_desc">隱藏文章描述中的標題</string>
-    <string name="settings_hide_description">隱藏文章描述</string>
     <string name="settings_hide_images">隱藏文章圖片</string>
-    <string name="settings_hide_date">隱藏文章日期</string>
     <string name="reader_mode_font_size">字型大小</string>
     <string name="edit_feed_source_name_button">編輯</string>
     <string name="edit_feed">編輯消息來源</string>
@@ -186,12 +184,8 @@
     <string name="settings_swipe_action_none">已停用</string>
     <string name="settings_swipe_action_toggle_bookmark">切換收藏與否</string>
     <string name="settings_notification_no_feed">您似乎尚未添加任何訂閱源。請添加一些以開始接收通知！</string>
-    <string name="settings_notification_check_period">通知檢查頻率</string>
     <string name="settings_notifications_enable_all_title">啟用所有通知</string>
     <string name="notification_channel_description">訂閱源中新文章的通知</string>
-    <string name="settings_notifications_permission_status_title">權限狀態</string>
-    <string name="settings_notifications_permission_status_granted">已授予</string>
-    <string name="settings_notifications_permission_status_denied">已拒絕</string>
     <string name="settings_notifications_permission_request_button">請求權限</string>
     <string name="new_articles_notification_title">有新文章</string>
     <string name="notification_channel_name">新文章</string>
@@ -235,7 +229,6 @@
     <string name="clear_old_articles_dialog_message">是否確定要刪除舊文章？</string>
     <string name="confirm_button">確認</string>
     <string name="cancel_button">取消</string>
-    <string name="settings_danger_title">危險</string>
     <string name="settings_clear_downloaded_articles">清除已下載的文章</string>
     <string name="settings_clear_downloaded_articles_dialog_title">要清除已下載的文章嗎？</string>
     <string name="settings_clear_downloaded_articles_dialog_message">這會刪除所有用於離線閱讀的已下載文章內容。此操作無法復原。</string>
@@ -287,7 +280,6 @@
     <string name="search_filter_bookmarks">收藏</string>
     <string name="feed_suggestions_title">消息來源建議</string>
     <string name="feed_suggestions_description">瀏覽並新增消息來源到你的訂閱清單</string>
-    <string name="settings_feeds_and_accounts">消息來源與帳戶</string>
     <string name="settings_reading_behavior">閱讀行為</string>
     <string name="settings_sync_and_storage">同步與儲存空間</string>
     <string name="change_category">變更分類</string>
@@ -308,7 +300,6 @@
     <string name="drawer_title_library">資料庫</string>
     <string name="settings_desktop_multi_pane_layout">使用多面板的首頁版型</string>
     <string name="select_article_to_read">選擇要閱讀的文章</string>
-    <string name="settings_hide_read_items">將標為已讀的文章自動隱藏</string>
     <string name="menu_mark_all_above_as_read">將以上的全部標為已讀</string>
     <string name="menu_mark_all_below_as_read">將以下的全部標為已讀</string>
     <string name="mark_all_above_as_read_confirmation_title">要將以上全標為已讀嗎？</string>
@@ -321,9 +312,7 @@
     <string name="no_google_drive_sync_yet">資料尚未與 Google 雲端硬碟同步，請點擊備份按鈕來啟動同步</string>
     <string name="google_drive_connect_button">連接 Google 雲端硬碟</string>
     <string name="google_drive_desktop_sync_description">點擊以下按鈕以連結 Google 雲端硬碟帳號。會開啟一個身分驗證用瀏覽器視窗，登入完成後即可返回本 App 中。</string>
-    <string name="settings_hide_unread_dot">隱藏未讀標示</string>
     <string name="settings_hide_unread_count">隱藏未讀數字</string>
-    <string name="settings_hide_feed_source">隱藏 feed 來源</string>
     <string name="settings_description_max_lines">說明行數</string>
     <string name="settings_description_lines_three">3 行</string>
     <string name="settings_description_lines_five">5 行</string>

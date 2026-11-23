@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -76,13 +78,10 @@ internal fun AddFeedForm(
     showLoading: Boolean,
     errorMessage: String,
     categoriesState: CategoriesState,
-    showNotificationToggle: Boolean,
-    isNotificationEnabled: Boolean,
     canForceAdd: Boolean,
     onFeedUrlUpdated: (String) -> Unit,
     onAddFeed: () -> Unit,
     categoryActions: FeedCategoryActions,
-    onNotificationToggleChanged: (Boolean) -> Unit,
     onForceAddFeed: () -> Unit,
     modifier: Modifier = Modifier,
     youTubeOptions: YouTubeOptionsState = YouTubeOptionsState(),
@@ -132,14 +131,6 @@ internal fun AddFeedForm(
                 FeedFormError(errorMessage.takeIf { showError })
                 SettingsSection {
                     FeedCategoryChoice(categoriesState, !submission.busy, categoryActions)
-                    if (showNotificationToggle) {
-                        SettingsSwitch(
-                            title = strings.enableNotificationsForFeed,
-                            checked = isNotificationEnabled,
-                            onCheckedChange = { if (!submission.busy) onNotificationToggleChanged(it) },
-                            enabled = !submission.busy,
-                        )
-                    }
                 }
                 HideShortsOption(youTubeOptions, enabled = !submission.busy, onToggle = onHideShortsToggleChanged)
                 statusMessage?.let { Text(it) }
@@ -178,7 +169,13 @@ internal fun AddFeedForm(
 private fun HideShortsOption(options: YouTubeOptionsState, enabled: Boolean, onToggle: (Boolean) -> Unit) {
     if (!options.showHideShortsToggle) return
     val strings = LocalFeedFlowStrings.current
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    // The option appears after the dialog has been laid out, so it can start below the visible area.
+    val bringIntoView = remember { BringIntoViewRequester() }
+    LaunchedEffect(bringIntoView) { bringIntoView.bringIntoView() }
+    Column(
+        modifier = Modifier.bringIntoViewRequester(bringIntoView),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
         CheckboxRow(
             text = strings.hideYoutubeShorts,
             checked = options.hideShorts,
@@ -209,8 +206,6 @@ internal fun EditFeedForm(
     onKeepUnreadOnScrollToggled: (Boolean) -> Unit,
     isMarkReadWhenScrollingEnabled: Boolean,
     onPinnedToggled: (Boolean) -> Unit,
-    showNotificationToggle: Boolean,
-    onNotificationToggleChanged: (Boolean) -> Unit,
     categoryActions: FeedCategoryActions,
     editFeed: () -> Unit,
     onShowDeleteDialog: () -> Unit,
@@ -313,14 +308,6 @@ internal fun EditFeedForm(
                     onCheckedChange = { if (!submission.busy) onPinnedToggled(it) },
                     enabled = !submission.busy,
                 )
-                if (showNotificationToggle) {
-                    SettingsSwitch(
-                        title = strings.enableNotificationsForFeed,
-                        checked = feedSourceSettings.isNotificationEnabled,
-                        onCheckedChange = { if (!submission.busy) onNotificationToggleChanged(it) },
-                        enabled = !submission.busy,
-                    )
-                }
             }
         },
         leadingAction = {

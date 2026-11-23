@@ -109,7 +109,6 @@
     <string name="menu_copy_link">Copiar enlace</string>
     <string name="menu_copy_link_comments">Copiar enlace de comentarios</string>
     <string name="settings_crash_reporting">Enviar informe anónimo de errores</string>
-    <string name="settings_hide_description">Ocultar descripción del artículo</string>
     <string name="settings_hide_images">Ocultar imagen del artículo</string>
     <string name="edit_feed_source_name_button">Editar</string>
     <string name="edit_feed">Editar feed</string>
@@ -155,9 +154,6 @@
     <string name="settings_swipe_action_none">Deshabilitado</string>
     <string name="settings_notifications_enable_all_title">Permitir todas las notificaciones</string>
     <string name="notification_channel_description">Notificaciones de nuevos artículos en tus fuentes</string>
-    <string name="settings_notifications_permission_status_title">Estado del permiso</string>
-    <string name="settings_notifications_permission_status_granted">Concedido</string>
-    <string name="settings_notifications_permission_status_denied">Denegado</string>
     <string name="settings_notifications_permission_request_button">Solicitar permiso</string>
     <string name="new_articles_notification_title">Nuevos artículos disponibles</string>
     <string name="notification_channel_name">Nuevos artículos</string>
@@ -199,7 +195,6 @@
     <string name="wrong_credentials_error_message">Las credenciales no son correctas. Por favor, inténtalo de nuevo.</string>
     <string name="wrong_url_error_message">El enlace proporcionado no es correcto. Por favor, inténtalo de nuevo.</string>
     <string name="link_with_error_report_title">Los siguientes feeds no se han añadido por un error</string>
-    <string name="settings_notification_check_period">Frecuencia de comprobación de notificaciones</string>
     <string name="icloud_sync_description">Conecta tu cuenta iCloud para sincronizar las suscripciones a los feeds, categorías, artículos leídos y marcadores entre tus dispositivos iOS, iPadOS y macOS. Los datos se guardarán en una carpeta específica de la aplicación; FeedFlow no tendrá acceso a ninguno de tus archivos</string>
     <string name="open_feed_website_button">Abrir sitio web del feed</string>
     <string name="import_export_label">Importar y exportar</string>
@@ -224,9 +219,6 @@
     <string name="settings_theme_dark">Oscuro</string>
     <string name="settings_theme_oled">Negro</string>
     <string name="settings_desktop_multi_pane_layout">Usar disposición multipanel</string>
-    <string name="settings_hide_date">Ocultar fecha del artículo</string>
-    <string name="settings_hide_unread_dot">Ocultar indicador de no leído</string>
-    <string name="settings_hide_feed_source">Ocultar fuente del feed</string>
     <string name="settings_description_max_lines">Líneas de descripción</string>
     <string name="settings_description_lines_three">3 líneas</string>
     <string name="settings_description_lines_five">5 líneas</string>
@@ -246,10 +238,8 @@
     <string name="delete_all_feeds_confirmation_title">¿Eliminar todos los feeds en la categoría?</string>
     <string name="delete_all_feeds_confirmation_message">¿Seguro que quieres eliminar todos los feeds en esta categoría? Esta acción no se puede deshacer.</string>
     <string name="confirm_button">Confirmar</string>
-    <string name="settings_hide_read_items">Ocultar artículos automáticamente al marcar como leídos</string>
     <string name="settings_about_and_support">Información &amp; Soporte</string>
     <string name="settings_refresh_feeds_on_launch">Refrescar feeds al iniciar la aplicación</string>
-    <string name="settings_danger_title">Peligro</string>
     <string name="settings_clear_downloaded_articles">Borrar artículos descargados</string>
     <string name="settings_clear_downloaded_articles_dialog_title">¿Borrar artículos descargados?</string>
     <string name="settings_clear_downloaded_articles_dialog_message">Esto borrará todo el contenido de los artículos descargados para lectura sin conexión. Esta acción no se puede deshacer.</string>

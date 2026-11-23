@@ -23,6 +23,7 @@ struct EditFeedScreenContent: View {
     let errorMessage: String
     @Binding var isAddingFeed: Bool
     @Binding var articleOpenMode: ArticleOpenMode
+    let articleBrowserName: String
     @Binding var isHidden: Bool
     @Binding var isHideImagesEnabled: Bool
     let showHideShortsToggle: Bool
@@ -30,7 +31,7 @@ struct EditFeedScreenContent: View {
     @Binding var isKeepUnreadOnScrollEnabled: Bool
     var isMarkReadWhenScrollingEnabled: Bool
     @Binding var isPinned: Bool
-    var showNotificationToggle: Bool
+    let notificationPermissionDenied: Bool
     @Binding var isNotificationEnabled: Bool
 
     var categorySelectorObserver: CategorySelectorObserver
@@ -45,6 +46,7 @@ struct EditFeedScreenContent: View {
     let onKeepUnreadOnScrollToggled: (Bool) -> Void
     let onPinnedToggled: (Bool) -> Void
     let onNotificationToggled: (Bool) -> Void
+    let onOpenSettings: () -> Void
     let addFeed: () -> Void
     let updateCategoryName: (String, String) -> Void
     let onDeleteFeed: () -> Void
@@ -109,40 +111,40 @@ struct EditFeedScreenContent: View {
                 .onChange(of: isHideImagesEnabled) {
                     onHideImagesToggled(isHideImagesEnabled)
                 }
+            }
 
-                if showHideShortsToggle {
+            if showHideShortsToggle {
+                Section {
                     Toggle(isOn: $isHideShortsEnabled) {
-                        VStack(alignment: .leading) {
-                            Text(feedFlowStrings.hideYoutubeShorts)
-                            Text(feedFlowStrings.hideYoutubeShortsDescription)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        Text(feedFlowStrings.hideYoutubeShorts)
                     }
                     .accessibilityIdentifier(EditFeedAccessibilityIdentifiers.hideShortsToggle)
                     .onChange(of: isHideShortsEnabled) {
                         onHideShortsToggled(isHideShortsEnabled)
                     }
+                } footer: {
+                    Text(feedFlowStrings.hideYoutubeShortsDescription)
                 }
+            }
 
+            Section {
                 Toggle(isOn: $isKeepUnreadOnScrollEnabled) {
-                    VStack(alignment: .leading) {
-                        Text(feedFlowStrings.keepUnreadWhenScrollingForFeed)
-                        Text(
-                            isMarkReadWhenScrollingEnabled
-                                ? feedFlowStrings.keepUnreadWhenScrollingForFeedDescription
-                                : feedFlowStrings.keepUnreadWhenScrollingForFeedDisabled
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
+                    Text(feedFlowStrings.keepUnreadWhenScrollingForFeed)
                 }
                 .disabled(!isMarkReadWhenScrollingEnabled)
                 .accessibilityIdentifier(EditFeedAccessibilityIdentifiers.keepUnreadOnScrollToggle)
                 .onChange(of: isKeepUnreadOnScrollEnabled) {
                     onKeepUnreadOnScrollToggled(isKeepUnreadOnScrollEnabled)
                 }
+            } footer: {
+                Text(
+                    isMarkReadWhenScrollingEnabled
+                        ? feedFlowStrings.keepUnreadWhenScrollingForFeedDescription
+                        : feedFlowStrings.keepUnreadWhenScrollingForFeedDisabled
+                )
+            }
 
+            Section {
                 Toggle(isOn: $isPinned) {
                     Text(feedFlowStrings.pinFeedSourceDescription)
                 }
@@ -151,13 +153,21 @@ struct EditFeedScreenContent: View {
                     onPinnedToggled(isPinned)
                 }
 
-                if showNotificationToggle {
-                    Toggle(isOn: $isNotificationEnabled) {
-                        Text(feedFlowStrings.enableNotificationsForFeed)
+                Toggle(isOn: Binding(
+                    get: { isNotificationEnabled },
+                    set: {
+                        isNotificationEnabled = $0
+                        onNotificationToggled($0)
                     }
-                    .onChange(of: isNotificationEnabled) {
-                        onNotificationToggled(isNotificationEnabled)
-                    }
+                )) {
+                    Text(feedFlowStrings.enableNotificationsForFeed)
+                }
+
+                if isNotificationEnabled && notificationPermissionDenied {
+                    Text(feedFlowStrings.feedNotificationsPermissionNeeded)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button(feedFlowStrings.settingsNotificationsOpenSettingsButton, action: onOpenSettings)
                 }
             }
 
@@ -314,8 +324,13 @@ struct EditFeedScreenContent: View {
         Section(feedFlowStrings.articleOpenModeSectionBrowser) {
             Text(feedFlowStrings.linkOpeningPreferenceInternalBrowser)
                 .tag(ArticleOpenMode.internalBrowser)
-            Text(feedFlowStrings.linkOpeningPreferencePreferredBrowser)
-                .tag(ArticleOpenMode.preferredBrowser)
+            VStack(alignment: .leading) {
+                Text(feedFlowStrings.articleOpenModeNamedBrowser(articleBrowserName))
+                Text(feedFlowStrings.articleOpenModeNamedBrowserSubtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .tag(ArticleOpenMode.preferredBrowser)
         }
     }
 

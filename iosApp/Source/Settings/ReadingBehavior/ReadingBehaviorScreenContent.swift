@@ -4,83 +4,89 @@ import SwiftUI
 struct ReadingBehaviorScreenContent: View {
     @Bindable var browserSelector: BrowserSelector
     @Binding var articleOpenMode: ArticleOpenMode
-    @Binding var isSaveReaderModeContentEnabled: Bool
-    @Binding var isPrefetchArticleContentEnabled: Bool
+    let onArticleBrowserSelected: (String) -> Void
     @Binding var isMarkReadWhenScrollingEnabled: Bool
-    @Binding var isShowReadItemEnabled: Bool
-    @Binding var isHideReadItemsEnabled: Bool
+    @Binding var readArticlesVisibility: ReadArticlesVisibility
 
     private let feedFlowStrings = Deps.shared.getStrings()
 
     var body: some View {
         Form {
             Section {
-                Picker(
-                    selection: $browserSelector.selectedBrowser,
-                    content: {
-                        ForEach(browserSelector.browsers, id: \.self) { browser in
-                            Text(browser.name).tag(browser as Browser?)
-                        }
-                    },
-                    label: {
-                        Text(feedFlowStrings.browserSelectionButton)
-                    }
-                )
-
                 NavigationLink {
-                    ArticleOpenModeSelectionScreen(articleOpenMode: $articleOpenMode)
+                    ArticleOpenModeSelectionScreen(
+                        articleOpenMode: $articleOpenMode,
+                        browsers: browserSelector.browsers,
+                        selectedArticleBrowserId: selectedArticleBrowserId,
+                        onBrowserSelected: onArticleBrowserSelected
+                    )
                 } label: {
-                    HStack {
-                        Text(feedFlowStrings.articleOpenMode)
-
-                        Spacer()
-
-                        Text(articleOpenModePreview)
-                            .foregroundStyle(.secondary)
-                    }
+                    LabeledContent(feedFlowStrings.articleOpenMode, value: articleOpenModePreview)
                 }
                 .accessibilityIdentifier(ReadingBehaviorAccessibilityIdentifiers.articleOpenModePicker)
+            } footer: {
+                Text(feedFlowStrings.articleOpenModeSubtitle)
+            }
 
-                Toggle(isOn: $isSaveReaderModeContentEnabled) {
-                    Text(feedFlowStrings.settingsSaveReaderModeContent)
-                }
-                .accessibilityIdentifier(ReadingBehaviorAccessibilityIdentifiers.saveContentToggle)
-
-                SettingToggleItem(
-                    isOn: $isPrefetchArticleContentEnabled,
-                    title: feedFlowStrings.settingsPrefetchArticleContent,
-                    confirmationDialog: ConfirmationDialogConfig(
-                        title: feedFlowStrings.settingsPrefetchArticleContent,
-                        message: feedFlowStrings.settingsPrefetchArticleContentWarning
+            Section {
+                NavigationLink {
+                    LinksBrowserSelectionScreen(browserSelector: browserSelector)
+                } label: {
+                    LabeledContent(
+                        feedFlowStrings.linksBrowserTitle,
+                        value: browserSelector.selectedBrowser?.name ?? feedFlowStrings.inAppBrowser
                     )
-                )
-                .accessibilityIdentifier(ReadingBehaviorAccessibilityIdentifiers.prefetchContentToggle)
+                }
+                .accessibilityIdentifier(ReadingBehaviorAccessibilityIdentifiers.linksBrowserPicker)
+            } footer: {
+                Text(feedFlowStrings.linksBrowserSubtitle)
+            }
 
+            Section {
                 Toggle(isOn: $isMarkReadWhenScrollingEnabled) {
                     Text(feedFlowStrings.toggleMarkReadWhenScrolling)
                 }
                 .accessibilityIdentifier(ReadingBehaviorAccessibilityIdentifiers.markReadWhenScrollingToggle)
+            }
 
-                Toggle(isOn: $isShowReadItemEnabled) {
-                    Text(feedFlowStrings.settingsToggleShowReadArticles)
+            Section {
+                NavigationLink {
+                    ReadArticlesSelectionScreen(
+                        readArticlesVisibility: $readArticlesVisibility,
+                        isMarkReadWhenScrollingEnabled: isMarkReadWhenScrollingEnabled
+                    )
+                } label: {
+                    LabeledContent(feedFlowStrings.settingsReadArticlesTitle, value: readArticlesPreview)
                 }
-                .accessibilityIdentifier(ReadingBehaviorAccessibilityIdentifiers.showReadToggle)
-
-                Toggle(isOn: $isHideReadItemsEnabled) {
-                    Text(feedFlowStrings.settingsHideReadItems)
-                }
-                .disabled(isMarkReadWhenScrollingEnabled)
-                .accessibilityIdentifier(ReadingBehaviorAccessibilityIdentifiers.hideReadToggle)
-
-                if isMarkReadWhenScrollingEnabled {
-                    Text(feedFlowStrings.settingsHideReadItemsDisabledWhileScrolling)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                .accessibilityIdentifier(ReadingBehaviorAccessibilityIdentifiers.readArticlesPicker)
+            } footer: {
+                Text(feedFlowStrings.settingsReadArticlesFooter)
             }
         }
         .scrollContentBackground(.hidden)
         .background(Color.secondaryBackgroundColor)
+    }
+
+    private var selectedArticleBrowserId: String? {
+        switch articleOpenMode {
+        case .internalBrowser:
+            BrowserIds.shared.IN_APP_BROWSER
+        case .preferredBrowser:
+            browserSelector.articleBrowserId()
+        default:
+            nil
+        }
+    }
+
+    private var readArticlesPreview: String {
+        switch readArticlesVisibility {
+        case .keepInList:
+            feedFlowStrings.settingsReadArticlesKeep
+        case .hideRightAway:
+            feedFlowStrings.settingsReadArticlesHideRightAway
+        default:
+            feedFlowStrings.settingsReadArticlesHideOnRefresh
+        }
     }
 
     private var articleOpenModePreview: String {
@@ -90,9 +96,11 @@ struct ReadingBehaviorScreenContent: View {
         case .feedContent:
             feedFlowStrings.articleOpenModeFeedShort
         case .internalBrowser:
-            feedFlowStrings.linkOpeningPreferenceInternalBrowser
+            feedFlowStrings.inAppBrowser
         default:
-            feedFlowStrings.linkOpeningPreferencePreferredBrowser
+            browserSelector.articleBrowserId() == BrowserIds.shared.IN_APP_BROWSER
+                ? feedFlowStrings.inAppBrowser
+                : browserSelector.articleBrowserName()
         }
     }
 }

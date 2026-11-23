@@ -13,11 +13,15 @@ appId: com.prof18.feedflow.dev
     id: drawer_menu_button
 - tapOn:
     id: drawer_settings_button
+- scrollUntilVisible:
+    element:
+      id: settings_notifications
+    direction: DOWN
+    timeout: 10000
 - tapOn:
-    id: settings_feeds_accounts
-- tapOn: "Notifications"
+    id: settings_notifications
 - tapOn:
-    text: "Request Permission"
+    text: "Allow notifications"
     optional: true
 - tapOn:
     text: "Allow"

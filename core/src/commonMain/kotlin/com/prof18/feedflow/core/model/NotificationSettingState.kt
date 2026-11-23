@@ -6,12 +6,21 @@ import kotlinx.collections.immutable.ImmutableList
 @Stable
 data class NotificationSettingState(
     val feedSources: ImmutableList<FeedSourceNotificationPreference>,
+    val feedGroups: ImmutableList<NotificationFeedGroup>,
+    val searchQuery: String,
     val isEnabledForAll: Boolean,
     val notificationMode: NotificationMode,
+    val isLoading: Boolean = false,
 )
 
 data class FeedSourceNotificationPreference(
     val feedSourceId: String,
     val feedSourceTitle: String,
+    val categoryTitle: String?,
     val isEnabled: Boolean,
+)
+
+data class NotificationFeedGroup(
+    val categoryTitle: String?,
+    val feedSources: ImmutableList<FeedSourceNotificationPreference>,
 )

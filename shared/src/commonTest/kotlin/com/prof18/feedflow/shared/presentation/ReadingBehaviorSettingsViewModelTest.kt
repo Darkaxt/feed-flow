@@ -4,6 +4,8 @@ import app.cash.turbine.test
 import com.prof18.feedflow.core.model.ArticleOpenMode
 import com.prof18.feedflow.core.model.FeedItemId
 import com.prof18.feedflow.core.model.ParsedFeedSource
+import com.prof18.feedflow.core.model.ReadArticlesVisibility
+import com.prof18.feedflow.core.utils.BrowserIds
 import com.prof18.feedflow.database.DatabaseHelper
 import com.prof18.feedflow.shared.data.SettingsRepository
 import com.prof18.feedflow.shared.domain.feed.FeedStateRepository
@@ -33,8 +35,7 @@ class ReadingBehaviorSettingsViewModelTest : KoinTestBase() {
             assertFalse(initialState.isSaveReaderModeContentEnabled)
             assertFalse(initialState.isPrefetchArticleContentEnabled)
             assertTrue(initialState.isMarkReadWhenScrollingEnabled)
-            assertFalse(initialState.isShowReadItemsEnabled)
-            assertFalse(initialState.isHideReadItemsEnabled)
+            assertEquals(ReadArticlesVisibility.HIDE_ON_REFRESH, initialState.readArticlesVisibility)
         }
     }
 
@@ -48,6 +49,40 @@ class ReadingBehaviorSettingsViewModelTest : KoinTestBase() {
 
             viewModel.updateArticleOpenMode(ArticleOpenMode.FEED_CONTENT)
             assertEquals(ArticleOpenMode.FEED_CONTENT, awaitItem().articleOpenMode)
+        }
+    }
+
+    @Test
+    fun `updateArticleBrowser with a browser opens articles in that browser`() = runTest {
+        viewModel.state.test {
+            awaitItem()
+
+            viewModel.updateArticleBrowser("com.duckduckgo.mobile.android")
+            val state = awaitItem()
+            assertEquals(ArticleOpenMode.PREFERRED_BROWSER, state.articleOpenMode)
+            assertEquals("com.duckduckgo.mobile.android", state.articleBrowserId)
+        }
+    }
+
+    @Test
+    fun `updateArticleBrowser with the in-app browser opens articles in the in-app browser`() = runTest {
+        viewModel.state.test {
+            awaitItem()
+
+            viewModel.updateArticleBrowser(BrowserIds.IN_APP_BROWSER)
+            assertEquals(ArticleOpenMode.INTERNAL_BROWSER, awaitItem().articleOpenMode)
+        }
+    }
+
+    @Test
+    fun `refreshArticleOpenState picks up a mode changed by a links browser change`() = runTest {
+        viewModel.updateArticleOpenMode(ArticleOpenMode.PREFERRED_BROWSER)
+        viewModel.state.test {
+            assertEquals(ArticleOpenMode.PREFERRED_BROWSER, awaitItem().articleOpenMode)
+
+            settingsRepository.saveFavouriteBrowserId("org.mozilla.firefox")
+            viewModel.refreshArticleOpenState()
+            assertEquals(ArticleOpenMode.INTERNAL_BROWSER, awaitItem().articleOpenMode)
         }
     }
 
@@ -108,34 +143,7 @@ class ReadingBehaviorSettingsViewModelTest : KoinTestBase() {
     }
 
     @Test
-    fun `updateShowReadItemsOnTimeline updates state`() = runTest {
-        viewModel.state.test {
-            awaitItem()
-
-            viewModel.updateShowReadItemsOnTimeline(true)
-            assertTrue(settingsRepository.getShowReadArticlesTimeline())
-            assertTrue(awaitItem().isShowReadItemsEnabled)
-
-            viewModel.updateShowReadItemsOnTimeline(false)
-            assertFalse(awaitItem().isShowReadItemsEnabled)
-        }
-    }
-
-    @Test
-    fun `updateHideReadItems updates state`() = runTest {
-        viewModel.state.test {
-            awaitItem()
-
-            viewModel.updateHideReadItems(true)
-            assertTrue(awaitItem().isHideReadItemsEnabled)
-
-            viewModel.updateHideReadItems(false)
-            assertFalse(awaitItem().isHideReadItemsEnabled)
-        }
-    }
-
-    @Test
-    fun `disabling auto hide brings back read articles hidden from the current list`() = runTest {
+    fun `enabling scroll marking keeps read articles that show read kept in the current list`() = runTest {
         populateDatabase()
         settingsRepository.setShowReadArticlesTimeline(true)
         settingsRepository.setMarkFeedAsReadWhenScrolling(false)
@@ -144,25 +152,7 @@ class ReadingBehaviorSettingsViewModelTest : KoinTestBase() {
         val itemId = FeedItemId(feedStateRepository.feedState.value.single().id)
         databaseHelper.updateReadStatus(itemId, isRead = true)
         feedStateRepository.markAsRead(hashSetOf(itemId))
-        assertTrue(feedStateRepository.feedState.value.isEmpty())
-
-        viewModel.updateHideReadItems(false)
-        advanceUntilIdle()
-
         assertEquals(listOf(itemId.id), feedStateRepository.feedState.value.map { it.id })
-    }
-
-    @Test
-    fun `enabling scroll marking brings back read articles auto hidden from the current list`() = runTest {
-        populateDatabase()
-        settingsRepository.setShowReadArticlesTimeline(true)
-        settingsRepository.setMarkFeedAsReadWhenScrolling(false)
-        settingsRepository.setHideReadItems(true)
-        feedStateRepository.getFeeds()
-        val itemId = FeedItemId(feedStateRepository.feedState.value.single().id)
-        databaseHelper.updateReadStatus(itemId, isRead = true)
-        feedStateRepository.markAsRead(hashSetOf(itemId))
-        assertTrue(feedStateRepository.feedState.value.isEmpty())
 
         viewModel.updateMarkReadWhenScrolling(true)
         advanceUntilIdle()
@@ -172,14 +162,125 @@ class ReadingBehaviorSettingsViewModelTest : KoinTestBase() {
     }
 
     @Test
-    fun `updateShowReadItemsOnTimeline triggers getFeeds`() = runTest {
+    fun `readArticlesVisibility follows a later settings change`() = runTest {
+        viewModel.state.test {
+            assertEquals(ReadArticlesVisibility.HIDE_ON_REFRESH, awaitItem().readArticlesVisibility)
+
+            settingsRepository.setShowReadArticlesTimeline(true)
+            val updated = awaitItem()
+            assertEquals(ReadArticlesVisibility.KEEP_IN_LIST, updated.readArticlesVisibility)
+        }
+    }
+
+    @Test
+    fun `updateReadArticlesVisibility ignores hide right away while scroll marking is on`() = runTest {
+        settingsRepository.setMarkFeedAsReadWhenScrolling(true)
+
+        viewModel.updateReadArticlesVisibility(ReadArticlesVisibility.HIDE_RIGHT_AWAY)
+        advanceUntilIdle()
+
+        assertFalse(settingsRepository.getHideReadItems())
+        assertEquals(ReadArticlesVisibility.HIDE_ON_REFRESH, viewModel.state.value.readArticlesVisibility)
+    }
+
+    @Test
+    fun `updateReadArticlesVisibility to keep in list triggers getFeeds`() = runTest {
         populateDatabase()
 
         feedStateRepository.feedState.test {
             awaitItem()
-            viewModel.updateShowReadItemsOnTimeline(true)
+            viewModel.updateReadArticlesVisibility(ReadArticlesVisibility.KEEP_IN_LIST)
             awaitItem()
         }
+    }
+
+    @Test
+    fun `updateReadArticlesVisibility to hide right away removes read articles from the current list`() = runTest {
+        populateDatabase()
+        settingsRepository.setMarkFeedAsReadWhenScrolling(false)
+        feedStateRepository.getFeeds()
+        val itemId = FeedItemId(feedStateRepository.feedState.value.single().id)
+        databaseHelper.updateReadStatus(itemId, isRead = true)
+        feedStateRepository.markAsRead(hashSetOf(itemId))
+        assertEquals(1, feedStateRepository.feedState.value.size)
+
+        viewModel.updateReadArticlesVisibility(ReadArticlesVisibility.HIDE_RIGHT_AWAY)
+        advanceUntilIdle()
+
+        assertTrue(feedStateRepository.feedState.value.isEmpty())
+    }
+
+    @Test
+    fun `updateReadArticlesVisibility to hide on refresh keeps the current list`() = runTest {
+        populateDatabase()
+        settingsRepository.setMarkFeedAsReadWhenScrolling(false)
+        settingsRepository.setShowReadArticlesTimeline(true)
+        feedStateRepository.getFeeds()
+        val itemId = FeedItemId(feedStateRepository.feedState.value.single().id)
+        databaseHelper.updateReadStatus(itemId, isRead = true)
+        feedStateRepository.markAsRead(hashSetOf(itemId))
+
+        viewModel.updateReadArticlesVisibility(ReadArticlesVisibility.HIDE_ON_REFRESH)
+        advanceUntilIdle()
+
+        assertFalse(settingsRepository.getShowReadArticlesTimeline())
+        assertEquals(listOf(itemId.id), feedStateRepository.feedState.value.map { it.id })
+    }
+
+    @Test
+    fun `switching from keep in list to hide right away loads unread articles past an all-read page`() = runTest {
+        seedAllReadFirstPage()
+        settingsRepository.setMarkFeedAsReadWhenScrolling(false)
+        settingsRepository.setShowReadArticlesTimeline(true)
+        feedStateRepository.getFeeds()
+        assertTrue(feedStateRepository.feedState.value.all { it.isRead })
+
+        viewModel.updateReadArticlesVisibility(ReadArticlesVisibility.HIDE_RIGHT_AWAY)
+        advanceUntilIdle()
+
+        assertEquals(listOf("item-40"), feedStateRepository.feedState.value.map { it.id })
+    }
+
+    @Test
+    fun `hide right away after hide on next refresh loads unread articles past an all-read page`() = runTest {
+        seedAllReadFirstPage()
+        settingsRepository.setMarkFeedAsReadWhenScrolling(false)
+        settingsRepository.setShowReadArticlesTimeline(true)
+        feedStateRepository.getFeeds()
+
+        viewModel.updateReadArticlesVisibility(ReadArticlesVisibility.HIDE_ON_REFRESH)
+        advanceUntilIdle()
+        assertTrue(feedStateRepository.feedState.value.all { it.isRead })
+        viewModel.updateReadArticlesVisibility(ReadArticlesVisibility.HIDE_RIGHT_AWAY)
+        advanceUntilIdle()
+
+        assertEquals(listOf("item-40"), feedStateRepository.feedState.value.map { it.id })
+    }
+
+    private suspend fun seedAllReadFirstPage() {
+        val source = FeedItemGenerator.unreadFeedItem().feedSource
+        databaseHelper.insertFeedSource(
+            listOf(
+                ParsedFeedSource(
+                    id = source.id,
+                    url = source.url,
+                    title = source.title,
+                    category = source.category,
+                    logoUrl = source.logoUrl,
+                    websiteUrl = source.websiteUrl,
+                ),
+            ),
+        )
+        val items = List(41) { index ->
+            FeedItemGenerator.unreadFeedItem(
+                id = "item-$index",
+                url = "https://example.com/article-$index",
+                feedSource = source,
+                pubDateMillis = 1_704_067_200_000L - index * 60_000L,
+            )
+        }
+        databaseHelper.insertFeedItems(items, lastSyncTimestamp = 0)
+        items.take(40).forEach { databaseHelper.updateReadStatus(FeedItemId(it.id), isRead = true) }
     }
 
     private suspend fun populateDatabase() {

@@ -52,7 +52,6 @@
     <string name="last_download">Pēdējoreiz lejupielādēts: %s</string>
     <string name="add_account_button">Pievienot kontu</string>
     <string name="settings_hide_duplicated_title_from_desc">Slēpt virsrakstu raksta aprakstā</string>
-    <string name="settings_hide_description">Slēpt raksta aprakstu</string>
     <string name="settings_hide_images">Slēpt raksta attēlu</string>
     <string name="reader_mode_font_size">Fonta izmērs</string>
     <string name="edit_feed">Rediģēt ziņu plūsmu</string>
@@ -73,7 +72,6 @@
     <string name="feed_sync_in_progress">Notiek sinhronizācija. Kad pabeigs, lietotni automātiski aizvērs.</string>
     <string name="link_opening_preference_internal_browser">Lietotnes pārlūkā</string>
     <string name="link_opening_preference_preferred_browser">Iecienītākajā pārlūkā</string>
-    <string name="settings_notifications_permission_status_denied">Liegta</string>
     <string name="settings_notifications_title">Paziņojumi</string>
     <string name="date_format_normal">Diena/Mēnesis</string>
     <string name="date_format_american">Mēnesis/Diena</string>
@@ -163,18 +161,14 @@
     <string name="enable_notifications_for_feed">Paziņot par jauniem rakstiem</string>
     <string name="icloud_connection_error">Diemžēl neizdevās izveidot savienojumu ar iCloud. Lūdzu, pārliecinieties, ka esiet autorizējušies, iCloud Drive ir iespējots un ir brīva pietiekoša krātuves vieta. Kļūdas kods: %s.</string>
     <string name="settings_notifications_enable_all_title">Paziņot par jauniem rakstiem visās ziņu plūsmās</string>
-    <string name="settings_notification_check_period">Paziņot</string>
     <string name="accounts_description">Pievienojiet kontu, lai sinhronizētu ziņu plūsmas abonementus, kategorijas, lasītos un saglabātos rakstus starp ierīcēm.\n\nŠī funkcija ir beta stadijā, var rasties problēmas (piemēram, lasītie raksti var nebūt pilnībā sinhronizēti). Nākotnē ir plānots atbalstīt citus pakalpojumu sniedzējus.\n\nVienlaikus var izmantot tikai vienu kontu.</string>
     <string name="settings_swipe_action_toggle_bookmark">Pievienot/aizvākt no saglabātiem rakstiem</string>
     <string name="bookmarked_articles_empty_screen_message">Pagaidām šeit nav nekā, laiks kaut ko pievienot saglabātiem rakstiem!</string>
-    <string name="settings_notifications_permission_status_granted">Piešķirta</string>
     <string name="about_menu_faq">BUJ (Biežāk uzdotie jautājumi)</string>
-    <string name="settings_danger_title">Bīstami</string>
     <string name="widget_latest_items">Visjaunākie raksti</string>
     <string name="no_feeds_found_message">Nav atrasta neviena ziņu plūsma. Lūdzu, pievienojiet jaunu ziņu plūsmu!</string>
     <string name="clear_old_articles_dialog_message">Vai tiešām vēlaties izdzēst vecos rakstus?</string>
     <string name="widget_configuration_confirm">Pievienot logrīku</string>
-    <string name="settings_notifications_permission_status_title">Atļaujas statuss</string>
     <string name="settings_notifications_permission_request_button">Pieprasīt atļauju</string>
     <string name="delete_feed_confirmation_title">Vai tiešām dzēst ziņu plūsmu?</string>
     <string name="delete_feed_button">Dzēst ziņu plūsmu</string>
@@ -208,7 +202,6 @@
     <string name="widget_background_color_default">Sistēmas</string>
     <string name="reset_button">Atiestatīt</string>
     <string name="settings_theme_oled">Melns</string>
-    <string name="settings_feeds_and_accounts">Ziņu plūsmas un konti</string>
     <string name="bazqux_account_connected">Jūsu BazQux konts veiksmīgi pievienots</string>
     <string name="miniflux_last_sync">Pēdējo reizi sinhronizēts: %s</string>
     <string name="bazqux_last_sync">Pēdējo reizi sinhronizēts: %s</string>
@@ -235,7 +228,6 @@
     <string name="articles_import_done_message">Raksti ievietoti</string>
     <string name="settings_sync_period">Atsvaidzināt ziņu plūsmas fonā</string>
     <string name="settings_auto_delete_period_one_day">vecāki par vienu dienu</string>
-    <string name="settings_hide_date">Slēpt raksta datumu</string>
     <string name="reader_mode_archive_button">Atvērt archive.is vietnē</string>
     <string name="reader_mode_browser_button_content_description">Atvērt pārlūkā</string>
     <string name="delete_category">Dzēst kategoriju</string>
@@ -306,8 +298,6 @@
     <string name="desktop_search_back_button">Atpakaļ</string>
     <string name="add_feed_anyway_button">Pievienot tik un tā</string>
     <string name="reader_mode_title_font_size">Virsraksta izmērs</string>
-    <string name="settings_hide_read_items">Automātiski paslēpt rakstus, kad tie atzīmēti kā lasīti</string>
-    <string name="settings_hide_read_items_disabled_while_scrolling">Automātiskā rakstu paslēpšana nedarbojas, ja ir iespējots iestatījums \"Atzīmēt rakstu kā lasītu, to ritinot\". Tāpēc raksti ritinot paliek savās vietās. Atspējojiet šo iestatījumu, lai izmantotu automātisko paslēpšanu.</string>
     <string name="article_bookmarked_content_description">Jau saglabātajos rakstos</string>
     <string name="article_unread_bookmarked_state">Nelasīts, saglabātajos rakstos</string>
     <string name="widget_content_bookmarks_description">Jūsu saglabāto rakstu kolekcija</string>

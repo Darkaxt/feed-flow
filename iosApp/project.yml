@@ -64,7 +64,7 @@ knownRegions:
 packages:
   Firebase:
     url: https://github.com/firebase/firebase-ios-sdk
-    exactVersion: 13.1.1
+    exactVersion: 13.2.0
   SwiftyDropbox:
     url: https://github.com/dropbox/SwiftyDropbox
     exactVersion: 10.2.4
@@ -73,7 +73,7 @@ packages:
     exactVersion: 13.2.3
   SwiftDraw:
     url: https://github.com/swhitty/SwiftDraw
-    exactVersion: 0.29.0
+    exactVersion: 0.30.0
   Collections:
     url: https://github.com/apple/swift-collections
     exactVersion: 1.7.6
@@ -90,7 +90,7 @@ packages:
     path: Packages/Reader
   RevenueCat:
     url: https://github.com/RevenueCat/purchases-ios-spm.git
-    exactVersion: 5.103.0
+    exactVersion: 5.103.2
 
 aggregateTargets:
   FeedFlowKitBuilder:

@@ -34,22 +34,23 @@ class SettingsFlowsTest {
     val e2e = DesktopE2eRule()
 
     /**
-     * refresh on launch, refresh while open, auto-delete, delete offline copies: desktop
-     * settings/SyncStoragePane.kt (settingsRefreshFeedsOnLaunch, settingsDesktopRefreshWhileOpen,
-     * settingsAutoDelete, settingsClearDownloadedArticles)
+     * refresh on launch, refresh while open: desktop settings/SyncRefreshSection.kt (settingsRefreshFeedsOnLaunch,
+     * settingsDesktopRefreshWhileOpen); auto-delete, delete offline copies: desktop settings/StoragePane.kt
+     * (settingsAutoDelete, settingsClearDownloadedArticles)
      */
     @Test
     fun `REG-113 sync storage settings`() {
         val flow = e2e.start(Seed.ContentRich)
         flow.awaitText(SEED_NEWEST_TITLE)
 
-        flow.openSettings(flow.strings.settingsSyncAndStorage)
+        flow.openSettings(flow.strings.settingsSyncAndRefresh)
         flow.setSwitch(SETTINGS(flow), flow.strings.settingsRefreshFeedsOnLaunch, on = true)
         flow.choose(
             SETTINGS(flow),
             flow.strings.settingsDesktopRefreshWhileOpen,
             flow.strings.settingsSyncPeriodOneHour,
         )
+        flow.clickIn(SETTINGS(flow), flow.strings.settingsStorage)
         flow.choose(SETTINGS(flow), flow.strings.settingsAutoDelete, flow.strings.settingsAutoDeletePeriodOneWeek)
         flow.clickSettingsButton(flow.strings.settingsClearDownloadedArticles)
         flow.cancelDialog(flow.strings.settingsClearDownloadedArticlesDialogTitle)
@@ -92,7 +93,7 @@ class SettingsFlowsTest {
         val flow = e2e.start(Seed.ContentRich)
         flow.awaitText(SEED_NEWEST_TITLE)
 
-        flow.openSettings(flow.strings.settingsReadingBehavior)
+        flow.openSettings(flow.strings.settingsReadingTitle)
         val saveContent = flow.isSwitchOn(SETTINGS(flow), flow.strings.settingsSaveReaderModeContent)
         flow.setSwitch(SETTINGS(flow), flow.strings.settingsSaveReaderModeContent, on = !saveContent)
         val markRead = flow.isSwitchOn(SETTINGS(flow), flow.strings.toggleMarkReadWhenScrolling)
@@ -110,7 +111,7 @@ class SettingsFlowsTest {
         }
     }
 
-    // feed list detail controls: desktop settings/FeedListPane.kt:115-246
+    // feed list detail controls: desktop settings/FeedListPane.kt:91-266
     @Test
     fun `REG-122 feed list settings detail controls`() {
         val flow = e2e.start(Seed.ContentRich)
@@ -119,12 +120,20 @@ class SettingsFlowsTest {
         flow.openSettings(flow.strings.settingsFeedListTitle)
         flow.awaitTextIn(SETTINGS(flow), flow.strings.settingsFeedListScaleTitle)
         flow.click(flow.awaitDescriptionIn(flow.strings.increaseFontSizeButtonContentDescription))
+        flow.awaitTextIn(SETTINGS(flow), "+1")
         listOf(
-            flow.strings.settingsHideDate,
-            flow.strings.settingsHideUnreadDot,
-            flow.strings.settingsHideFeedSource,
-            flow.strings.settingsHideDuplicatedTitleFromDesc,
-        ).forEach { flow.setSwitch(SETTINGS(flow), it, on = true) }
+            flow.strings.settingsShowUnreadDot,
+            flow.strings.settingsShowFeedSource,
+        ).forEach { flow.setSwitch(SETTINGS(flow), it, on = false) }
+        flow.setSwitch(SETTINGS(flow), flow.strings.settingsHideDuplicatedTitleFromDesc, on = true)
+        // Turning Description or Date off disables the rows that depend on it, with the reason.
+        flow.setSwitch(SETTINGS(flow), flow.strings.settingsShowDescription, on = false)
+        flow.awaitTextIn(SETTINGS(flow), flow.strings.settingsRequiresDescription)
+        assertTrue(flow.switchIn(SETTINGS(flow), flow.strings.settingsHideDuplicatedTitleFromDesc).isDisabled)
+        flow.setSwitch(SETTINGS(flow), flow.strings.settingsShowDescription, on = true)
+        flow.setSwitch(SETTINGS(flow), flow.strings.settingsShowDate, on = false)
+        flow.scrollInWindow(SETTINGS(flow), "the Date reason") { flow.strings.settingsRequiresDate in it.texts }
+        flow.setSwitch(SETTINGS(flow), flow.strings.settingsShowDate, on = true)
         flow.choose(
             SETTINGS(flow),
             flow.strings.settingsDescriptionMaxLines,
@@ -141,7 +150,9 @@ class SettingsFlowsTest {
     }
 
     /**
-     * refresh while open and delete offline copies: desktop settings/SyncStoragePane.kt
+     * refresh while open: desktop settings/SyncRefreshSection.kt; delete offline copies: desktop
+     * settings/StoragePane.kt
+     * clear confirmations: desktop settings/StoragePane.kt (settingsOfflineCopiesDeleted, settingsImageCacheCleared)
      *
      * Skipped: the Android-only background sync Wi-Fi and charging restrictions.
      */
@@ -150,21 +161,30 @@ class SettingsFlowsTest {
         val flow = e2e.start(Seed.ContentRich)
         flow.awaitText(SEED_NEWEST_TITLE)
 
-        flow.openSettings(flow.strings.settingsSyncAndStorage)
+        flow.openSettings(flow.strings.settingsSyncAndRefresh)
         val refreshWhileOpen = flow.dropdownIn(SETTINGS(flow), flow.strings.settingsDesktopRefreshWhileOpen)
         assertTrue(flow.strings.settingsSyncPeriodNever in refreshWhileOpen.texts)
+        flow.clickIn(SETTINGS(flow), flow.strings.settingsStorage)
         flow.clickSettingsButton(flow.strings.settingsClearDownloadedArticles)
         flow.awaitTextIn(
             flow.strings.settingsClearDownloadedArticlesDialogTitle,
             flow.strings.settingsClearDownloadedArticlesDialogTitle,
         )
         flow.cancelDialog(flow.strings.settingsClearDownloadedArticlesDialogTitle)
+
+        flow.clickSettingsButton(flow.strings.settingsClearDownloadedArticles)
+        flow.confirmDialog(flow.strings.settingsClearDownloadedArticlesDialogTitle)
+        flow.awaitTextIn(flow.strings.settingsTitle, flow.strings.settingsOfflineCopiesDeleted)
+
+        flow.clickSettingsButton(flow.strings.settingsClearImageCache)
+        flow.confirmDialog(flow.strings.settingsClearImageCacheDialogTitle)
+        flow.awaitTextIn(flow.strings.settingsTitle, flow.strings.settingsImageCacheCleared)
     }
 
     /**
      * Desktop has no home "more" menu: Refresh feeds is a toolbar button (not pressed: it would fetch live
-     * feeds), sort and show-read live in Settings → Feed list, and Delete week-old articles in Settings →
-     * Sync & storage.
+     * feeds), sort lives in Settings → Feed list, read articles in Settings → Reading, and Delete
+     * week-old articles in Settings → Storage.
      */
     @Test
     fun `REG-124 home overflow secondary actions`() {
@@ -178,8 +198,9 @@ class SettingsFlowsTest {
 
         flow.openSettings(flow.strings.settingsFeedListTitle)
         flow.choose(SETTINGS(flow), flow.strings.settingsFeedOrderTitle, flow.strings.settingsFeedOrderOldestFirst)
-        flow.setSwitch(SETTINGS(flow), flow.strings.settingsToggleShowReadArticles, on = true)
-        flow.clickIn(SETTINGS(flow), flow.strings.settingsSyncAndStorage)
+        flow.clickIn(SETTINGS(flow), flow.strings.settingsReadingTitle)
+        flow.choose(SETTINGS(flow), flow.strings.settingsReadArticlesTitle, flow.strings.settingsReadArticlesKeep)
+        flow.clickIn(SETTINGS(flow), flow.strings.settingsStorage)
         flow.clickSettingsButton(flow.strings.clearOldArticlesButton)
         flow.awaitTextIn(flow.dialogTitle(), flow.strings.clearOldArticlesDialogMessage, exact = false)
         flow.cancelDialog(flow.dialogTitle())
@@ -187,7 +208,7 @@ class SettingsFlowsTest {
         flow.scrollToText(OLD_ARTICLE_TITLE)
         flow.scrollToText(SEED_READ_TITLE)
 
-        flow.openSettings(flow.strings.settingsSyncAndStorage)
+        flow.openSettings(flow.strings.settingsStorage)
         flow.clickSettingsButton(flow.strings.clearOldArticlesButton)
         val dialog = flow.dialogTitle()
         flow.clickIn(dialog, flow.strings.confirmButton)
@@ -259,27 +280,29 @@ class SettingsFlowsTest {
         }
     }
 
-    // sync and storage persistence: desktop settings/SyncStoragePane.kt
+    // sync and storage persistence: desktop settings/SyncRefreshSection.kt and settings/StoragePane.kt
     @Test
     fun `REG-136 sync storage secondary persistence`() {
         val flow = e2e.start(Seed.ContentRich)
         flow.awaitText(SEED_NEWEST_TITLE)
 
-        flow.openSettings(flow.strings.settingsSyncAndStorage)
+        flow.openSettings(flow.strings.settingsSyncAndRefresh)
         flow.choose(
             SETTINGS(flow),
             flow.strings.settingsDesktopRefreshWhileOpen,
             flow.strings.settingsSyncPeriodOneHour,
         )
+        flow.clickIn(SETTINGS(flow), flow.strings.settingsStorage)
         flow.choose(SETTINGS(flow), flow.strings.settingsAutoDelete, flow.strings.settingsAutoDeletePeriodOneWeek)
         flow.closeWindow(SETTINGS(flow))
 
         flow.relaunch()
-        flow.openSettings(flow.strings.settingsSyncAndStorage)
+        flow.openSettings(flow.strings.settingsSyncAndRefresh)
         assertTrue(
             flow.strings.settingsSyncPeriodOneHour in
                 flow.dropdownIn(SETTINGS(flow), flow.strings.settingsDesktopRefreshWhileOpen).texts,
         )
+        flow.clickIn(SETTINGS(flow), flow.strings.settingsStorage)
         assertTrue(
             flow.strings.settingsAutoDeletePeriodOneWeek in
                 flow.dropdownIn(SETTINGS(flow), flow.strings.settingsAutoDelete).texts,
@@ -352,6 +375,12 @@ class SettingsFlowsTest {
     private fun Flow.cancelDialog(title: String) {
         awaitWindow(title)
         clickIn(title, strings.cancelButton)
+        awaitWindowGone(title)
+    }
+
+    private fun Flow.confirmDialog(title: String) {
+        awaitWindow(title)
+        clickIn(title, strings.confirmButton)
         awaitWindowGone(title)
     }
 

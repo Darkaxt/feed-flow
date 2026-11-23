@@ -98,7 +98,7 @@ jobs:
           install -m 600 config/dummy-google-services.json androidApp/src/release/google-services.json
 
       - name: Refresh translations
-        run: bash .scripts/refresh-translations.sh
+        run: ./gradlew --quiet --console=plain :i18n:kspCommonMainKotlinMetadata
 
       - name: Prepare Linux desktop test display
         run: |

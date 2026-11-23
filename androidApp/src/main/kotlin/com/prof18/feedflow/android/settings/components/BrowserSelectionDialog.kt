@@ -1,5 +1,6 @@
 package com.prof18.feedflow.android.settings.components
 
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -19,6 +20,7 @@ internal fun BrowserSelector(
     onBrowserSelected: (Browser) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = LocalFeedFlowStrings.current
     val currentBrowserId = browsers.firstOrNull { it.isFavourite }?.id.orEmpty()
 
     val options = remember(browsers) {
@@ -29,11 +31,14 @@ internal fun BrowserSelector(
 
     CompactSettingDropdownRow(
         modifier = modifier,
-        title = LocalFeedFlowStrings.current.browserSelectionButton,
+        title = strings.linksBrowserTitle,
         currentValue = currentBrowserId,
         options = options,
         onOptionSelected = { browserId ->
             browsers.firstOrNull { it.id == browserId }?.let(onBrowserSelected)
+        },
+        supportingText = {
+            Text(text = strings.linksBrowserSubtitle)
         },
     )
 }

@@ -15,9 +15,9 @@ struct ReadingBehaviorScreen: View {
         isSaveReaderModeContentEnabled: false,
         isPrefetchArticleContentEnabled: false,
         isMarkReadWhenScrollingEnabled: false,
-        isShowReadItemsEnabled: false,
-        isHideReadItemsEnabled: false,
-        articleOpenMode: .fullArticle
+        readArticlesVisibility: .hideOnRefresh,
+        articleOpenMode: .fullArticle,
+        articleBrowserId: nil
     )
 
     var body: some View {
@@ -29,27 +29,22 @@ struct ReadingBehaviorScreen: View {
                 get: { settingsState.articleOpenMode },
                 set: { vmStoreOwner.instance.updateArticleOpenMode(value: $0) }
             ),
-            isSaveReaderModeContentEnabled: Binding(
-                get: { settingsState.isSaveReaderModeContentEnabled },
-                set: { vmStoreOwner.instance.updateSaveReaderModeContent(value: $0) }
-            ),
-            isPrefetchArticleContentEnabled: Binding(
-                get: { settingsState.isPrefetchArticleContentEnabled },
-                set: { vmStoreOwner.instance.updatePrefetchArticleContent(value: $0) }
-            ),
+            onArticleBrowserSelected: { browserId in
+                vmStoreOwner.instance.updateArticleBrowser(browserId: browserId)
+            },
             isMarkReadWhenScrollingEnabled: Binding(
                 get: { settingsState.isMarkReadWhenScrollingEnabled },
                 set: { vmStoreOwner.instance.updateMarkReadWhenScrolling(value: $0) }
             ),
-            isShowReadItemEnabled: Binding(
-                get: { settingsState.isShowReadItemsEnabled },
-                set: { vmStoreOwner.instance.updateShowReadItemsOnTimeline(value: $0) }
-            ),
-            isHideReadItemsEnabled: Binding(
-                get: { settingsState.isHideReadItemsEnabled },
-                set: { vmStoreOwner.instance.updateHideReadItems(value: $0) }
+            readArticlesVisibility: Binding(
+                get: { settingsState.readArticlesVisibility },
+                set: { vmStoreOwner.instance.updateReadArticlesVisibility(value: $0) }
             )
         )
+        // Saving a new links browser can rewrite the stored article mode.
+        .onChange(of: browserSelector.selectedBrowser) {
+            vmStoreOwner.instance.refreshArticleOpenState()
+        }
         .navigationTitle(Text(feedFlowStrings.settingsReadingBehavior))
         .navigationBarTitleDisplayMode(.inline)
         .task {

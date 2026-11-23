@@ -7,12 +7,13 @@ import com.prof18.feedflow.core.model.CategoryName
 import com.prof18.feedflow.core.model.CategoryNameValidationResult
 import com.prof18.feedflow.core.model.YouTubeOptionsState
 import com.prof18.feedflow.core.utils.withSuspensionGuard
-import com.prof18.feedflow.database.DatabaseHelper
 import com.prof18.feedflow.shared.domain.feed.FeedSourcesRepository
 import com.prof18.feedflow.shared.domain.feed.FeedStateRepository
 import com.prof18.feedflow.shared.domain.feed.YouTubeChannelUrl
 import com.prof18.feedflow.shared.domain.feedcategories.FeedCategoryRepository
 import com.prof18.feedflow.shared.domain.model.FeedAddedState
+import com.prof18.feedflow.shared.domain.model.SyncPeriod
+import com.prof18.feedflow.shared.domain.notification.NotificationRefreshEnabler
 import com.prof18.feedflow.shared.domain.recovery.FeedRecoveryCoordinator
 import com.prof18.feedflow.shared.domain.recovery.FeedRecoveryRepository
 import com.prof18.feedflow.shared.domain.recovery.FeedRecoveryRequest
@@ -24,6 +25,7 @@ import io.ktor.http.Url
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -32,11 +34,11 @@ import kotlinx.coroutines.launch
 class AddFeedViewModel internal constructor(
     private val categoryRepository: FeedCategoryRepository,
     private val feedSourcesRepository: FeedSourcesRepository,
-    private val databaseHelper: DatabaseHelper,
     private val feedStateRepository: FeedStateRepository,
     private val recoveryService: FeedRecoveryService,
     private val recoveryRepository: FeedRecoveryRepository,
     private val coordinator: FeedRecoveryCoordinator,
+    private val notificationRefreshEnabler: NotificationRefreshEnabler,
 ) : ViewModel() {
 
     private var feedUrl: String = ""
@@ -50,11 +52,11 @@ class AddFeedViewModel internal constructor(
     val feedAddedState = feedAddedMutableState.asSharedFlow()
     val categoriesState = categoryRepository.categoriesState
 
-    private val showNotificationToggleMutableState: MutableStateFlow<Boolean> = MutableStateFlow(false)
-    val showNotificationToggleState = showNotificationToggleMutableState.asStateFlow()
-
     private val isNotificationEnabledMutableStateFlow: MutableStateFlow<Boolean> = MutableStateFlow(false)
     val isNotificationEnabledState = isNotificationEnabledMutableStateFlow.asStateFlow()
+
+    private val backgroundRefreshTurnedOnMutable = MutableSharedFlow<SyncPeriod>()
+    val backgroundRefreshTurnedOn: SharedFlow<SyncPeriod> = backgroundRefreshTurnedOnMutable.asSharedFlow()
 
     val verificationAvailable: Boolean = coordinator.available
     private val verificationRequiredMutableState = MutableStateFlow(false)
@@ -65,10 +67,6 @@ class AddFeedViewModel internal constructor(
     init {
         viewModelScope.launch {
             categoryRepository.initCategories()
-        }
-
-        viewModelScope.launch {
-            showNotificationToggleMutableState.update { databaseHelper.areNotificationsEnabled() }
         }
     }
 
@@ -95,6 +93,13 @@ class AddFeedViewModel internal constructor(
 
     fun updateNotificationStatus(status: Boolean) {
         isNotificationEnabledMutableStateFlow.update { status }
+        if (status) {
+            viewModelScope.launch {
+                notificationRefreshEnabler.enableIfOff()?.let { period ->
+                    backgroundRefreshTurnedOnMutable.emit(period)
+                }
+            }
+        }
     }
 
     fun updateHideShortsStatus(status: Boolean) {

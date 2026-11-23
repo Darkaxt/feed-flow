@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.prof18.feedflow.core.model.ArticleOpenMode
 import com.prof18.feedflow.core.model.AutoDeletePeriod
 import com.prof18.feedflow.core.model.FeedOrder
+import com.prof18.feedflow.core.model.ReadArticlesVisibility
 import com.prof18.feedflow.core.model.ThemeMode
 import com.prof18.feedflow.shared.data.FeedAppearanceSettingsRepository
 import com.prof18.feedflow.shared.data.SettingsRepository
@@ -14,10 +15,14 @@ import com.prof18.feedflow.shared.domain.feed.FeedStateRepository
 import com.prof18.feedflow.shared.domain.feeditem.FeedItemContentFileHandler
 import com.prof18.feedflow.shared.domain.model.SyncPeriod
 import com.prof18.feedflow.shared.presentation.model.MenuBarSettingsState
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -33,6 +38,9 @@ class MenuBarViewModel internal constructor(
     private val stateMutableFlow = MutableStateFlow(MenuBarSettingsState())
     val state: StateFlow<MenuBarSettingsState> = stateMutableFlow.asStateFlow()
 
+    private val downloadedArticlesClearedMutable = MutableSharedFlow<Boolean>()
+    val downloadedArticlesCleared: SharedFlow<Boolean> = downloadedArticlesClearedMutable.asSharedFlow()
+
     init {
         loadSettings()
         viewModelScope.launch {
@@ -41,8 +49,16 @@ class MenuBarViewModel internal constructor(
             }
         }
         viewModelScope.launch {
-            settingsRepository.showReadArticlesTimelineFlow.collect { value ->
-                stateMutableFlow.update { it.copy(isShowReadItemsEnabled = value) }
+            combine(
+                settingsRepository.showReadArticlesTimelineFlow,
+                settingsRepository.hideReadItemsFlow,
+                settingsRepository.markFeedAsReadWhenScrollingFlow,
+            ) { showRead, _, _ ->
+                showRead to settingsRepository.getReadArticlesVisibility()
+            }.collect { (showRead, visibility) ->
+                stateMutableFlow.update {
+                    it.copy(isShowReadItemsEnabled = showRead, readArticlesVisibility = visibility)
+                }
             }
         }
     }
@@ -51,7 +67,6 @@ class MenuBarViewModel internal constructor(
         val themeMode = settingsRepository.getThemeMode()
         val isMarkReadWhenScrollingEnabled = settingsRepository.getMarkFeedAsReadWhenScrolling()
         val isShowReadItemsEnabled = settingsRepository.getShowReadArticlesTimeline()
-        val isHideReadItemsEnabled = settingsRepository.getHideReadItems()
         val articleOpenMode = settingsRepository.getArticleOpenMode()
         val isSaveReaderModeContentEnabled = settingsRepository.isSaveItemContentOnOpenEnabled()
         val isPrefetchArticleContentEnabled = settingsRepository.isPrefetchArticleContentEnabled()
@@ -68,7 +83,7 @@ class MenuBarViewModel internal constructor(
                 themeMode = themeMode,
                 isMarkReadWhenScrollingEnabled = isMarkReadWhenScrollingEnabled,
                 isShowReadItemsEnabled = isShowReadItemsEnabled,
-                isHideReadItemsEnabled = isHideReadItemsEnabled,
+                readArticlesVisibility = settingsRepository.getReadArticlesVisibility(),
                 articleOpenMode = articleOpenMode,
                 isSaveReaderModeContentEnabled = isSaveReaderModeContentEnabled,
                 isPrefetchArticleContentEnabled = isPrefetchArticleContentEnabled,
@@ -112,12 +127,14 @@ class MenuBarViewModel internal constructor(
         }
     }
 
-    fun updateHideReadItems(value: Boolean) {
+    fun updateReadArticlesVisibility(value: ReadArticlesVisibility) {
         viewModelScope.launch {
-            settingsRepository.setHideReadItems(value)
-            stateMutableFlow.update {
-                it.copy(isHideReadItemsEnabled = value)
-            }
+            val blocked = value == ReadArticlesVisibility.HIDE_RIGHT_AWAY &&
+                settingsRepository.getMarkFeedAsReadWhenScrolling()
+            if (blocked || value == settingsRepository.getReadArticlesVisibility()) return@launch
+            settingsRepository.setReadArticlesVisibility(value)
+            // Same rule as ReadingBehaviorSettingsViewModel.updateReadArticlesVisibility.
+            if (value != ReadArticlesVisibility.HIDE_ON_REFRESH) feedStateRepository.getFeeds()
         }
     }
 
@@ -219,7 +236,8 @@ class MenuBarViewModel internal constructor(
 
     fun clearDownloadedArticleContent() {
         viewModelScope.launch {
-            feedItemContentFileHandler.clearAllContent()
+            val cleared = feedItemContentFileHandler.clearAllContent()
+            downloadedArticlesClearedMutable.emit(cleared)
         }
     }
 }

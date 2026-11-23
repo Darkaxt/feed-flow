@@ -3,9 +3,9 @@ title: "Comment supprimer les anciens articles ?"
 weight: 90
 ---
 
-- **Suppression automatique des anciens articles** (Paramètres → Synchronisation
-  et stockage) supprime les articles de plus d'un jour, d'une semaine, de deux
-  semaines ou d'un mois.
+- **Suppression automatique des anciens articles** (Paramètres → Stockage)
+  supprime les articles de plus d'un jour, d'une semaine, de deux semaines ou
+  d'un mois, y compris les articles non lus.
 - **Supprimer les articles de plus d’une semaine**, dans le menu, supprime de la
   liste affichée ( fil principal, catégorie ou flux unique) les articles de plus
   d’une semaine.

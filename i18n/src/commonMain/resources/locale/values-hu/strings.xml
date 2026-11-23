@@ -100,7 +100,6 @@
     <string name="add_account_button">Fiók hozzáadása</string>
     <string name="no_icloud_sync_yet">Az adatok még nincsenek szinkronizálva az iClouddal. Kattintson/koppintson a biztonsági mentés gombra a szinkronizálás elindításához</string>
     <string name="settings_hide_duplicated_title_from_desc">Cím elrejtése a cikkek leírásában</string>
-    <string name="settings_hide_description">Cikk leírásának elrejtése</string>
     <string name="edit_feed_source_name_button">Szerkesztés</string>
     <string name="edit_feed">Hírforrás szerkesztése</string>
     <string name="wrong_credentials_error_message">A hitelesítési adatok hibásak. Próbálja újra.</string>
@@ -124,12 +123,8 @@
     <string name="fresh_rss_account_connected">A FreshRSS-fiók sikeresen kapcsolódott</string>
     <string name="fresh_rss_last_sync">Utoljára szinkronizálva: %s</string>
     <string name="settings_notification_no_feed">Úgy tűnik, hogy még nem adott hozzá egyetlen hírforrást sem. Adjon hozzá néhányat, hogy értesítéseket kapjon!</string>
-    <string name="settings_notification_check_period">Értesítések ellenőrzésének időköze</string>
     <string name="settings_notifications_enable_all_title">Összes értesítés engedélyezése</string>
     <string name="notification_channel_description">Értesítések az új cikkekről a hírforrásokhoz</string>
-    <string name="settings_notifications_permission_status_title">Engedély állapota</string>
-    <string name="settings_notifications_permission_status_granted">Engedélyezve</string>
-    <string name="settings_notifications_permission_status_denied">Megtagadva</string>
     <string name="settings_notifications_permission_request_button">Engedély kérése</string>
     <string name="new_articles_notification_title">Új cikkek érhetőek el</string>
     <string name="settings_notifications_title">Értesítések</string>
@@ -228,7 +223,6 @@
     <string name="hide_youtube_shorts_description">Csak a csatornán található videókat tartalmazza. Az élő közvetítéseket és shortokat nem.</string>
     <string name="hide_youtube_shorts_fallback">Ezen a csatornán nem rejthetők el a shortok, így a teljes hírfolyam jelen van.</string>
     <string name="hide_youtube_shorts_edit_fallback">A shortokat nem lehet elrejteni ezen a csatornán. Mentve a többi változtatás.</string>
-    <string name="settings_filters">Szűrők</string>
     <string name="browser_launch_error">Nem nyitható hivatkozás. Ellenőrizd a böngésző beállításait.</string>
     <string name="about_the_app">Algoritmusok és fölösleges tartalmaktól mentes - időrendet betartó, tiszta, minimalista RSS hírfolyamolvasó a FeedFlow. Olvasd a cikkeket kedvenc böngésződben vagy olvasó módban figyelemelterelő elemek nélkül. Offline módban is bárhol olvasható. Szinkronizáld a hírfolyamaidat, jelöld meg ahol abbaghagytad az olvasást és könyvelzőzd Android, iOS, macOS, Windows, és Linux iCloud-ot használva, Dropbox, Google Drive, FreshRSS, Miniflux, Feedbin, vagy BazQux programokban. Csoportosítsd hírfolyamaidat, szortírozz kifejezésekre, OPML-formátumba exportálj, importálj mindent.</string>
     <string name="open_feed_website_button">Nyisd meg az oldalt</string>
@@ -279,8 +273,6 @@
     <string name="select_article_to_read">Válassz egy cikket</string>
     <string name="desktop_expand_reader">Olvasó átméretezése teljes képernyőre</string>
     <string name="desktop_restore_reader_layout">Cikklista visszaállítása</string>
-    <string name="settings_hide_read_items">Olvasottnak jelölt cikkek elrejtése</string>
-    <string name="settings_hide_read_items_disabled_while_scrolling">Elrejtés kikapcsolva, ha \"Olvasottnak jelöl görgetéskor\" van bejelölve, így a cikkek megmaradnak. Kapcsold ki, ha szeretnéd az automatikus elrejtés funkciót.</string>
     <string name="menu_mark_all_above_as_read">Olvasottnak jelöli a fentieket</string>
     <string name="menu_mark_all_below_as_read">Olvasottnak jelöli az alábbiakat</string>
     <string name="mark_all_above_as_read_confirmation_title">Olvasottnak jelölöd a fentieket?</string>
@@ -359,10 +351,7 @@
     <string name="no_google_drive_sync_yet">Az adatok még nincsenek szinkronizálva a Google Drive-val. Kattintson a biztonsági mentés gombra az adatszinkronizásláshoz</string>
     <string name="google_drive_connect_button">Google Drive csatlakozás</string>
     <string name="google_drive_desktop_sync_description">Kattints az alábbi gombra Google Drive csatlakoztatásához. Megnyílik egy böngészőablak a hitelesítéshez. Miután befejezted a bejelentkezést, visszatérhetsz ehhez az alkalmazáshoz.</string>
-    <string name="settings_hide_date">Rejtsd el a cikk dátumát</string>
-    <string name="settings_hide_unread_dot">Rejtsd el az olvasatlan cimkét</string>
     <string name="settings_hide_unread_count">Rejtsd el az olvasatlan cikkek számlálását</string>
-    <string name="settings_hide_feed_source">Rejtsd el a hírfolyam forrását</string>
     <string name="settings_description_max_lines">Megjegyzések</string>
     <string name="settings_description_lines_three">3 sor</string>
     <string name="settings_description_lines_five">5 sor</string>
@@ -533,8 +522,6 @@
     <string name="mark_all_bookmarks_read_dialog_message">Biztosan olvasottnak jelölöd az összes könyvjelzőhöz adott cikket?</string>
     <string name="remove_bookmark_dialog_message">Biztosan eltávolítod a Könyjelzők közül a cikket?</string>
     <string name="reset_button">Újraindítás</string>
-    <string name="settings_danger_title">Veszély</string>
-    <string name="settings_feeds_and_accounts">Hírfolyamok és fiókok</string>
     <string name="article_report_action">Hibás cikk jelentése</string>
     <string name="article_report_disclosure">A fejlesztőnek küldöd a cikk hivatkozását, az aplikáció és a rendszer verziószámát? Nem továbbítódnak a cikk és a fiókod adatai.</string>
     <string name="article_report_send">Elküld</string>

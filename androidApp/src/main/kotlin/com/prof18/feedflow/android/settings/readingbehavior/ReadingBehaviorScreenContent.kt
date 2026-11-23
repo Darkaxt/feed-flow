@@ -16,17 +16,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
-import com.prof18.feedflow.android.feed.ArticleOpenModeSelector
 import com.prof18.feedflow.android.settings.SettingsE2eIds
 import com.prof18.feedflow.android.settings.components.BrowserSelector
-import com.prof18.feedflow.android.ui.settings.ConfirmationDialogConfig
+import com.prof18.feedflow.android.ui.settings.CompactSettingDropdownRow
+import com.prof18.feedflow.android.ui.settings.SettingDropdownOption
 import com.prof18.feedflow.android.ui.settings.SettingSwitchItem
 import com.prof18.feedflow.android.ui.style.Spacing
 import com.prof18.feedflow.android.ui.theme.FeedFlowTheme
 import com.prof18.feedflow.android.ui.utils.LocalFeedFlowStrings
 import com.prof18.feedflow.core.model.ArticleOpenMode
 import com.prof18.feedflow.core.model.Browser
+import com.prof18.feedflow.core.model.ReadArticlesVisibility
 import com.prof18.feedflow.core.model.ReadingBehaviorState
+import com.prof18.feedflow.shared.presentation.preview.browsersForPreview
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 
@@ -35,13 +37,12 @@ internal fun ReadingBehaviorScreenContent(
     navigateBack: () -> Unit,
     state: ReadingBehaviorState,
     browsers: ImmutableList<Browser>,
+    resolvedArticleBrowserId: String,
     onBrowserSelected: (Browser) -> Unit,
+    onArticleBrowserSelected: (String) -> Unit,
     setArticleOpenMode: (ArticleOpenMode) -> Unit,
-    setSaveReaderModeContent: (Boolean) -> Unit,
-    setPrefetchArticleContent: (Boolean) -> Unit,
     setMarkReadWhenScrolling: (Boolean) -> Unit,
-    setShowReadItem: (Boolean) -> Unit,
-    setHideReadItems: (Boolean) -> Unit,
+    setReadArticlesVisibility: (ReadArticlesVisibility) -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -69,39 +70,22 @@ internal fun ReadingBehaviorScreenContent(
                 .padding(end = paddingValues.calculateRightPadding(layoutDir)),
         ) {
             item {
-                BrowserSelector(
-                    browsers = browsers,
-                    onBrowserSelected = onBrowserSelected,
-                )
-            }
-
-            item {
-                ArticleOpenModeSelector(
+                ArticleDestinationSelector(
                     modifier = Modifier
                         .padding(horizontal = Spacing.regular)
                         .testTag(SettingsE2eIds.READING_BEHAVIOR_ARTICLE_OPEN_MODE),
-                    currentMode = state.articleOpenMode,
-                    onModeSelected = setArticleOpenMode,
+                    articleOpenMode = state.articleOpenMode,
+                    resolvedArticleBrowserId = resolvedArticleBrowserId,
+                    browsers = browsers,
+                    onReaderModeSelected = setArticleOpenMode,
+                    onBrowserSelected = onArticleBrowserSelected,
                 )
             }
 
             item {
-                SettingSwitchItem(
-                    title = LocalFeedFlowStrings.current.settingsSaveReaderModeContent,
-                    isChecked = state.isSaveReaderModeContentEnabled,
-                    onCheckedChange = setSaveReaderModeContent,
-                )
-            }
-
-            item {
-                SettingSwitchItem(
-                    title = LocalFeedFlowStrings.current.settingsPrefetchArticleContent,
-                    isChecked = state.isPrefetchArticleContentEnabled,
-                    onCheckedChange = setPrefetchArticleContent,
-                    confirmationDialog = ConfirmationDialogConfig(
-                        title = LocalFeedFlowStrings.current.settingsPrefetchArticleContent,
-                        message = LocalFeedFlowStrings.current.settingsPrefetchArticleContentWarning,
-                    ),
+                BrowserSelector(
+                    browsers = browsers,
+                    onBrowserSelected = onBrowserSelected,
                 )
             }
 
@@ -114,26 +98,10 @@ internal fun ReadingBehaviorScreenContent(
             }
 
             item {
-                SettingSwitchItem(
-                    modifier = Modifier.testTag(SettingsE2eIds.READING_BEHAVIOR_SHOW_READ),
-                    title = LocalFeedFlowStrings.current.settingsToggleShowReadArticles,
-                    isChecked = state.isShowReadItemsEnabled,
-                    onCheckedChange = setShowReadItem,
-                )
-            }
-
-            item {
-                SettingSwitchItem(
-                    modifier = Modifier.testTag(SettingsE2eIds.READING_BEHAVIOR_HIDE_READ),
-                    title = LocalFeedFlowStrings.current.settingsHideReadItems,
-                    isChecked = state.isHideReadItemsEnabled,
-                    onCheckedChange = setHideReadItems,
-                    enabled = !state.isMarkReadWhenScrollingEnabled,
-                    supportingText = if (state.isMarkReadWhenScrollingEnabled) {
-                        LocalFeedFlowStrings.current.settingsHideReadItemsDisabledWhileScrolling
-                    } else {
-                        null
-                    },
+                ReadArticlesVisibilityRow(
+                    readArticlesVisibility = state.readArticlesVisibility,
+                    isMarkReadWhenScrollingEnabled = state.isMarkReadWhenScrollingEnabled,
+                    onReadArticlesVisibilitySelected = setReadArticlesVisibility,
                 )
             }
 
@@ -142,6 +110,41 @@ internal fun ReadingBehaviorScreenContent(
             }
         }
     }
+}
+
+@Composable
+private fun ReadArticlesVisibilityRow(
+    readArticlesVisibility: ReadArticlesVisibility,
+    isMarkReadWhenScrollingEnabled: Boolean,
+    onReadArticlesVisibilitySelected: (ReadArticlesVisibility) -> Unit,
+) {
+    val strings = LocalFeedFlowStrings.current
+    CompactSettingDropdownRow(
+        modifier = Modifier.testTag(SettingsE2eIds.READING_BEHAVIOR_READ_ARTICLES),
+        title = strings.settingsReadArticlesTitle,
+        currentValue = readArticlesVisibility,
+        options = persistentListOf(
+            SettingDropdownOption(
+                value = ReadArticlesVisibility.KEEP_IN_LIST,
+                label = strings.settingsReadArticlesKeep,
+            ),
+            SettingDropdownOption(
+                value = ReadArticlesVisibility.HIDE_ON_REFRESH,
+                label = strings.settingsReadArticlesHideOnRefresh,
+            ),
+            SettingDropdownOption(
+                value = ReadArticlesVisibility.HIDE_RIGHT_AWAY,
+                label = strings.settingsReadArticlesHideRightAway,
+                e2eId = SettingsE2eIds.READING_BEHAVIOR_READ_ARTICLES_HIDE_RIGHT_AWAY,
+                subtitle = strings.settingsReadArticlesRightAwayDisabled.takeIf { isMarkReadWhenScrollingEnabled },
+                enabled = !isMarkReadWhenScrollingEnabled,
+            ),
+        ),
+        onOptionSelected = onReadArticlesVisibilitySelected,
+        supportingText = {
+            Text(strings.settingsReadArticlesFooter)
+        },
+    )
 }
 
 @Preview
@@ -154,17 +157,15 @@ private fun ReadingBehaviorScreenContentPreview() {
                 isSaveReaderModeContentEnabled = false,
                 isPrefetchArticleContentEnabled = false,
                 isMarkReadWhenScrollingEnabled = true,
-                isShowReadItemsEnabled = true,
-                isHideReadItemsEnabled = false,
+                readArticlesVisibility = ReadArticlesVisibility.KEEP_IN_LIST,
             ),
-            browsers = persistentListOf(),
+            browsers = browsersForPreview,
+            resolvedArticleBrowserId = browsersForPreview.first().id,
             onBrowserSelected = {},
+            onArticleBrowserSelected = {},
             setArticleOpenMode = {},
-            setSaveReaderModeContent = {},
-            setPrefetchArticleContent = {},
             setMarkReadWhenScrolling = {},
-            setShowReadItem = {},
-            setHideReadItems = {},
+            setReadArticlesVisibility = {},
         )
     }
 }

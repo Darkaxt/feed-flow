@@ -26,6 +26,7 @@ fun ConfirmationSettingItem(
     confirmButtonText: String = LocalFeedFlowStrings.current.confirmButton,
     dismissButtonText: String = LocalFeedFlowStrings.current.cancelButton,
     isDestructive: Boolean = true,
+    supportingText: String? = null,
 ) {
     var showDialog by remember { mutableStateOf(false) }
 
@@ -34,6 +35,8 @@ fun ConfirmationSettingItem(
         icon = icon,
         onClick = { showDialog = true },
         modifier = modifier,
+        isDestructive = isDestructive,
+        supportingText = supportingText,
     )
 
     if (showDialog) {

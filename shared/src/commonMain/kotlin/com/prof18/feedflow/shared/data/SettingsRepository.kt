@@ -6,12 +6,14 @@ import com.prof18.feedflow.core.model.ArticleOpenMode
 import com.prof18.feedflow.core.model.AutoDeletePeriod
 import com.prof18.feedflow.core.model.BackgroundSyncRestrictions
 import com.prof18.feedflow.core.model.NotificationMode
+import com.prof18.feedflow.core.model.ReadArticlesVisibility
 import com.prof18.feedflow.core.model.ReaderFontFamily
 import com.prof18.feedflow.core.model.ReaderFontSettings
 import com.prof18.feedflow.core.model.ReaderModeDefaults
 import com.prof18.feedflow.core.model.ThemeMode
 import com.prof18.feedflow.core.model.appDefaultArticleOpenMode
 import com.prof18.feedflow.core.model.resolveWith
+import com.prof18.feedflow.core.utils.BrowserIds
 import com.prof18.feedflow.shared.domain.model.SyncPeriod
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.set
@@ -98,11 +100,40 @@ class SettingsRepository(
     fun getFavouriteBrowserId(): String? =
         settings.getStringOrNull(SettingsFields.FAVOURITE_BROWSER_ID.name)
 
-    fun saveFavouriteBrowserId(browserId: String) =
-        settings.set(SettingsFields.FAVOURITE_BROWSER_ID.name, browserId)
+    fun saveFavouriteBrowserId(browserId: String) {
+        keepArticleBrowserBeforeFavouriteChange()
+        settings[SettingsFields.FAVOURITE_BROWSER_ID.name] = browserId
+    }
 
     fun clearFavouriteBrowserId() =
         settings.remove(SettingsFields.FAVOURITE_BROWSER_ID.name)
+
+    fun getArticleBrowserId(): String? =
+        settings.getStringOrNull(SettingsFields.ARTICLE_BROWSER_ID.name)
+
+    fun clearArticleBrowserId() =
+        settings.remove(SettingsFields.ARTICLE_BROWSER_ID.name)
+
+    fun selectArticleBrowser(browserId: String) {
+        if (browserId == BrowserIds.IN_APP_BROWSER) {
+            setArticleOpenMode(ArticleOpenMode.INTERNAL_BROWSER)
+        } else {
+            settings[SettingsFields.ARTICLE_BROWSER_ID.name] = browserId
+            setArticleOpenMode(ArticleOpenMode.PREFERRED_BROWSER)
+        }
+    }
+
+    // Before ARTICLE_BROWSER_ID existed, PREFERRED_BROWSER opened the favourite browser.
+    private fun keepArticleBrowserBeforeFavouriteChange() {
+        if (getArticleBrowserId() != null) return
+        if (getArticleOpenMode() != ArticleOpenMode.PREFERRED_BROWSER) return
+        val oldFavourite = getFavouriteBrowserId()
+        if (oldFavourite == null || oldFavourite == BrowserIds.IN_APP_BROWSER) {
+            setArticleOpenMode(ArticleOpenMode.INTERNAL_BROWSER)
+        } else {
+            settings[SettingsFields.ARTICLE_BROWSER_ID.name] = oldFavourite
+        }
+    }
 
     internal fun getMarkFeedAsReadWhenScrolling(): Boolean =
         settings.getBoolean(SettingsFields.MARK_FEED_AS_READ_WHEN_SCROLLING.name, true)
@@ -124,7 +155,21 @@ class SettingsRepository(
         settings.getBoolean(SettingsFields.HIDE_READ_ITEMS.name, false)
 
     internal fun getEffectiveHideReadItems(): Boolean =
-        getHideReadItems() && !getMarkFeedAsReadWhenScrolling()
+        getHideReadItems() && !getMarkFeedAsReadWhenScrolling() && !getShowReadArticlesTimeline()
+
+    internal fun getReadArticlesVisibility(): ReadArticlesVisibility = when {
+        getShowReadArticlesTimeline() -> ReadArticlesVisibility.KEEP_IN_LIST
+        getEffectiveHideReadItems() -> ReadArticlesVisibility.HIDE_RIGHT_AWAY
+        else -> ReadArticlesVisibility.HIDE_ON_REFRESH
+    }
+
+    // Keep in list leaves the saved hide mode alone, so turning show-read off restores it.
+    internal fun setReadArticlesVisibility(value: ReadArticlesVisibility) {
+        setShowReadArticlesTimeline(value == ReadArticlesVisibility.KEEP_IN_LIST)
+        if (value != ReadArticlesVisibility.KEEP_IN_LIST) {
+            setHideReadItems(value == ReadArticlesVisibility.HIDE_RIGHT_AWAY)
+        }
+    }
 
     internal fun setHideReadItems(value: Boolean) {
         settings.set(SettingsFields.HIDE_READ_ITEMS.name, value)
@@ -408,4 +453,5 @@ private enum class SettingsFields {
     REFRESH_FEEDS_ON_LAUNCH,
     NOTIFICATION_MODE,
     UNCATEGORIZED_CATEGORY_POSITION,
+    ARTICLE_BROWSER_ID,
 }

@@ -3,9 +3,9 @@ title: "Can I swipe to mark articles as read or move between articles?"
 weight: 170
 ---
 
-Yes. Swipe actions are off until you choose them: in **Settings → Feed list**,
-pick an action for **Swipe left** and **Swipe right**: **Mark as read or
-unread**, **Add or remove bookmark**, or **Open in preferred browser**. Choose
+Yes. Swipe actions are off until you choose them: in **Settings → Feed list →
+Gestures**, pick an action for **Swipe left** and **Swipe right**: **Mark as
+read or unread**, **Add or remove bookmark**, or **Open in browser**. Choose
 **None** to turn a direction off again.
 
 Swipe actions work in the list layout. When the feed list shows articles in a

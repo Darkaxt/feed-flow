@@ -11,10 +11,14 @@ appId: com.prof18.feedflow.debug
     id: drawer_menu_button
 - tapOn:
     id: drawer_settings_button
+- scrollUntilVisible:
+    element:
+      id: settings_notifications
+    direction: DOWN
+    timeout: 10000
+    centerElement: true
 - tapOn:
-    id: settings_feeds_accounts
-- tapOn:
-    text: "Notifications"
+    id: settings_notifications
 - assertVisible:
     text: "Notifications"
 - assertVisible:
@@ -22,14 +26,14 @@ appId: com.prof18.feedflow.debug
 - assertVisible:
     text: "By feed"
 - tapOn:
-    text: "Notification grouping"
+    text: "Notification style"
 - tapOn:
     text: "Per article"
 - assertVisible:
     text: "Show article titles and available images. Each refresh shows up to 20 articles, plus a summary of the rest."
 - back
 - tapOn:
-    text: "Notifications"
+    id: settings_notifications
 - assertVisible:
     text: "Per article"
 - stopApp
@@ -38,20 +42,24 @@ appId: com.prof18.feedflow.debug
     id: drawer_menu_button
 - tapOn:
     id: drawer_settings_button
+- scrollUntilVisible:
+    element:
+      id: settings_notifications
+    direction: DOWN
+    timeout: 10000
+    centerElement: true
 - tapOn:
-    id: settings_feeds_accounts
-- tapOn:
-    text: "Notifications"
+    id: settings_notifications
 - assertVisible:
     text: "Per article"
 - tapOn:
-    text: "Notification grouping"
+    text: "Notification style"
 - tapOn:
     text: "By category"
 - assertNotVisible:
     text: "Show article titles and available images. Each refresh shows up to 20 articles, plus a summary of the rest."
 - assertVisible:
-    text: "Enable All Notifications"
+    text: "Enable all notifications"
 - scrollUntilVisible:
     element:
       text: "Android Central RSS Feed"
@@ -75,11 +83,11 @@ appId: com.prof18.feedflow.debug
     text: "Ars Technica"
 - scrollUntilVisible:
     element:
-      text: "Notification grouping"
+      text: "Notification style"
     direction: UP
     timeout: 10000
 - tapOn:
-    text: "Notification grouping"
+    text: "Notification style"
 - tapOn:
     text: "By category"
 - assertVisible:
